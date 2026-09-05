@@ -65,8 +65,12 @@ public class CppTokenizer {
         KEYWORD,
         OBJECT_MACRO,
         CALL_MACRO,
-        INTEGER_LITERAL,
-        FLOATING_LITERAL,
+        // Lexing (translation phases 3-6) produces pp-numbers; they only
+        // become INTEGER_CONSTANT/FLOATING_CONSTANT tokens in phase 7
+        // (TokenConversion), after macro expansion.
+        PP_NUMBER,
+        INTEGER_CONSTANT,
+        FLOATING_CONSTANT,
         CHARACTER_LITERAL,
         STRING_LITERAL,
         PUNCTUATOR,
@@ -293,7 +297,7 @@ public class CppTokenizer {
             return classifyDirectiveIdentifier(scanIdentifier(startLine, startCol));
         }
         if (Character.isDigit(c) || (c == '.' && Character.isDigit(peek(1)))) {
-            return scanNumber(startLine, startCol);
+            return scanPpNumber(startLine, startCol);
         }
         if (c == '"') {
             int tokenStart = pos;
@@ -567,59 +571,34 @@ public class CppTokenizer {
         return expansion;
     }
 
-    private Token scanNumber(int startLine, int startCol) {
+    // pp-number (C2y 6.4.9): a deliberately greedy superset of the integer
+    // and floating constant grammars. After the leading digit (or '.'
+    // digit) it swallows identifier characters, '.', digit separators, and
+    // a sign when it directly follows e/E/p/P - so `0xE+2` is one
+    // pp-number that phase 7 later rejects, exactly as the standard's
+    // example calls for. Classification into INTEGER_CONSTANT or
+    // FLOATING_CONSTANT is TokenConversion's job.
+    private Token scanPpNumber(int startLine, int startCol) {
         int start = pos;
-        boolean isFloat = false;
-
-        if (peek() == '0' && (peek(1) == 'x' || peek(1) == 'X')) {
-            advance();
-            advance();
-            while (isHexDigit(peek()) || peek() == '\'') advance();
-            if (peek() == '.') {
-                isFloat = true;
-                advance();
-                while (isHexDigit(peek()) || peek() == '\'') advance();
-            }
-            if (peek() == 'p' || peek() == 'P') {
-                isFloat = true;
-                advance();
-                if (peek() == '+' || peek() == '-') advance();
-                while (Character.isDigit(peek())) advance();
-            }
-        } else if (peek() == '0' && (peek(1) == 'b' || peek(1) == 'B')) {
-            advance();
-            advance();
-            while (peek() == '0' || peek() == '1' || peek() == '\'') advance();
-        } else {
-            while (Character.isDigit(peek()) || peek() == '\'') advance();
-            if (peek() == '.') {
-                isFloat = true;
-                advance();
-                while (Character.isDigit(peek()) || peek() == '\'') advance();
-            }
-            if (peek() == 'e' || peek() == 'E') {
-                isFloat = true;
-                advance();
-                if (peek() == '+' || peek() == '-') advance();
-                while (Character.isDigit(peek())) advance();
-            }
-        }
-
-        while (isSuffixLetter(peek())) {
-            if (peek() == 'f' || peek() == 'F') isFloat = true;
+        if (peek() == '.') {
             advance();
         }
-
-        String text = src.substring(start, pos);
-        return new Token(isFloat ? TokenType.FLOATING_LITERAL : TokenType.INTEGER_LITERAL, text, startLine, startCol);
-    }
-
-    private static boolean isHexDigit(char c) {
-        return Character.isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-    }
-
-    private static boolean isSuffixLetter(char c) {
-        return c == 'u' || c == 'U' || c == 'l' || c == 'L' || c == 'f' || c == 'F';
+        advance(); // first digit
+        while (pos < src.length()) {
+            char c = peek();
+            if (c == 'e' || c == 'E' || c == 'p' || c == 'P') {
+                advance();
+                if (peek() == '+' || peek() == '-') advance();
+            } else if (isIdentifierPart(c) || c == '.') {
+                advance();
+            } else if (c == '\'' && isIdentifierPart(peek(1))) {
+                advance(); // digit separator
+                advance();
+            } else {
+                break;
+            }
+        }
+        return new Token(TokenType.PP_NUMBER, src.substring(start, pos), startLine, startCol);
     }
 
     private Token scanString(int start, int startLine, int startCol) {

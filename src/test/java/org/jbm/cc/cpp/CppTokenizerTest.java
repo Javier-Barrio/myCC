@@ -53,26 +53,56 @@ class CppTokenizerTest {
     }
 
     @Test
-    void integerLiterals() {
+    void integerConstantSpellingsLexAsSinglePpNumbers() {
         assertTokens("42 0x1F 0b101 100ULL",
-                TokenType.INTEGER_LITERAL, "42",
-                TokenType.INTEGER_LITERAL, "0x1F",
-                TokenType.INTEGER_LITERAL, "0b101",
-                TokenType.INTEGER_LITERAL, "100ULL");
+                TokenType.PP_NUMBER, "42",
+                TokenType.PP_NUMBER, "0x1F",
+                TokenType.PP_NUMBER, "0b101",
+                TokenType.PP_NUMBER, "100ULL");
     }
 
     @Test
-    void integerLiteralWithDigitSeparators() {
-        assertTokens("1'000'000", TokenType.INTEGER_LITERAL, "1'000'000");
+    void ppNumberWithDigitSeparators() {
+        assertTokens("1'000'000", TokenType.PP_NUMBER, "1'000'000");
     }
 
     @Test
-    void floatingLiterals() {
+    void floatingConstantSpellingsLexAsSinglePpNumbers() {
         assertTokens("3.14 1e10 2.5f 0x1.8p3",
-                TokenType.FLOATING_LITERAL, "3.14",
-                TokenType.FLOATING_LITERAL, "1e10",
-                TokenType.FLOATING_LITERAL, "2.5f",
-                TokenType.FLOATING_LITERAL, "0x1.8p3");
+                TokenType.PP_NUMBER, "3.14",
+                TokenType.PP_NUMBER, "1e10",
+                TokenType.PP_NUMBER, "2.5f",
+                TokenType.PP_NUMBER, "0x1.8p3");
+    }
+
+    @Test
+    void ppNumberMayStartWithADot() {
+        assertTokens(".5", TokenType.PP_NUMBER, ".5");
+    }
+
+    @Test
+    void ppNumberSwallowsASignAfterAnExponentLetter() {
+        // The standard's canonical example: 0xE+2 is ONE pp-number (which
+        // phase 7 then rejects), not the addition 0xE + 2.
+        assertTokens("0xE+2", TokenType.PP_NUMBER, "0xE+2");
+    }
+
+    @Test
+    void ppNumberSwallowsTrailingIdentifierCharacters() {
+        assertTokens("123abc", TokenType.PP_NUMBER, "123abc");
+    }
+
+    @Test
+    void ppNumberSwallowsRepeatedDots() {
+        assertTokens("1.2.3", TokenType.PP_NUMBER, "1.2.3");
+    }
+
+    @Test
+    void signIsOnlySwallowedDirectlyAfterAnExponentLetter() {
+        assertTokens("1+2",
+                TokenType.PP_NUMBER, "1",
+                TokenType.PUNCTUATOR, "+",
+                TokenType.PP_NUMBER, "2");
     }
 
     @Test
@@ -157,7 +187,7 @@ class CppTokenizerTest {
                 TokenType.PUNCTUATOR, "#",
                 TokenType.IDENTIFIER, "define",
                 TokenType.OBJECT_MACRO, "FOO",
-                TokenType.INTEGER_LITERAL, "1");
+                TokenType.PP_NUMBER, "1");
     }
 
     @Test
@@ -169,11 +199,11 @@ class CppTokenizerTest {
 
         List<Token> expansion = objectMacro.expansion;
         assertEquals(3, expansion.size());
-        assertEquals(TokenType.INTEGER_LITERAL, expansion.get(0).type);
+        assertEquals(TokenType.PP_NUMBER, expansion.get(0).type);
         assertEquals("1", expansion.get(0).text);
         assertEquals(TokenType.PUNCTUATOR, expansion.get(1).type);
         assertEquals("+", expansion.get(1).text);
-        assertEquals(TokenType.INTEGER_LITERAL, expansion.get(2).type);
+        assertEquals(TokenType.PP_NUMBER, expansion.get(2).type);
         assertEquals("2", expansion.get(2).text);
     }
 
@@ -259,10 +289,10 @@ class CppTokenizerTest {
         List<List<Token>> arguments = invocation.arguments;
         assertEquals(2, arguments.size());
         assertEquals(1, arguments.get(0).size());
-        assertEquals(TokenType.INTEGER_LITERAL, arguments.get(0).get(0).type);
+        assertEquals(TokenType.PP_NUMBER, arguments.get(0).get(0).type);
         assertEquals("1", arguments.get(0).get(0).text);
         assertEquals(1, arguments.get(1).size());
-        assertEquals(TokenType.INTEGER_LITERAL, arguments.get(1).get(0).type);
+        assertEquals(TokenType.PP_NUMBER, arguments.get(1).get(0).type);
         assertEquals("2", arguments.get(1).get(0).text);
 
         // The actual '(', '1', ',', '2', ')' still show up as ordinary
@@ -293,18 +323,18 @@ class CppTokenizerTest {
         assertEquals(5, first.size());
         assertEquals(TokenType.PUNCTUATOR, first.get(0).type);
         assertEquals("(", first.get(0).text);
-        assertEquals(TokenType.INTEGER_LITERAL, first.get(1).type);
+        assertEquals(TokenType.PP_NUMBER, first.get(1).type);
         assertEquals("1", first.get(1).text);
         assertEquals(TokenType.PUNCTUATOR, first.get(2).type);
         assertEquals(",", first.get(2).text);
-        assertEquals(TokenType.INTEGER_LITERAL, first.get(3).type);
+        assertEquals(TokenType.PP_NUMBER, first.get(3).type);
         assertEquals("2", first.get(3).text);
         assertEquals(TokenType.PUNCTUATOR, first.get(4).type);
         assertEquals(")", first.get(4).text);
 
         List<Token> second = arguments.get(1);
         assertEquals(1, second.size());
-        assertEquals(TokenType.INTEGER_LITERAL, second.get(0).type);
+        assertEquals(TokenType.PP_NUMBER, second.get(0).type);
         assertEquals("3", second.get(0).text);
     }
 
@@ -340,7 +370,7 @@ class CppTokenizerTest {
                 TokenType.PUNCTUATOR, "#",
                 TokenType.IDENTIFIER, "define",
                 TokenType.OBJECT_MACRO, "A",
-                TokenType.INTEGER_LITERAL, "1");
+                TokenType.PP_NUMBER, "1");
     }
 
     @Test
@@ -363,7 +393,7 @@ class CppTokenizerTest {
                 TokenType.IDENTIFIER, "define",
                 TokenType.OBJECT_MACRO, "A",
                 TokenType.PUNCTUATOR, "(",
-                TokenType.INTEGER_LITERAL, "1",
+                TokenType.PP_NUMBER, "1",
                 TokenType.PUNCTUATOR, ")");
     }
 
@@ -424,7 +454,7 @@ class CppTokenizerTest {
                 TokenType.PUNCTUATOR, "#",
                 TokenType.IDENTIFIER, "define",
                 TokenType.OBJECT_MACRO, "C",
-                TokenType.INTEGER_LITERAL, "2");
+                TokenType.PP_NUMBER, "2");
     }
 
     @Test

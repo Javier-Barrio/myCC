@@ -289,4 +289,44 @@ class PreprocessorEndToEndTest {
                 """,
                 "int", "main", "(", ")", "{", "return", "0", ";", "}");
     }
+
+    @Test
+    void pastingDigitsBuildsANumericConstant() {
+        assertExpandsTo("""
+                #define CAT(a, b) a##b
+                int x = CAT(4, 2);
+                """,
+                "int", "x", "=", "42", ";");
+    }
+
+    @Test
+    void pastingBuildsAFloatingConstantAcrossTheDot() {
+        assertExpandsTo("""
+                #define CAT(a, b) a##b
+                double d = CAT(1, .5);
+                """,
+                "double", "d", "=", "1.5", ";");
+    }
+
+    @Test
+    void pastingCompletesAnExponent() {
+        assertExpandsTo("""
+                #define CAT(a, b) a##b
+                double d = CAT(1e, 3);
+                """,
+                "double", "d", "=", "1e3", ";");
+    }
+
+    @Test
+    void pastingADigitOntoAMacroProducedNumberViaIndirection() {
+        // XCAT expands its arguments first (they are not adjacent to ##
+        // in XCAT's own body), so N ## 5 pastes the expanded 4 with 5.
+        assertExpandsTo("""
+                #define CAT(a, b) a##b
+                #define XCAT(a, b) CAT(a, b)
+                #define N 4
+                int x = XCAT(N, 5);
+                """,
+                "int", "x", "=", "45", ";");
+    }
 }

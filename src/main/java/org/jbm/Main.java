@@ -2,16 +2,57 @@ package org.jbm;
 
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
+import org.jbm.cc.cpp.TokenConversion;
+
+import java.util.stream.Collectors;
 
 public class Main {
+
+    // Minimal C program driving development of the parser and compiler:
+    // globals, function definitions/calls, locals, while/if, array
+    // indexing, and arithmetic - with every preprocessor feature in play
+    // (object and function-like macros, #, ##, and the STR/XSTR
+    // rescanning idiom).
+    static final String SOURCE = """
+            #define BUFFER_SIZE 8
+            #define SQUARE(x) ((x) * (x))
+            #define MAX(a, b) ((a) > (b) ? (a) : (b))
+            #define STR(x) #x
+            #define XSTR(x) STR(x)
+            #define GETTER(field) get_##field
+
+            int values[BUFFER_SIZE];
+            const char* size_str = XSTR(BUFFER_SIZE);
+
+            int GETTER(count)(void) {
+                return BUFFER_SIZE;
+            }
+
+            int main(void) {
+                int total = 0;
+                int i = 0;
+                while (i < get_count()) {
+                    values[i] = SQUARE(i);
+                    total = MAX(total, values[i]);
+                    i = i + 1;
+                }
+                if (total > BUFFER_SIZE) {
+                    return total;
+                }
+                return 0;
+            }
+            """;
+
     public static void main(String[] args) {
+        var expanded = new Scanner().expand(CppTokenizer.tokenSet(SOURCE));
 
+        // Translation phase 7: pp-tokens -> tokens (pp-numbers become
+        // integer/floating constants). This is the parser's input.
+        var converted = TokenConversion.convert(expanded);
 
-        new Scanner().expand(CppTokenizer.tokenSet("""
-            #define A 12
-            #define B A13
-            int a = A;
-            int b = B;
-        """));
+        System.out.println(converted.tokens.stream()
+                .filter(t -> t.token.type != CppTokenizer.TokenType.EOF)
+                .map(t -> t.token.text)
+                .collect(Collectors.joining(" ")));
     }
 }
