@@ -140,14 +140,14 @@ Each phase ends with the test suite green and `Main` still running.
 - [x] `org.jbm.cc.parse` support: `TokenCursor`, `ScopeStack`, `ParseException`.
 
 ### Phase 1 - expressions (A.3.1, 6.5)
-- [ ] `Parser` with the expression entry point; `ParserTest` harness running the full pipeline (`expr(src)`)
-- [ ] primary: identifier, constants (incl. `true`/`false`/`nullptr`), adjacent string-literal concatenation, `( expression )`
-- [ ] postfix: `[]`, calls, `.`/`->`, `++`/`--`
-- [ ] unary: `++ --`, `& * + - ~ !`, `sizeof`/`alignof`/`_Countof` (expr and type forms), `static_assert` expression
-- [ ] cast `( type-name ) cast-expression` and compound literals `( type-name ) { ... }`
-- [ ] binary via precedence climbing, `?:`, assignment operators, comma
-- [ ] `_Generic`
-- [ ] `type-name` (specifier-qualifier-list + abstract declarator) - shared with phase 2
+- [x] `Parser` with the expression entry point; `ParserTest` harness running the full pipeline (`expr(src)`)
+- [x] primary: identifier, constants (incl. `true`/`false`/`nullptr`), adjacent string-literal concatenation, `( expression )`
+- [x] postfix: `[]`, calls, `.`/`->`, `++`/`--`
+- [x] unary: `++ --`, `& * + - ~ !`, `sizeof`/`alignof`/`_Countof` (expr and type forms), `static_assert` expression
+- [x] cast `( type-name ) cast-expression` and compound literals `( type-name ) { ... }`
+- [x] binary via precedence climbing, `?:`, assignment operators, comma
+- [x] `_Generic`
+- [x] `type-name` (specifier-qualifier-list + abstract declarator) - shared with phase 2
 
 ### Phase 2 - declarations (A.3.2, 6.7)
 - [ ] declaration-specifiers bag and fold to `Type` (incl. `_BitInt(N)`, `_Complex`, `_Decimal*`, `_Atomic(T)`)
@@ -192,5 +192,5 @@ Each phase ends with the test suite green and `Main` still running.
 
 ## Status
 
-Phase 0 is implemented: `Parser` covers nothing of A.3 yet and the
+Phases 0-1 are implemented: `Parser` covers A.3.1 (expressions) and the type-name subset of A.3.2 and the
 full test suite (`./gradlew test`) is green.
