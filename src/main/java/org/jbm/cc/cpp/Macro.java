@@ -1,10 +1,8 @@
 package org.jbm.cc.cpp;
 
-import org.jbm.cc.CppTokenizer;
-
 import java.util.LinkedHashSet;
 
-import static org.jbm.cc.CppTokenizer.Token;
+import static org.jbm.cc.cpp.CppTokenizer.Token;
 
 public abstract class Macro {
     Token token;

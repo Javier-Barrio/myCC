@@ -1,6 +1,6 @@
 package org.jbm;
 
-import org.jbm.cc.CppTokenizer;
+import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 
 public class Main {

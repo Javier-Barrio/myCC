@@ -1,7 +1,5 @@
 package org.jbm.cc.cpp;
 
-import org.jbm.cc.CppTokenizer;
-
 import java.util.LinkedHashSet;
 
 public class CppToken {
