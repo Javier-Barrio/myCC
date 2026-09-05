@@ -132,31 +132,31 @@ public class CppTokenizer {
         }
     }
 
+    // The keywords of C2y (N3886 6.4.2). Note the old `_Bool`, `_Alignas`,
+    // `_Static_assert` and `_Thread_local` spellings are no longer keywords.
     private static final Set<String> KEYWORDS = Set.of(
-            "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
-            "bool", "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t",
-            "class", "compl", "concept", "const", "consteval", "constexpr", "constinit",
-            "const_cast", "continue", "co_await", "co_return", "co_yield", "decltype",
-            "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit",
-            "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline",
-            "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq",
-            "nullptr", "operator", "or", "or_eq", "private", "protected", "public",
-            "register", "reinterpret_cast", "requires", "return", "short", "signed",
-            "sizeof", "static", "static_assert", "static_cast", "struct", "switch",
-            "template", "this", "thread_local", "throw", "true", "try", "typedef",
-            "typeid", "typename", "union", "unsigned", "using", "virtual", "void",
-            "volatile", "wchar_t", "while", "xor", "xor_eq"
+            "alignas", "alignof", "auto", "bool", "break", "case", "char", "const",
+            "constexpr", "continue", "default", "do", "double", "else", "enum", "extern",
+            "false", "float", "for", "goto", "if", "inline", "int", "long", "nullptr",
+            "register", "restrict", "return", "short", "signed", "sizeof", "static",
+            "static_assert", "struct", "switch", "thread_local", "true", "typedef",
+            "typeof", "typeof_unqual", "union", "unsigned", "void", "volatile", "while",
+            "_Atomic", "_BitInt", "_Complex", "_Countof", "_Decimal128", "_Decimal32",
+            "_Decimal64", "_Generic", "_Noreturn"
     );
 
     public static Set<String> keywords() {
         return KEYWORDS;
     }
 
-    // Ordered longest-first so matching is greedy.
+    // The punctuators of C2y (6.4.7), including the six digraphs. Ordered
+    // longest-first so matching is greedy.
     private static final String[] PUNCTUATORS = {
-            "<<=", ">>=", "...", "->*", "<=>",
-            "::", "->", ".*", "==", "!=", "<=", ">=", "&&", "||", "++", "--",
+            "%:%:",
+            "<<=", ">>=", "...",
+            "::", "->", "==", "!=", "<=", ">=", "&&", "||", "++", "--",
             "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<", ">>", "##",
+            "<:", ":>", "<%", "%>", "%:",
             "{", "}", "[", "]", "(", ")", ";", ":", "?", ".", "~", "!",
             "+", "-", "*", "/", "%", "^", "&", "|", "=", ",", "<", ">", "#"
     };
@@ -164,6 +164,11 @@ public class CppTokenizer {
     static {
         Arrays.sort(PUNCTUATORS, (a, b) -> b.length() - a.length());
     }
+
+    // A digraph behaves exactly like its primary spelling (6.4.7p3), so it is
+    // normalized here and the parser only ever sees the primary form.
+    private static final Map<String, String> DIGRAPHS = Map.of(
+            "<:", "[", ":>", "]", "<%", "{", "%>", "}", "%:", "#", "%:%:", "##");
 
     private static final String[] STRING_PREFIXES = {"u8R", "uR", "UR", "LR", "u8", "u", "U", "L", "R"};
 
@@ -312,15 +317,16 @@ public class CppTokenizer {
 
         for (String p : PUNCTUATORS) {
             if (match(p)) {
+                String spelling = DIGRAPHS.getOrDefault(p, p);
                 // Reached only when '#'/'##' aren't the line-start directive
                 // marker, i.e. when they're the macro-body stringize/paste
                 // operators.
-                TokenType type = switch (p) {
+                TokenType type = switch (spelling) {
                     case "##" -> TokenType.PASTE;
                     case "#" -> TokenType.STRINGIZE;
                     default -> TokenType.PUNCTUATOR;
                 };
-                return new Token(type, p, startLine, startCol);
+                return new Token(type, spelling, startLine, startCol);
             }
         }
 
