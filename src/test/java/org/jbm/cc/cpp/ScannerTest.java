@@ -72,12 +72,12 @@ class ScannerTest {
     }
 
     @Test
-    void gluePastesIntegerLiteralsIntoAnIntegerToken() {
-        var result = scanner.glue(setOf(tok(TokenType.INTEGER_LITERAL, "1")),
-                setOf(tok(TokenType.INTEGER_LITERAL, "2")));
+    void gluePastesDigitsIntoOnePpNumber() {
+        var result = scanner.glue(setOf(tok(TokenType.PP_NUMBER, "1")),
+                setOf(tok(TokenType.PP_NUMBER, "2")));
 
         assertEquals(List.of("12"), texts(result));
-        assertEquals(TokenType.INTEGER_LITERAL, result.tokens.get(0).token.type);
+        assertEquals(TokenType.PP_NUMBER, result.tokens.get(0).token.type);
     }
 
     @Test
@@ -258,8 +258,8 @@ class ScannerTest {
     @Test
     void stringizeOfAParenthesizedExpression() {
         var result = scanner.stringize(setOf(
-                tok(TokenType.PUNCTUATOR, "("), tok(TokenType.INTEGER_LITERAL, "1"),
-                tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.INTEGER_LITERAL, "2"),
+                tok(TokenType.PUNCTUATOR, "("), tok(TokenType.PP_NUMBER, "1"),
+                tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.PP_NUMBER, "2"),
                 tok(TokenType.PUNCTUATOR, ")")));
 
         assertEquals("\"(1+2)\"", result.token.text);
@@ -287,8 +287,8 @@ class ScannerTest {
                 TokenSet.from(tok(TokenType.IDENTIFIER, "b"))
         ));
         var args = new ArrayList<>(List.of(
-                setOf(tok(TokenType.INTEGER_LITERAL, "1")),
-                setOf(tok(TokenType.INTEGER_LITERAL, "2"))
+                setOf(tok(TokenType.PP_NUMBER, "1")),
+                setOf(tok(TokenType.PP_NUMBER, "2"))
         ));
         var inSet = setOf(tok(TokenType.IDENTIFIER, "a"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.IDENTIFIER, "b"));
 
@@ -401,7 +401,7 @@ class ScannerTest {
     void substituteSubstitutesAMultiTokenArgument() {
         var params = new ArrayList<>(List.of(TokenSet.from(tok(TokenType.IDENTIFIER, "x"))));
         var args = new ArrayList<>(List.of(setOf(
-                tok(TokenType.INTEGER_LITERAL, "1"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.INTEGER_LITERAL, "2"))));
+                tok(TokenType.PP_NUMBER, "1"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.PP_NUMBER, "2"))));
         var inSet = setOf(tok(TokenType.IDENTIFIER, "x"));
 
         var result = scanner.substitute(inSet, params, args, TokenSet.empty(), TokenSet.empty());
@@ -424,7 +424,7 @@ class ScannerTest {
     void substituteStringizesAMultiTokenArgument() {
         var params = new ArrayList<>(List.of(TokenSet.from(tok(TokenType.IDENTIFIER, "x"))));
         var args = new ArrayList<>(List.of(setOf(
-                tok(TokenType.INTEGER_LITERAL, "1"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.INTEGER_LITERAL, "2"))));
+                tok(TokenType.PP_NUMBER, "1"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.PP_NUMBER, "2"))));
         var inSet = setOf(tok(TokenType.STRINGIZE, "#"), tok(TokenType.IDENTIFIER, "x"));
 
         var result = scanner.substitute(inSet, params, args, TokenSet.empty(), TokenSet.empty());
@@ -528,7 +528,7 @@ class ScannerTest {
                 setOf(tok(TokenType.IDENTIFIER, "bar"))
         ));
         var inSet = setOf(tok(TokenType.IDENTIFIER, "a"), tok(TokenType.PASTE, "##"),
-                tok(TokenType.IDENTIFIER, "b"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.INTEGER_LITERAL, "1"));
+                tok(TokenType.IDENTIFIER, "b"), tok(TokenType.PUNCTUATOR, "+"), tok(TokenType.PP_NUMBER, "1"));
 
         var result = scanner.substitute(inSet, params, args, TokenSet.empty(), TokenSet.empty());
 
@@ -760,14 +760,63 @@ class ScannerTest {
     }
 
     @Test
-    void expandPastedIntegersFormOneIntegerToken() {
+    void expandPastedDigitsFormOnePpNumber() {
         var result = expand("""
                 #define CAT(a, b) a##b
                 CAT(1, 2)
                 """);
 
         assertEquals(List.of("12"), texts(result));
-        assertEquals(TokenType.INTEGER_LITERAL, result.tokens.get(0).token.type);
+        assertEquals(TokenType.PP_NUMBER, result.tokens.get(0).token.type);
+    }
+
+    @Test
+    void expandPastesAPpNumberAcrossADot() {
+        // 1 ## .5 pastes into the single pp-number 1.5.
+        var result = expand("""
+                #define CAT(a, b) a##b
+                CAT(1, .5)
+                """);
+
+        assertEquals(List.of("1.5"), texts(result));
+        assertEquals(TokenType.PP_NUMBER, result.tokens.get(0).token.type);
+    }
+
+    @Test
+    void expandPastesAPartialExponentWithItsDigits() {
+        // "1e" is itself a pp-number; pasting the exponent digits onto it
+        // forms the (floating) pp-number 1e3.
+        var result = expand("""
+                #define CAT(a, b) a##b
+                CAT(1e, 3)
+                """);
+
+        assertEquals(List.of("1e3"), texts(result));
+        assertEquals(TokenType.PP_NUMBER, result.tokens.get(0).token.type);
+    }
+
+    @Test
+    void expandPastesANumberOntoAnIdentifierFormingAPpNumber() {
+        // 123 ## abc is a valid paste: the result 123abc is one pp-number
+        // pp-token. That it can never convert to a constant is phase 7's
+        // problem (TokenConversion), not the preprocessor's.
+        var result = expand("""
+                #define CAT(a, b) a##b
+                CAT(123, abc)
+                """);
+
+        assertEquals(List.of("123abc"), texts(result));
+        assertEquals(TokenType.PP_NUMBER, result.tokens.get(0).token.type);
+    }
+
+    @Test
+    void expandKeepsAGreedyPpNumberIntactThroughSubstitution() {
+        // 0xE+2 lexes as one pp-number and must flow through a macro as
+        // one token, e.g. into # for stringizing.
+        assertExpandsTo("""
+                #define STR(x) #x
+                STR(0xE+2)
+                """, "\"0xE+2\"");
     }
 
     @Test
