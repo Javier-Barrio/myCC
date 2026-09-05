@@ -1,6 +1,4 @@
-package org.jbm.cc;
-
-import org.jbm.cc.cpp.CppToken;
+package org.jbm.cc.cpp;
 
 import java.util.*;
 

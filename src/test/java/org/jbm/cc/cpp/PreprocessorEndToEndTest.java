@@ -1,7 +1,6 @@
 package org.jbm.cc.cpp;
 
-import org.jbm.cc.CppTokenizer;
-import org.jbm.cc.CppTokenizer.TokenType;
+import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

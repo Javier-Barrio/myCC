@@ -1,9 +1,8 @@
 package org.jbm.cc.cpp;
 
-import org.jbm.cc.CppTokenizer;
-import org.jbm.cc.CppTokenizer.Token;
-import org.jbm.cc.CppTokenizer.TokenSet;
-import org.jbm.cc.CppTokenizer.TokenType;
+import org.jbm.cc.cpp.CppTokenizer.Token;
+import org.jbm.cc.cpp.CppTokenizer.TokenSet;
+import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
