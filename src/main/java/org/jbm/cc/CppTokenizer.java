@@ -432,7 +432,18 @@ public class CppTokenizer {
     // here, and the argument list may span multiple lines.
     private Token classifyCallSite(Token idToken) {
         Token definition = macroTable.get(idToken.text);
-        if (definition == null || definition.type != TokenType.CALL_MACRO) {
+        if (definition == null) {
+            return idToken;
+        }
+        if (definition.type == TokenType.OBJECT_MACRO) {
+            // Resolve object-macro occurrences at scan time too, so each
+            // use carries the definition in force at its position in the
+            // source (matters across #undef / redefinition).
+            Token occurrence = new Token(TokenType.OBJECT_MACRO, idToken.text, idToken.line, idToken.column);
+            occurrence.expansion = definition.expansion;
+            return occurrence;
+        }
+        if (definition.type != TokenType.CALL_MACRO) {
             return idToken;
         }
         skipWhitespaceAndComments();

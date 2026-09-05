@@ -1,201 +1,331 @@
 package org.jbm.cc.cpp;
 
 import org.jbm.cc.CppTokenizer;
+import org.jbm.cc.CppTokenizer.Token;
+import org.jbm.cc.CppTokenizer.TokenSet;
+import org.jbm.cc.CppTokenizer.TokenType;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * Macro expander implementing Dave Prosser's expand/subst/glue/hsadd
+ * algorithm with hide sets, as reproduced in
+ * https://www.spinellis.gr/blog/20060626/cpp.algo.pdf.
+ */
 public class Scanner {
 
-    private CppToken stringize(CppTokenizer.TokenSet set) {
-        var str = new StringBuilder();
+    // Macro table captured from the incoming TokenSet. Recursive expansion
+    // builds fresh intermediate TokenSets, so the table lives here rather
+    // than being threaded through each of them.
+    private Map<String, Token> macros = Map.of();
 
-        for (var t : set.tokens) {
-            str.append(t.token.text);
-        }
-
-        // TODO line numbers
-        return new CppToken(new CppTokenizer.Token(CppTokenizer.TokenType.STRING_LITERAL, str.toString(), 0, 0));
+    public TokenSet expand(TokenSet tokenSet) {
+        macros = tokenSet.macros;
+        return doExpand(stripDirectiveLines(tokenSet));
     }
 
-    private CppTokenizer.TokenSet glue(CppTokenizer.TokenSet lhs, CppTokenizer.TokenSet rhs) {
-        var lhsFirst = lhs.tokens.get(0);
-
-        if (lhs.tokens.size() == 1 && rhs.tokens.size() > 1) {
-            var intersect = rhs.tokens.stream()
-                    .filter(t -> t.token.equals(lhsFirst.token))
-                    .peek(t ->
-                        t.hideSet.retainAll(lhsFirst.hideSet)
-                    ).toList();
-            return new CppTokenizer.TokenSet(intersect);
+    // expand(TS) from the paper, over a stream with directive lines
+    // already removed.
+    private TokenSet doExpand(TokenSet tokenSet) {
+        if (tokenSet.tokens.isEmpty()) {
+            return TokenSet.empty();
         }
 
-        var lhsRest = new CppTokenizer.TokenSet(lhs.tokens.subList(1, lhs.tokens.size()));
-        return new CppTokenizer.TokenSet(lhsFirst, glue(lhsRest, rhs));
-    }
+        var first = tokenSet.tokens.get(0);
+        var rest = new TokenSet(tokenSet.tokens.subList(1, tokenSet.tokens.size()));
 
-    private CppTokenizer.TokenSet hsAdd(CppTokenizer.TokenSet hs, CppTokenizer.TokenSet ts) {
-        if (ts.tokens.isEmpty()) {
-            return CppTokenizer.TokenSet.empty();
+        // T is in its own hide set: painted blue, never expanded again.
+        if (hideSetContains(first, first.token.text)) {
+            return new TokenSet(first, doExpand(rest));
         }
 
-        var first = ts.tokens.get(0);
-        var tsp = new CppTokenizer.TokenSet(ts.tokens.subList(1, ts.tokens.size()));
-        var lhs = hs.dup();
-        lhs.tokens.forEach(t -> t.hideSet.addAll(first.hideSet));
-        return lhs.concat(hsAdd(hs, tsp));
+        var definition = definitionOf(first);
+
+        // T is an object-like macro:
+        // expand(subst(ts(T), {}, {}, HS ∪ {T}, {}) • TS')
+        if (definition != null && definition.type == TokenType.OBJECT_MACRO) {
+            var hs = hideSetPlus(first, null);
+            var replaced = substitute(TokenSet.fromTokens(definition.expansion),
+                    new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
+            return doExpand(replaced.concat(rest));
+        }
+
+        // T is a function-like macro followed by '(' actuals ')':
+        // expand(subst(ts(T), fp(T), actuals, (HS ∩ HS') ∪ {T}, {}) • TS'')
+        if (definition != null && definition.type == TokenType.CALL_MACRO && startsWithOpenParen(rest)) {
+            int close = matchingCloseParen(rest);
+            if (close >= 0) {
+                var closeParen = rest.tokens.get(close);
+                var args = splitArguments(rest.tokens.subList(1, close), definition.params.size());
+                var remainder = new TokenSet(rest.tokens.subList(close + 1, rest.tokens.size()));
+
+                var fp = new ArrayList<TokenSet>();
+                definition.params.forEach(p -> fp.add(TokenSet.from(new CppToken(p))));
+
+                var hs = hideSetPlus(first, closeParen);
+                var replaced = substitute(TokenSet.fromTokens(definition.expansion),
+                        fp, args, hs, TokenSet.empty());
+                return doExpand(replaced.concat(remainder));
+            }
+        }
+
+        return new TokenSet(first, doExpand(rest));
     }
 
-    private CppTokenizer.TokenSet substitute(CppTokenizer.TokenSet inSet,
-                                             ArrayList<CppTokenizer.TokenSet> params,
-                                             ArrayList<CppTokenizer.TokenSet> args,
-                                             CppTokenizer.TokenSet hs,
-                                             CppTokenizer.TokenSet outSet) {
+    // subst(IS, FP, AP, HS, OS) from the paper.
+    TokenSet substitute(TokenSet inSet,
+                        ArrayList<TokenSet> params,
+                        ArrayList<TokenSet> args,
+                        TokenSet hs,
+                        TokenSet outSet) {
         if (inSet.tokens.isEmpty()) {
             return hsAdd(hs, outSet);
         }
 
         var first = inSet.tokens.get(0);
+        var rest = new TokenSet(inSet.tokens.subList(1, inSet.tokens.size()));
 
-        // #define FOO(x) #x
-        if (first.token.type == CppTokenizer.TokenType.STRINGIZE) {
-            var secondToken = inSet.tokens.get(1);
-            var secondSet = CppTokenizer.TokenSet.from(secondToken);
+        // IS = # • T • IS', T ∈ FP:  OS • stringize(AP[i])
+        if (first.token.type == TokenType.STRINGIZE && !rest.tokens.isEmpty()) {
+            int i = paramIndex(params, rest.tokens.get(0));
+            if (i >= 0 && i < args.size()) {
+                var restp = new TokenSet(rest.tokens.subList(1, rest.tokens.size()));
+                return substitute(restp, params, args, hs,
+                        outSet.concat(TokenSet.from(stringize(args.get(i)))));
+            }
+        }
 
-            if (params.contains(secondSet)) {
-                var i = params.indexOf(secondSet);
-                if (args.size() <= i) {
-                    // Bad input
-                    // TODO report error
-                    return CppTokenizer.TokenSet.empty();
-                }
-                var list = inSet.tokens.subList(2, inSet.tokens.size());
-                var isp = new CppTokenizer.TokenSet(list);
-
+        // IS = ## • T • IS'
+        if (first.token.type == TokenType.PASTE && !rest.tokens.isEmpty()) {
+            var second = rest.tokens.get(0);
+            var restp = new TokenSet(rest.tokens.subList(1, rest.tokens.size()));
+            int i = paramIndex(params, second);
+            if (i >= 0 && i < args.size()) {
                 var arg = args.get(i);
-                return substitute(isp, params, args, hs,
-                        outSet.concat(stringize(arg)));
-            }
-        }
-
-        // #define FOO(x, y) x ## y
-        if (first.token.type == CppTokenizer.TokenType.PASTE) {
-            var secondToken = inSet.tokens.get(1);
-            var secondSet = CppTokenizer.TokenSet.from(secondToken);
-            if (params.contains(secondSet)) {
-                var second = CppTokenizer.TokenSet.from(inSet.tokens.get(1));
-                if (!args.contains(second)) {
-                    var list = inSet.tokens.subList(2, inSet.tokens.size());
-                    var isp = new CppTokenizer.TokenSet(list);
-                    return substitute(isp, params, args, hs, outSet);
+                if (arg.tokens.isEmpty()) {
+                    // Pasting an empty actual is a no-op.
+                    return substitute(restp, params, args, hs, outSet);
                 }
-                var list = inSet.tokens.subList(2, inSet.tokens.size());
-                var isp = new CppTokenizer.TokenSet(list);
-                var secondArg = args.get(args.indexOf(second));
-                var glued = glue(outSet, secondArg);
-                return substitute(isp, params, args, hs, glued);
+                return substitute(restp, params, args, hs, glue(outSet, arg));
             }
+            // T is an ordinary token: glue it on directly.
+            return substitute(restp, params, args, hs, glue(outSet, TokenSet.from(second)));
         }
 
-        // #define FOO(x) y ## bar
-        if (inSet.tokens.size() > 1) {
-            if (first.token.type == CppTokenizer.TokenType.PASTE) {
-                var secondToken = inSet.tokens.get(1);
-                var secondSet = CppTokenizer.TokenSet.from(secondToken);
-                var list = inSet.tokens.subList(2, inSet.tokens.size());
-                var isp = new CppTokenizer.TokenSet(list);
-                return substitute(isp, params, args, hs, glue(outSet, secondSet));
-            }
-        }
+        int i = paramIndex(params, first);
+        if (i >= 0 && i < args.size()) {
+            var arg = args.get(i);
 
-        // #define FOO(x) x ## bar
-        if (inSet.tokens.size() > 1) {
-            var firstSet = CppTokenizer.TokenSet.from(first);
-            var secondToken = inSet.tokens.get(1);
-            if (params.contains(firstSet) && secondToken.token.type == CppTokenizer.TokenType.PASTE) {
-                var list = inSet.tokens.subList(2, inSet.tokens.size());
-                var isp = new CppTokenizer.TokenSet(list);
-
-                if (!args.contains(firstSet)) {
-                    var isppList = isp.tokens.subList(1, isp.tokens.size());
-                    var ispp = new CppTokenizer.TokenSet(isppList);
-                    var isppFirst = ispp.tokens.get(0);
-                    var isppFirstSet = CppTokenizer.TokenSet.from(isppFirst);
-                    // IS' = T' + IS'' && T' is PARAM
-                    if (params.contains(isppFirstSet)) {
-                        var arg = args.get(params.indexOf(isppFirstSet));
-                        var out1 = outSet.concat(arg);
-                        return substitute(isp, params, args, hs, out1);
-                    } else {
-                        return substitute(isp, params, args, hs, outSet);
+            // IS = T • ## • IS', T ∈ FP
+            if (!rest.tokens.isEmpty() && rest.tokens.get(0).token.type == TokenType.PASTE) {
+                if (arg.tokens.isEmpty()) {
+                    var restp = new TokenSet(rest.tokens.subList(1, rest.tokens.size())); // after ##
+                    if (!restp.tokens.isEmpty()) {
+                        int j = paramIndex(params, restp.tokens.get(0));
+                        if (j >= 0 && j < args.size()) {
+                            var restpp = new TokenSet(restp.tokens.subList(1, restp.tokens.size()));
+                            return substitute(restpp, params, args, hs, outSet.concat(args.get(j)));
+                        }
                     }
-                } else {
-                    var secondSet = CppTokenizer.TokenSet.from(secondToken);
-                    return substitute(secondSet.concat(isp),
-                            params, args, hs, outSet.concat(args.get(params.indexOf(firstSet))));
+                    return substitute(restp, params, args, hs, outSet);
                 }
+                // Leave the ## in place; it will glue OS's new tail next.
+                return substitute(rest, params, args, hs, outSet.concat(arg));
             }
+
+            // IS = T • IS', T ∈ FP: plain occurrence, substitute the fully
+            // macro-expanded actual.
+            return substitute(rest, params, args, hs, outSet.concat(doExpand(arg)));
         }
 
-        var firstSet = CppTokenizer.TokenSet.from(first);
-        var isp = new CppTokenizer.TokenSet(inSet.tokens.subList(1, inSet.tokens.size()));
-        return substitute(isp, params, args, hs, outSet.concat(firstSet));
+        // Ordinary token: copy through.
+        return substitute(rest, params, args, hs, outSet.concat(TokenSet.from(first)));
     }
 
-    public CppTokenizer.TokenSet expand(CppTokenizer.TokenSet tokenSet) {
-        if (tokenSet.tokens.isEmpty()) {
-            return new CppTokenizer.TokenSet(new ArrayList<>());
-        }
-
-        var first = tokenSet.tokens.get(0);
-        if (first.hideSet.contains(first.token)) {
-            return new CppTokenizer.TokenSet(first,
-                    expand(new CppTokenizer.TokenSet(
-                            tokenSet.tokens.subList(1, tokenSet.tokens.size())))
-            );
-        }
-
-        if (first.token.type == CppTokenizer.TokenType.IDENTIFIER) {
-            var macro = tokenSet.macros.get(first.token.text);
-            if (macro.type == CppTokenizer.TokenType.OBJECT_MACRO) {
-                var list = macro.expansion.stream().map(CppToken::new).toList();
-                var replacement = new CppTokenizer.TokenSet(list);
-                var hs = new CppTokenizer.TokenSet(new ArrayList<>());
-                hs.concat(first);
-                return expand(substitute(replacement,
-                        new ArrayList<>(), new ArrayList<>(),
-                        hs,
-                        CppTokenizer.TokenSet.empty()
-                ));
+    // The '#' operator: quote the actual's spelling as one string literal.
+    CppToken stringize(TokenSet set) {
+        var str = new StringBuilder("\"");
+        for (var t : set.tokens) {
+            var text = t.token.text;
+            if (t.token.type == TokenType.STRING_LITERAL || t.token.type == TokenType.CHARACTER_LITERAL) {
+                text = text.replace("\\", "\\\\").replace("\"", "\\\"");
             }
-
-            // CALL_MACRO
-            // #define FOO(x) x + 1
-            //
-            // FOO(x)
-
-            var callMacro = tokenSet.macros.get(first.token.text);
-            // TODO each param can be a token set
-            var fp = new ArrayList<>(callMacro.params.stream().map(t -> CppTokenizer.TokenSet.from(new CppToken(t))).toList());
-            var replacement = callMacro.expansion.stream().map(CppToken::new).toList();
-            var replacementSet = new CppTokenizer.TokenSet(replacement);
-
-            var _args = new ArrayList<CppTokenizer.TokenSet>();
-            first.token.arguments.stream().map(CppTokenizer.TokenSet::fromTokens).forEach(_args::add);
-
-            var argsHs = new ArrayList<CppToken>();
-            for (var arg : _args) {
-                argsHs.addAll(arg.tokens);
-            }
-            var intersect = replacementSet
-                    .tokens
-                    .stream()
-                    .filter(t -> argsHs.contains(new CppToken(t.token))).toList();
-
-            var hs = new CppTokenizer.TokenSet(intersect);
-            return expand(substitute(replacementSet, fp, _args, hs, new CppTokenizer.TokenSet(new ArrayList<>())));
+            str.append(text);
         }
+        str.append('"');
 
-        var isp = tokenSet.tokens.subList(1, tokenSet.tokens.size());
-        return expand(new CppTokenizer.TokenSet(isp)).concat(first);
+        int line = set.tokens.isEmpty() ? 0 : set.tokens.get(0).token.line;
+        int column = set.tokens.isEmpty() ? 0 : set.tokens.get(0).token.column;
+        return new CppToken(new Token(TokenType.STRING_LITERAL, str.toString(), line, column));
+    }
+
+    // glue(LS, RS): paste the last token of LS with the first token of RS,
+    // keeping everything else in place. The pasted token's hide set is the
+    // intersection of the two operands' hide sets.
+    TokenSet glue(TokenSet lhs, TokenSet rhs) {
+        if (lhs.tokens.isEmpty()) {
+            return new TokenSet(rhs.tokens);
+        }
+        if (rhs.tokens.isEmpty()) {
+            return new TokenSet(lhs.tokens);
+        }
+        if (lhs.tokens.size() == 1) {
+            var l = lhs.tokens.get(0);
+            var r = rhs.tokens.get(0);
+            var text = l.token.text + r.token.text;
+            var pasted = new CppToken(new Token(pastedType(text), text, l.token.line, l.token.column));
+            l.hideSet.stream()
+                    .filter(h -> hideSetContains(r, h.text))
+                    .forEach(pasted.hideSet::add);
+            return new TokenSet(pasted, new TokenSet(rhs.tokens.subList(1, rhs.tokens.size())));
+        }
+        var lhsRest = new TokenSet(lhs.tokens.subList(1, lhs.tokens.size()));
+        return new TokenSet(lhs.tokens.get(0), glue(lhsRest, rhs));
+    }
+
+    // Re-lex the pasted spelling so e.g. "A" ## "B" -> identifier AB, which
+    // rescanning can then recognize as a macro name.
+    private static TokenType pastedType(String text) {
+        try {
+            var lexed = CppTokenizer.tokenize(text);
+            return lexed.size() == 2 ? lexed.get(0).type : TokenType.UNKNOWN;
+        } catch (CppTokenizer.LexException e) {
+            return TokenType.UNKNOWN;
+        }
+    }
+
+    // hsadd(HS, TS): union HS into every token of TS, keeping TS's tokens
+    // and order unchanged.
+    TokenSet hsAdd(TokenSet hs, TokenSet ts) {
+        var result = new TokenSet(ts.tokens); // clones each token
+        for (var t : result.tokens) {
+            for (var h : hs.tokens) {
+                t.hideSet.add(h.token);
+            }
+        }
+        return result;
+    }
+
+    // Resolves what macro (if any) this occurrence refers to.
+    private Token definitionOf(CppToken t) {
+        return switch (t.token.type) {
+            // Resolved at scan time; carries the definition in force at its
+            // position in the source (matters across #undef/redefine).
+            case OBJECT_MACRO -> t.token;
+            // Function-like occurrences and rescanned identifiers resolve
+            // against the macro table.
+            case CALL_MACRO, IDENTIFIER -> macros.get(t.token.text);
+            default -> null;
+        };
+    }
+
+    // HS ∪ {T}; or (HS ∩ HS') ∪ {T} when the invocation's closing paren
+    // carries hide set HS'. Wrapped as a TokenSet for hsAdd.
+    private static TokenSet hideSetPlus(CppToken occurrence, CppToken closeParen) {
+        var list = new ArrayList<CppToken>();
+        for (var t : occurrence.hideSet) {
+            if (closeParen == null || hideSetContains(closeParen, t.text)) {
+                list.add(new CppToken(t));
+            }
+        }
+        list.add(new CppToken(occurrence.token));
+        return new TokenSet(list);
+    }
+
+    // Hide sets track macro *names*: occurrences from different source
+    // positions must still be considered hidden.
+    private static boolean hideSetContains(CppToken t, String name) {
+        return t.hideSet.stream().anyMatch(h -> h.text.equals(name));
+    }
+
+    private static int paramIndex(ArrayList<TokenSet> params, CppToken t) {
+        if (t.token.type != TokenType.IDENTIFIER) {
+            return -1;
+        }
+        for (int i = 0; i < params.size(); i++) {
+            var p = params.get(i).tokens;
+            if (!p.isEmpty() && p.get(0).token.text.equals(t.token.text)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean startsWithOpenParen(TokenSet ts) {
+        if (ts.tokens.isEmpty()) {
+            return false;
+        }
+        var t = ts.tokens.get(0).token;
+        return t.type == TokenType.PUNCTUATOR && t.text.equals("(");
+    }
+
+    // Index of the ')' matching the '(' at index 0, or -1.
+    private static int matchingCloseParen(TokenSet ts) {
+        int depth = 0;
+        for (int i = 0; i < ts.tokens.size(); i++) {
+            var t = ts.tokens.get(i).token;
+            if (t.type == TokenType.PUNCTUATOR && t.text.equals("(")) {
+                depth++;
+            } else if (t.type == TokenType.PUNCTUATOR && t.text.equals(")")) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // Splits the tokens between an invocation's parens into one TokenSet
+    // per top-level comma. `THUNK()` with no formals yields no arguments,
+    // while `ONE_ARG()` with one formal yields a single empty argument.
+    private static ArrayList<TokenSet> splitArguments(List<CppToken> inner, int paramCount) {
+        var args = new ArrayList<TokenSet>();
+        if (inner.isEmpty() && paramCount == 0) {
+            return args;
+        }
+        var current = new ArrayList<CppToken>();
+        int depth = 0;
+        for (var t : inner) {
+            if (t.token.type == TokenType.PUNCTUATOR) {
+                switch (t.token.text) {
+                    case "(" -> depth++;
+                    case ")" -> depth--;
+                    case "," -> {
+                        if (depth == 0) {
+                            args.add(new TokenSet(current));
+                            current = new ArrayList<>();
+                            continue;
+                        }
+                    }
+                }
+            }
+            current.add(t);
+        }
+        args.add(new TokenSet(current));
+        return args;
+    }
+
+    // The tokenizer keeps directive lines ('#define ...', '#undef ...') in
+    // the stream, echoing the replacement-list tokens it also captured onto
+    // the macro token. Preprocessing consumes directives, so drop those
+    // lines before expanding. A '#' is only lexed as a PUNCTUATOR when it
+    // starts a line, i.e. when it introduces a directive.
+    private static TokenSet stripDirectiveLines(TokenSet ts) {
+        var kept = new ArrayList<CppToken>();
+        int directiveLine = -1;
+        for (var t : ts.tokens) {
+            if (t.token.type == TokenType.PUNCTUATOR && t.token.text.equals("#")) {
+                directiveLine = t.token.line;
+                continue;
+            }
+            if (t.token.line == directiveLine && t.token.type != TokenType.EOF) {
+                continue;
+            }
+            kept.add(t);
+        }
+        return new TokenSet(kept);
     }
 }
