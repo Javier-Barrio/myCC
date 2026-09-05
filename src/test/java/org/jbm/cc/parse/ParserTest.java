@@ -29,6 +29,15 @@ class ParserTest {
         return AstPrinter.print(new Parser(preprocess(source)).parseStandaloneExpression());
     }
 
+    /** Parses a translation unit; one line per external declaration. */
+    private static String unit(String source) {
+        return AstPrinter.print(Parser.parse(preprocess(source)));
+    }
+
+    private static ParseException fails(String source) {
+        return assertThrows(ParseException.class, () -> unit(source));
+    }
+
     // ---- A.3.1 expressions (6.5) ---------------------------------------
 
     @Nested
@@ -180,6 +189,199 @@ class ParserTest {
             assertThrows(ParseException.class, () -> expr("f(a,)"));
             var e = assertThrows(ParseException.class, () -> expr("1 +\n  )"));
             assertTrue(e.getMessage().contains("2:3"), e.getMessage());
+        }
+    }
+
+    // ---- A.3.2 declarations (6.7) --------------------------------------
+
+    @Nested
+    class Declarations {
+
+        @Test
+        void simpleObjectDeclarations() {
+            assertEquals("(decl (x int))", unit("int x;"));
+            assertEquals("(decl (x int 1) (p (ptr int) (& x)))", unit("int x = 1, *p = &x;"));
+            assertEquals("(decl static (s (const (ptr (const char))) \"hi\"))",
+                    unit("static const char *const s = \"hi\";"));
+            assertEquals("(decl extern (n int))", unit("extern int n;"));
+            assertEquals("(decl constexpr (k int 3))", unit("constexpr int k = 3;"));
+        }
+
+        @Test
+        void typeSpecifiersFoldInAnyOrder() {
+            assertEquals("(decl (x unsigned long long))", unit("unsigned long long x;"));
+            assertEquals("(decl (y unsigned long long))", unit("long unsigned int long y;"));
+            assertEquals("(decl (s short))", unit("short s;"));
+            assertEquals("(decl (s unsigned short))", unit("unsigned short int s;"));
+            assertEquals("(decl (c signed char))", unit("signed char c;"));
+            assertEquals("(decl (c unsigned char))", unit("char unsigned c;"));
+            assertEquals("(decl (d long double))", unit("long double d;"));
+            assertEquals("(decl (z _Complex double))", unit("double _Complex z;"));
+            assertEquals("(decl (u unsigned int))", unit("unsigned u;"));
+            assertEquals("(decl (l long))", unit("long l;"));
+            assertEquals("(decl (b bool))", unit("bool b;"));
+            assertEquals("(decl (d _Decimal64))", unit("_Decimal64 d;"));
+        }
+
+        @Test
+        void bitPreciseAndAtomicTypes() {
+            assertEquals("(decl (b (unsigned _BitInt 7)))", unit("unsigned _BitInt(7) b;"));
+            assertEquals("(decl (b (_BitInt (+ 8 8))))", unit("_BitInt(8 + 8) b;"));
+            assertEquals("(decl (a (_Atomic int)))", unit("_Atomic(int) a;"));
+            assertEquals("(decl (a (_Atomic int)))", unit("_Atomic int a;"));
+            assertEquals("(decl (p (ptr (_Atomic int))))", unit("_Atomic(int) *p;"));
+        }
+
+        @Test
+        void invalidSpecifierCombinationsAreRejected() {
+            fails("short long x;");
+            fails("signed float f;");
+            fails("long long long x;");
+            fails("int char c;");
+            fails("_Complex c;");
+            fails("unsigned bool b;");
+        }
+
+        @Test
+        void qualifiers() {
+            assertEquals("(decl (p (ptr (const volatile int))))", unit("const volatile int *p;"));
+            assertEquals("(decl (p (const (ptr int))))", unit("int *const p;"));
+            assertEquals("(decl (p (restrict (ptr (const char)))))", unit("const char *restrict p;"));
+            assertEquals("(decl (pp (ptr (const (ptr char)))))", unit("char *const *pp;"));
+        }
+
+        @Test
+        void declaratorsComposeInsideOut() {
+            assertEquals("(decl (a (array (ptr int) 3)))", unit("int *a[3];"));
+            assertEquals("(decl (a (ptr (array int 3))))", unit("int (*a)[3];"));
+            assertEquals("(decl (a (array (array int 3) 2)))", unit("int a[2][3];"));
+            assertEquals("(decl (fp (ptr (fn int ((int) (char))))))", unit("int (*fp)(int, char);"));
+            assertEquals("(decl (f (fn (ptr int) ())))", unit("int *f(void);"));
+            assertEquals("(decl (fa (fn (ptr (array int 4)) ((n int)))))", unit("int (*fa(int n))[4];"));
+            assertEquals("(decl (signal (fn (ptr (fn void ((int)))) ((int) ((ptr (fn void ((int)))))))))",
+                    unit("void (*signal(int, void (*)(int)))(int);"));
+            assertEquals("(decl (t (array (ptr (fn int ())) 2)))", unit("int (*t[2])(void);"));
+        }
+
+        @Test
+        void parameterLists() {
+            assertEquals("(decl (f (fn int ((a int) (b (ptr char))) ...)))", unit("int f(int a, char *b, ...);"));
+            assertEquals("(decl (f (fn int ())))", unit("int f(void);"));
+            assertEquals("(decl (f (fn int ())))", unit("int f();"));
+            assertEquals("(decl (f (fn int () ...)))", unit("int f(...);"));
+            assertEquals("(decl (f (fn int (((array static int 4))))))", unit("int f(int [static 4]);"));
+            assertEquals("(decl (f (fn int ((a (const (array int)))))))", unit("int f(int a[const]);"));
+            assertEquals("(decl (f (fn int (((array int *))))))", unit("int f(int[*]);"));
+            assertEquals("(decl (f (fn int ((register n int)))))", unit("int f(register int n);"));
+            assertEquals("(decl (f (fn void ((cb (ptr (fn int (((ptr void))))))))))", unit("void f(int (*cb)(void *));"));
+        }
+
+        @Test
+        void typedefNamesBecomeTypeSpecifiers() {
+            assertEquals("(decl typedef (T int))\n(decl (x T) (p (ptr T)))", unit("typedef int T; T x, *p;"));
+            assertEquals("(decl typedef (F (fn int ((int)))))\n(decl (g (ptr F)))", unit("typedef int F(int); F *g;"));
+            assertEquals("(decl typedef (A (array int 3)))\n(decl (m (array A 2)))", unit("typedef int A[3]; A m[2];"));
+        }
+
+        @Test
+        void aTypedefNameAfterATypeSpecifierIsTheDeclarator() {
+            // 6.7.3.1p2: once a type specifier has been seen, T is redeclared.
+            assertEquals("(decl typedef (T int))\n(decl (T unsigned int))", unit("typedef int T; unsigned T;"));
+        }
+
+        @Test
+        void typedefNamesDistinguishCastsFromParenthesizedExpressions() {
+            assertEquals("(decl typedef (T int))\n(decl (x int (cast T y)))", unit("typedef int T; int x = (T)y;"));
+            assertEquals("(decl (x int (* a y)))", unit("int x = (a) * y;"));
+        }
+
+        @Test
+        void structAndUnionSpecifiers() {
+            assertEquals("(decl (struct S (a int) (b (ptr char))))", unit("struct S { int a; char *b; };"));
+            assertEquals("(decl (struct S (a int : 3) (unsigned int : 2) ((struct (x int)))))",
+                    unit("struct S { int a : 3; unsigned : 2; struct { int x; }; };"));
+            assertEquals("(decl (p (ptr (struct S))))", unit("struct S *p;"));
+            assertEquals("(decl (u (union U (i int) (f float))))", unit("union U { int i; float f; } u;"));
+            assertEquals("(decl (v (struct (x int) (y int))))", unit("struct { int x, y; } v;"));
+            assertEquals("(decl (struct S (a int) (static_assert 1)))", unit("struct S { int a; static_assert(1); };"));
+            assertEquals("(decl (struct N (next (ptr (struct N)))))", unit("struct N { struct N *next; };"));
+        }
+
+        @Test
+        void enumSpecifiers() {
+            assertEquals("(decl (enum E (A) (B 2) (C)))", unit("enum E { A, B = 2, C };"));
+            assertEquals("(decl (enum E (A) (B)))", unit("enum E { A, B, };"));
+            assertEquals("(decl (enum F : unsigned char (X)))", unit("enum F : unsigned char { X };"));
+            assertEquals("(decl (e (enum E)))", unit("enum E e;"));
+            assertEquals("(decl (e (enum : long (Z))))", unit("enum : long { Z } e;"));
+        }
+
+        @Test
+        void enumeratorsAreOrdinaryIdentifiers() {
+            // A hides the typedef, so `A * 2` is a multiplication.
+            assertEquals("(decl typedef (A int))\n(decl (enum E (A)))\n(decl (y int (* A 2)))",
+                    unit("typedef int A; enum E { A }; int y = A * 2;"));
+        }
+
+        @Test
+        void initializers() {
+            assertEquals("(decl (a (array int) {1 2 3}))", unit("int a[] = {1, 2, 3};"));
+            assertEquals("(decl (a (array int 2) {1 2}))", unit("int a[2] = {1, 2,};"));
+            assertEquals("(decl (m (array (array int 2) 2) {{1 2} {3 4}}))", unit("int m[2][2] = {{1, 2}, {3, 4}};"));
+            assertEquals("(decl (p (struct P) {(.x 1) ([2] 3) (.a .b 4) ([0] .c 5)}))",
+                    unit("struct P p = {.x = 1, [2] = 3, .a.b = 4, [0].c = 5};"));
+            assertEquals("(decl (z (struct P) {}))", unit("struct P z = {};"));
+            assertEquals("(decl (n int (?: a b c)))", unit("int n = a ? b : c;"));
+        }
+
+        @Test
+        void autoRequiresAnInitializer() {
+            assertEquals("(decl auto (x _ 1))", unit("auto x = 1;"));
+            fails("auto x;");
+        }
+
+        @Test
+        void typeofAndAlignas() {
+            assertEquals("(decl (y (typeof x)))", unit("typeof(x) y;"));
+            assertEquals("(decl (z (typeof (type (ptr int)))))", unit("typeof(int *) z;"));
+            assertEquals("(decl (w (typeof_unqual (+ a b))))", unit("typeof_unqual(a + b) w;"));
+            assertEquals("(decl (alignas 16) (a int))", unit("alignas(16) int a;"));
+            assertEquals("(decl (alignas (type double)) (c char))", unit("alignas(double) char c;"));
+        }
+
+        @Test
+        void staticAssertDeclaration() {
+            assertEquals("(static_assert (== (sizeof (type int)) 4) \"int\")",
+                    unit("static_assert(sizeof(int) == 4, \"int\");"));
+        }
+
+        @Test
+        void attributesAreParsedWhereverTheGrammarAllows() {
+            assertEquals("(decl (f (fn int ())))", unit("[[nodiscard]] int f(void);"));
+            assertEquals("(decl static (y int))", unit("[[maybe_unused]] static int y;"));
+            assertEquals("(decl (x int))", unit("int x [[gnu::aligned(8)]];"));
+            assertEquals("(decl (p (ptr int)))", unit("int * [[deprecated]] p;"));
+            assertEquals("(decl (struct S (a int)))", unit("struct [[packed]] S { int a [[x]]; };"));
+            assertEquals("(decl (enum E (A) (B)))", unit("enum E { A [[deprecated(\"old\")]], B };"));
+            assertEquals("(decl (a (array int 3)))", unit("int a[3] [[q]];"));
+            assertEquals("(decl (f (fn void ((n int)))))", unit("void f([[maybe_unused]] int n);"));
+        }
+
+        @Test
+        void attributeDeclaration() {
+            assertEquals("(attrs [[deprecated(\"x\")]])", unit("[[deprecated(\"x\")]];"));
+            assertEquals("(attrs [[a]] [[b::c(1 , ( 2 ))]])", unit("[[a, b::c(1, (2))]];"));
+        }
+
+        @Test
+        void declarationErrors() {
+            fails("x y;");
+            fails("int x");
+            fails("int (x;");
+            fails("int f(a);");
+            fails("struct;");
+            fails("int a[3;");
+            fails("typedef int T; T = 1;");
         }
     }
 }
