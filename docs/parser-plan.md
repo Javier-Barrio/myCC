@@ -159,12 +159,12 @@ Each phase ends with the test suite green and `Main` still running.
 - [x] attributes: `[[ ]]` sequences parsed everywhere the grammar allows; balanced-token argument clauses
 
 ### Phase 3 - statements (A.3.3, 6.8)
-- [ ] compound statement with block-items (declaration | unlabeled-statement | label) and scope push
-- [ ] labels: `name :`, `case expr :`, `case lo ... hi :`, `default :`
-- [ ] expression statement, `if`/`else`, `switch`, selection-header with declarations
-- [ ] `while`, `do`/`while`, `for` (expression and declaration forms)
-- [ ] `goto`, `continue [label]`, `break [label]`, `return`
-- [ ] the declaration-vs-expression decision
+- [x] compound statement with block-items (declaration | unlabeled-statement | label) and scope push
+- [x] labels: `name :`, `case expr :`, `case lo ... hi :`, `default :`
+- [x] expression statement, `if`/`else`, `switch`, selection-header with declarations
+- [x] `while`, `do`/`while`, `for` (expression and declaration forms)
+- [x] `goto`, `continue [label]`, `break [label]`, `return`
+- [x] the declaration-vs-expression decision
 
 ### Phase 4 - external definitions (A.3.4, 6.9)
 - [ ] translation-unit; function-definition vs declaration split after the first declarator
@@ -192,5 +192,5 @@ Each phase ends with the test suite green and `Main` still running.
 
 ## Status
 
-Phases 0-2 are implemented: `Parser` covers A.3.1 and A.3.2 (expressions and declarations) and the
+Phases 0-3 are implemented: `Parser` covers A.3.1 - A.3.3 (expressions, declarations and statements) and the
 full test suite (`./gradlew test`) is green.
