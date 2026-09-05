@@ -150,13 +150,13 @@ Each phase ends with the test suite green and `Main` still running.
 - [x] `type-name` (specifier-qualifier-list + abstract declarator) - shared with phase 2
 
 ### Phase 2 - declarations (A.3.2, 6.7)
-- [ ] declaration-specifiers bag and fold to `Type` (incl. `_BitInt(N)`, `_Complex`, `_Decimal*`, `_Atomic(T)`)
-- [ ] declarators / abstract declarators as closures; pointer qualifiers; array `static`/qualifiers/`*`; parameter-type-list with `...`
-- [ ] init-declarator-list, initializers, braced initializers, designators
-- [ ] `typedef` registration in `ScopeStack`; ordinary-identifier shadowing
-- [ ] `struct`/`union` specifiers with members and bit-fields; `enum` with C23 underlying type
-- [ ] `typeof` / `typeof_unqual`, `alignas`, `static_assert` declaration
-- [ ] attributes: `[[ ]]` sequences parsed everywhere the grammar allows; balanced-token argument clauses
+- [x] declaration-specifiers bag and fold to `Type` (incl. `_BitInt(N)`, `_Complex`, `_Decimal*`, `_Atomic(T)`)
+- [x] declarators / abstract declarators as closures; pointer qualifiers; array `static`/qualifiers/`*`; parameter-type-list with `...`
+- [x] init-declarator-list, initializers, braced initializers, designators
+- [x] `typedef` registration in `ScopeStack`; ordinary-identifier shadowing
+- [x] `struct`/`union` specifiers with members and bit-fields; `enum` with C23 underlying type
+- [x] `typeof` / `typeof_unqual`, `alignas`, `static_assert` declaration
+- [x] attributes: `[[ ]]` sequences parsed everywhere the grammar allows; balanced-token argument clauses
 
 ### Phase 3 - statements (A.3.3, 6.8)
 - [ ] compound statement with block-items (declaration | unlabeled-statement | label) and scope push
@@ -192,5 +192,5 @@ Each phase ends with the test suite green and `Main` still running.
 
 ## Status
 
-Phases 0-1 are implemented: `Parser` covers A.3.1 (expressions) and the type-name subset of A.3.2 and the
+Phases 0-2 are implemented: `Parser` covers A.3.1 and A.3.2 (expressions and declarations) and the
 full test suite (`./gradlew test`) is green.

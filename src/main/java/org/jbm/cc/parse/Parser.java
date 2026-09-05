@@ -1,6 +1,7 @@
 package org.jbm.cc.parse;
 
 import org.jbm.cc.ast.Attribute;
+import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Initializer;
 import org.jbm.cc.ast.Specifiers;
@@ -40,6 +41,11 @@ public final class Parser {
 
     public Parser(List<CppToken> tokens) {
         this.cur = new TokenCursor(tokens);
+    }
+
+    /** Parses a whole translation-unit (6.9.1) - declarations only until phase 4. */
+    public static List<Decl> parse(TokenSet tokens) {
+        return new Parser(tokens).parseTranslationUnit();
     }
 
     // ---- keyword classes --------------------------------------------------
@@ -84,15 +90,96 @@ public final class Parser {
                 && (STORAGE_CLASSES.contains(t.text) || FUNCTION_SPECIFIERS.contains(t.text)));
     }
 
+    /**
+     * Is the input at a declaration rather than a statement/expression? An
+     * identifier that names a type starts a declaration unless it is
+     * immediately followed by ':' - then it is a label (6.8.2).
+     */
+    private boolean atDeclaration() {
+        Token t = cur.peek();
+        if (t.type == TokenType.IDENTIFIER) {
+            return scopes.isTypeName(t.text) && !cur.at(1, ":");
+        }
+        return t.type == TokenType.KEYWORD
+                && (startsDeclarationSpecifiers(t) || t.text.equals("static_assert"));
+    }
+
     private boolean atAttributeSpecifier() {
         return cur.at("[") && cur.at(1, "[");
     }
 
-    // ---- A.3.2 declarations (6.7): the type-name subset ----------------------
-    // Casts, sizeof, compound literals and _Generic need type-name (6.7.8),
-    // which drags in specifiers, abstract declarators, struct/enum/typeof
-    // specifiers, parameter lists and braced initializers. Declarations
-    // proper (init-declarators, typedef registration) come in phase 2.
+    // ---- A.3.4 external definitions (6.9) -----------------------------------
+
+    // translation-unit (6.9.1). Function definitions arrive with the
+    // statement grammar; until then a unit is a sequence of declarations.
+    public List<Decl> parseTranslationUnit() {
+        var decls = new ArrayList<Decl>();
+        while (!cur.atEof()) {
+            decls.add(parseDeclaration());
+        }
+        return decls;
+    }
+
+    // ---- A.3.2 declarations (6.7) ------------------------------------------
+
+    /** declaration (6.7.1), attributes not yet consumed. */
+    private Decl parseDeclaration() {
+        return parseDeclaration(parseAttributeSpecifierSequence());
+    }
+
+    private Decl parseDeclaration(List<Attribute> attrs) {
+        if (!attrs.isEmpty() && cur.accept(";")) {
+            return new Decl.AttributeDeclaration(attrs);
+        }
+        if (cur.at("static_assert")) {
+            var assertion = parseStaticAssertion();
+            cur.expect(";");
+            return assertion;
+        }
+        var specs = parseDeclarationSpecifiers(true);
+        List<Decl.InitDeclarator> declarators = List.of();
+        if (!cur.at(";")) {
+            declarators = parseInitDeclaratorList(specs, parseDeclarator(DeclaratorKind.NAMED));
+        }
+        cur.expect(";");
+        return new Decl.Declaration(attrs, specs, declarators);
+    }
+
+    // init-declarator-list, given the already-parsed first declarator.
+    private List<Decl.InitDeclarator> parseInitDeclaratorList(Specifiers specs, Declarator first) {
+        var list = new ArrayList<Decl.InitDeclarator>();
+        list.add(parseInitDeclaratorRest(specs, first));
+        while (cur.accept(",")) {
+            list.add(parseInitDeclaratorRest(specs, parseDeclarator(DeclaratorKind.NAMED)));
+        }
+        return list;
+    }
+
+    // Completes an init-declarator: builds the type, brings the name into
+    // scope (its scope starts right after the declarator, 6.2.1p7, so
+    // `int x = x;` sees the new x), then parses the initializer if any.
+    private Decl.InitDeclarator parseInitDeclaratorRest(Specifiers specs, Declarator declarator) {
+        Type type = applyDeclarator(declarator, specs);
+        String name = declarator.name().text;
+        if (specs.isTypedef()) {
+            scopes.declareTypedef(name, type);
+        } else {
+            scopes.declareOrdinary(name);
+        }
+        Initializer init = null;
+        if (cur.accept("=")) {
+            init = parseInitializer();
+        } else if (type == null) {
+            throw cur.error("'auto' declaration of '" + name + "' requires an initializer");
+        }
+        return new Decl.InitDeclarator(declarator.name(), type, declarator.attributes(), init);
+    }
+
+    private Type applyDeclarator(Declarator declarator, Specifiers specs) {
+        // A null specifier type is `auto` type inference; only a plain
+        // identifier declarator is meaningful then.
+        return specs.type() == null ? null : declarator.build().apply(specs.type());
+    }
 
     /**
      * declaration-specifiers (6.7.1) or, with allowStorage false, a
