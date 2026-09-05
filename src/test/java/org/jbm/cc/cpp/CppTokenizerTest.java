@@ -141,14 +141,44 @@ class CppTokenizerTest {
 
     @Test
     void punctuatorsPreferLongestMatch() {
-        assertTokens("<<= >> -> ->* ... :: <=>",
+        assertTokens("<<= >> -> ... :: <=",
                 TokenType.PUNCTUATOR, "<<=",
                 TokenType.PUNCTUATOR, ">>",
                 TokenType.PUNCTUATOR, "->",
-                TokenType.PUNCTUATOR, "->*",
                 TokenType.PUNCTUATOR, "...",
                 TokenType.PUNCTUATOR, "::",
-                TokenType.PUNCTUATOR, "<=>");
+                TokenType.PUNCTUATOR, "<=");
+    }
+
+    @Test
+    void cPlusPlusOnlyPunctuatorsAreNotSingleTokens() {
+        assertTokens("a->*b",
+                TokenType.IDENTIFIER, "a",
+                TokenType.PUNCTUATOR, "->",
+                TokenType.PUNCTUATOR, "*",
+                TokenType.IDENTIFIER, "b");
+    }
+
+    @Test
+    void digraphsAreNormalizedToTheirPrimarySpelling() {
+        // 6.4.7p3: <: :> <% %> behave exactly like [ ] { }.
+        assertTokens("a<:0:> <% %>",
+                TokenType.IDENTIFIER, "a",
+                TokenType.PUNCTUATOR, "[",
+                TokenType.PP_NUMBER, "0",
+                TokenType.PUNCTUATOR, "]",
+                TokenType.PUNCTUATOR, "{",
+                TokenType.PUNCTUATOR, "}");
+    }
+
+    @Test
+    void digraphStringizeAndPasteOperators() {
+        assertTokens("x %: y %:%: z",
+                TokenType.IDENTIFIER, "x",
+                TokenType.STRINGIZE, "#",
+                TokenType.IDENTIFIER, "y",
+                TokenType.PASTE, "##",
+                TokenType.IDENTIFIER, "z");
     }
 
     @Test

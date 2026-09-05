@@ -24,24 +24,33 @@ public final class TokenConversion {
         }
     }
 
-    // integer-constant: decimal/octal, hex, or binary digits (with C23 '
-    // separators), then an optional integer suffix.
-    private static final String INT_SUFFIX = "([uU](ll|LL|l|L)?|(ll|LL|l|L)[uU]?)?";
+    // integer-literal (6.4.5.2): decimal, octal (unprefixed or 0o), hex, or
+    // binary digits (with ' separators), then an optional integer suffix -
+    // an unsigned suffix combined either way with a long / long long /
+    // bit-precise (wb) suffix.
+    private static final String INT_SUFFIX = "([uU](ll|LL|l|L|wb|WB)?|(ll|LL|l|L|wb|WB)[uU]?)?";
     private static final Pattern INTEGER = Pattern.compile(
-            "(0[xX][0-9a-fA-F]['0-9a-fA-F]*|0[bB][01]['01]*|[0-9]['0-9]*)" + INT_SUFFIX);
+            "(0[xX][0-9a-fA-F]['0-9a-fA-F]*|0[bB][01]['01]*|0[oO][0-7]['0-7]*|[0-9]['0-9]*)"
+                    + INT_SUFFIX);
 
-    // floating-constant (decimal): a fractional constant with an optional
+    // floating-suffix (6.4.5.3): a real suffix (f l df dd dl, any case) and
+    // a complex suffix (i j, any case), either alone or in either order.
+    private static final String REAL_SUFFIX = "(f|l|F|L|df|dd|dl|DF|DD|DL)";
+    private static final String FLOAT_SUFFIX =
+            "(" + REAL_SUFFIX + "[iIjJ]?|[iIjJ]" + REAL_SUFFIX + "?)?";
+
+    // floating-literal (decimal): a fractional literal with an optional
     // exponent, or a digit sequence with a mandatory exponent.
     private static final String DIGITS = "[0-9]['0-9]*";
     private static final Pattern DECIMAL_FLOAT = Pattern.compile(
-            "(" + DIGITS + "\\.(" + DIGITS + ")?|\\." + DIGITS + ")([eE][+-]?" + DIGITS + ")?[flFL]?"
-                    + "|" + DIGITS + "[eE][+-]?" + DIGITS + "[flFL]?");
+            "((" + DIGITS + "\\.(" + DIGITS + ")?|\\." + DIGITS + ")([eE][+-]?" + DIGITS + ")?"
+                    + "|" + DIGITS + "[eE][+-]?" + DIGITS + ")" + FLOAT_SUFFIX);
 
-    // floating-constant (hex): the binary exponent is mandatory.
+    // floating-literal (hex): the binary exponent is mandatory.
     private static final String HEX_DIGITS = "[0-9a-fA-F]['0-9a-fA-F]*";
     private static final Pattern HEX_FLOAT = Pattern.compile(
             "0[xX](" + HEX_DIGITS + "(\\.(" + HEX_DIGITS + ")?)?|\\." + HEX_DIGITS + ")"
-                    + "[pP][+-]?" + DIGITS + "[flFL]?");
+                    + "[pP][+-]?" + DIGITS + FLOAT_SUFFIX);
 
     private TokenConversion() {
     }
