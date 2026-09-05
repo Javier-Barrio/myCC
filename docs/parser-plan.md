@@ -167,9 +167,9 @@ Each phase ends with the test suite green and `Main` still running.
 - [x] the declaration-vs-expression decision
 
 ### Phase 4 - external definitions (A.3.4, 6.9)
-- [ ] translation-unit; function-definition vs declaration split after the first declarator
-- [ ] parameters declared in the function body scope
-- [ ] `Main.SOURCE` parses end to end and `Main` prints the AST
+- [x] translation-unit; function-definition vs declaration split after the first declarator
+- [x] parameters declared in the function body scope
+- [x] `Main.SOURCE` parses end to end and `Main` prints the AST
 
 ### Phase 5 - hardening (not started)
 - [ ] `%:` digraph as a directive introducer at line start (the lexer only recognizes `#` there)
@@ -192,5 +192,6 @@ Each phase ends with the test suite green and `Main` still running.
 
 ## Status
 
-Phases 0-3 are implemented: `Parser` covers A.3.1 - A.3.3 (expressions, declarations and statements) and the
-full test suite (`./gradlew test`) is green.
+Phases 0-4 are implemented: `Parser` covers all of A.3 and the full test suite
+(`./gradlew test`) is green. `Main` runs the pipeline end to end and prints the
+translation unit as S-expressions.

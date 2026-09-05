@@ -1,10 +1,10 @@
 package org.jbm;
 
+import org.jbm.cc.ast.AstPrinter;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
-
-import java.util.stream.Collectors;
+import org.jbm.cc.parse.Parser;
 
 public class Main {
 
@@ -13,7 +13,7 @@ public class Main {
     // indexing, and arithmetic - with every preprocessor feature in play
     // (object and function-like macros, #, ##, and the STR/XSTR
     // rescanning idiom).
-    static final String SOURCE = """
+    public static final String SOURCE = """
             #define BUFFER_SIZE 8
             #define SQUARE(x) ((x) * (x))
             #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -50,9 +50,8 @@ public class Main {
         // integer/floating constants). This is the parser's input.
         var converted = TokenConversion.convert(expanded);
 
-        System.out.println(converted.tokens.stream()
-                .filter(t -> t.token.type != CppTokenizer.TokenType.EOF)
-                .map(t -> t.token.text)
-                .collect(Collectors.joining(" ")));
+        // Phase 8 begins: parse the token sequence into a translation unit.
+        var translationUnit = Parser.parse(converted);
+        System.out.println(AstPrinter.print(translationUnit));
     }
 }
