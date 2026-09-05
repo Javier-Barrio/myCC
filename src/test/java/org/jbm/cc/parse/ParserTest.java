@@ -8,6 +8,8 @@ import org.jbm.cc.cpp.TokenConversion;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,6 +38,14 @@ class ParserTest {
 
     private static ParseException fails(String source) {
         return assertThrows(ParseException.class, () -> unit(source));
+    }
+
+    /** Parses `{ statements }` as one compound statement and returns its block items, space separated. */
+    private static String block(String statements) {
+        var parser = new Parser(preprocess("{\n" + statements + "\n}"));
+        String out = AstPrinter.print(parser.parseStandaloneStatement());
+        assertTrue(out.startsWith("(block ") && out.endsWith(")"), out);
+        return out.substring("(block ".length(), out.length() - 1);
     }
 
     // ---- A.3.1 expressions (6.5) ---------------------------------------
@@ -382,6 +392,98 @@ class ParserTest {
             fails("struct;");
             fails("int a[3;");
             fails("typedef int T; T = 1;");
+        }
+    }
+
+    // ---- A.3.3 statements (6.8) ----------------------------------------
+
+    @Nested
+    class Statements {
+
+        @Test
+        void expressionStatementsAndDeclarations() {
+            assertEquals("(decl (x int 1)) (expr (= x 2)) (expr)", block("int x = 1; x = 2; ;"));
+        }
+
+        @Test
+        void ifAndElseChain() {
+            assertEquals("(if a (expr b) (if c (expr d) (expr e)))",
+                    block("if (a) b; else if (c) d; else e;"));
+            assertEquals("(if a (block (expr b)))", block("if (a) { b; }"));
+            // The dangling else binds to the nearest if.
+            assertEquals("(if a (if b (expr c) (expr d)))", block("if (a) if (b) c; else d;"));
+        }
+
+        @Test
+        void selectionHeadersWithDeclarations() {
+            assertEquals("(if (header (decl (n int (call g)))) (expr (call h n)))",
+                    block("if (int n = g()) h(n);"));
+            assertEquals("(if (header (decl (n int 1)) (> n 0)) (expr x))",
+                    block("if (int n = 1; n > 0) x;"));
+            assertEquals("(switch (header (decl (c int (call get)))) (block (case 1) (break)))",
+                    block("switch (int c = get()) { case 1: break; }"));
+        }
+
+        @Test
+        void switchWithCaseRangesAndDefault() {
+            assertEquals("(switch x (block (case 1) (case 2 4) (expr y) (break) (default) (expr z)))",
+                    block("switch (x) { case 1: case 2 ... 4: y; break; default: z; }"));
+        }
+
+        @Test
+        void loops() {
+            assertEquals("(while (< i n) (expr (post++ i)))", block("while (i < n) i++;"));
+            assertEquals("(do (expr x) y)", block("do x; while (y);"));
+            assertEquals("(do (block (expr x)) y)", block("do { x; } while (y);"));
+            assertEquals("(for (decl (i int 0)) (< i n) (post++ i) (expr (+= s i)))",
+                    block("for (int i = 0; i < n; i++) s += i;"));
+            assertEquals("(for _ _ _ (break))", block("for (;;) break;"));
+            assertEquals("(for (= i 0) (< i n) _ (expr))", block("for (i = 0; i < n;) ;"));
+            assertEquals("(for (decl (i int 0) (j int 9)) _ (, (post++ i) (post-- j)) (block))",
+                    block("for (int i = 0, j = 9;; i++, j--) {}"));
+        }
+
+        @Test
+        void labelsAndJumps() {
+            assertEquals("(label L) (expr x) (goto L)", block("L: x; goto L;"));
+            assertEquals("(if c (label L2 (expr y)))", block("if (c) L2: y;"));
+            assertEquals("(label outer) (while 1 (block (break outer) (continue outer)))",
+                    block("outer: while (1) { break outer; continue outer; }"));
+            assertEquals("(return)", block("return;"));
+            assertEquals("(return (+ x 1))", block("return x + 1;"));
+            // In a block a label is its own block-item (6.8.3), not a prefix of the statement.
+            assertEquals("(label end) (return)", block("end: return;"));
+        }
+
+        @Test
+        void nestedBlocksAndScopes() {
+            assertEquals("(block (block))", block("{ { } }"));
+            // The inner `int T;` hides the typedef only inside its block.
+            assertEquals("(decl typedef (T int)) (block (decl (T int)) (expr (* T x))) (decl (y (ptr T)))",
+                    block("typedef int T; { int T; T * x; } T *y;"));
+        }
+
+        @Test
+        void typedefNamesDistinguishDeclarationsFromExpressions() {
+            assertEquals("(decl typedef (T int)) (decl (p (ptr T))) (expr (* a b))",
+                    block("typedef int T; T *p; a * b;"));
+            // T followed by ':' is a label, not a declaration.
+            assertEquals("(decl typedef (T int)) (label T) (expr x)", block("typedef int T; T: x;"));
+        }
+
+        @Test
+        void attributesAndStaticAssertsInBlocks() {
+            assertEquals("(attrs [[fallthrough]])", block("[[fallthrough]];"));
+            assertEquals("(static_assert 1)", block("static_assert(1);"));
+            assertEquals("(expr (call f))", block("[[likely]] f();"));
+        }
+
+        @Test
+        void statementErrors() {
+            for (String s : List.of("return 0", "if a b;", "do x; while (y)", "case 1 ;",
+                    "for (int i = 0, i < 3;) ;", "if (int x = 1, y = 2) ;", "{ x;", "x; }")) {
+                assertThrows(ParseException.class, () -> block(s), s);
+            }
         }
     }
 }

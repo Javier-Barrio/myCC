@@ -1,10 +1,12 @@
 package org.jbm.cc.parse;
 
 import org.jbm.cc.ast.Attribute;
+import org.jbm.cc.ast.BlockItem;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Initializer;
 import org.jbm.cc.ast.Specifiers;
+import org.jbm.cc.ast.Stmt;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.ast.Type.Quals;
 import org.jbm.cc.cpp.CppToken;
@@ -722,6 +724,211 @@ public final class Parser {
             if (depth > 0) tokens.add(t);
         }
         return tokens;
+    }
+
+    // ---- A.3.3 statements (6.8) -----------------------------------------------
+
+    /** Parses a single statement that must consume all input; for tests and tools. */
+    public Stmt parseStandaloneStatement() {
+        Stmt s = parseStatement();
+        if (!cur.atEof()) throw cur.error("unexpected token after statement");
+        return s;
+    }
+
+    /** statement: labeled-statement | unlabeled-statement. */
+    public Stmt parseStatement() {
+        var attrs = parseAttributeSpecifierSequence();
+        if (atLabel()) {
+            Stmt.Label label = parseLabel();
+            return new Stmt.Labeled(label, parseStatement());
+        }
+        return parseUnlabeledStatement(attrs);
+    }
+
+    private boolean atLabel() {
+        return (cur.atIdentifier() && cur.at(1, ":")) || cur.at("case") || cur.at("default");
+    }
+
+    // label (6.8.2), attributes already consumed.
+    private Stmt.Label parseLabel() {
+        if (cur.at("default")) {
+            Token kw = cur.next();
+            cur.expect(":");
+            return new Stmt.DefaultLabel(kw);
+        }
+        if (cur.at("case")) {
+            Token kw = cur.next();
+            Expr low = parseConditionalExpression();
+            Expr high = cur.accept("...") ? parseConditionalExpression() : null;
+            cur.expect(":");
+            return new Stmt.CaseLabel(kw, low, high);
+        }
+        Token name = cur.expectIdentifier();
+        cur.expect(":");
+        return new Stmt.NameLabel(name);
+    }
+
+    /** compound-statement (6.8.3); newScope is false for a function body whose scope holds the parameters. */
+    private Stmt.Compound parseCompoundStatement(boolean newScope) {
+        Token brace = cur.expect("{");
+        if (newScope) scopes.push();
+        var items = new ArrayList<BlockItem>();
+        while (!cur.at("}")) {
+            if (cur.atEof()) throw cur.error("expected '}'");
+            items.add(parseBlockItem());
+        }
+        cur.next();
+        if (newScope) scopes.pop();
+        return new Stmt.Compound(brace, items);
+    }
+
+    // block-item: declaration | unlabeled-statement | label. All three may
+    // start with attributes, so those are parsed first and the decision is
+    // made on what follows.
+    private BlockItem parseBlockItem() {
+        var attrs = parseAttributeSpecifierSequence();
+        if (!attrs.isEmpty() && cur.accept(";")) {
+            return new Decl.AttributeDeclaration(attrs);
+        }
+        if (atLabel()) {
+            return new Stmt.Labeled(parseLabel(), null);
+        }
+        if (atDeclaration()) {
+            return parseDeclaration(attrs);
+        }
+        return parseUnlabeledStatement(attrs);
+    }
+
+    // unlabeled-statement: expression-statement | primary-block | jump-statement.
+    private Stmt parseUnlabeledStatement(List<Attribute> attrs) {
+        Token t = cur.peek();
+        if (cur.at("{")) return parseCompoundStatement(true);
+        if (t.type == TokenType.KEYWORD) {
+            switch (t.text) {
+                case "if" -> {
+                    cur.next();
+                    cur.expect("(");
+                    scopes.push();
+                    Stmt.Header header = parseSelectionHeader();
+                    cur.expect(")");
+                    Stmt thenBranch = parseStatement();
+                    Stmt elseBranch = cur.accept("else") ? parseStatement() : null;
+                    scopes.pop();
+                    return new Stmt.If(t, header, thenBranch, elseBranch);
+                }
+                case "switch" -> {
+                    cur.next();
+                    cur.expect("(");
+                    scopes.push();
+                    Stmt.Header header = parseSelectionHeader();
+                    cur.expect(")");
+                    Stmt body = parseStatement();
+                    scopes.pop();
+                    return new Stmt.Switch(t, header, body);
+                }
+                case "while" -> {
+                    cur.next();
+                    cur.expect("(");
+                    Expr cond = parseExpression();
+                    cur.expect(")");
+                    return new Stmt.While(t, cond, parseStatement());
+                }
+                case "do" -> {
+                    cur.next();
+                    Stmt body = parseStatement();
+                    cur.expect("while");
+                    cur.expect("(");
+                    Expr cond = parseExpression();
+                    cur.expect(")");
+                    cur.expect(";");
+                    return new Stmt.DoWhile(t, body, cond);
+                }
+                case "for" -> {
+                    return parseForStatement();
+                }
+                case "goto" -> {
+                    cur.next();
+                    Token label = cur.expectIdentifier();
+                    cur.expect(";");
+                    return new Stmt.Goto(t, label);
+                }
+                case "continue", "break" -> {
+                    cur.next();
+                    Token label = cur.atIdentifier() ? cur.next() : null;
+                    cur.expect(";");
+                    return t.text.equals("break") ? new Stmt.Break(t, label) : new Stmt.Continue(t, label);
+                }
+                case "return" -> {
+                    cur.next();
+                    Expr value = cur.at(";") ? null : parseExpression();
+                    cur.expect(";");
+                    return new Stmt.Return(t, value);
+                }
+                default -> { }
+            }
+        }
+        // expression-statement
+        if (cur.accept(";")) {
+            return new Stmt.ExprStmt(t, null);
+        }
+        Expr expr = parseExpression();
+        cur.expect(";");
+        return new Stmt.ExprStmt(t, expr);
+    }
+
+    // selection-header (6.8.5.1):
+    //   expression | declaration expression | simple-declaration
+    // A declaration consumes its ';' and is followed by the controlling
+    // expression; a simple-declaration (one declarator with initializer,
+    // no ';') is itself the controlling value.
+    private Stmt.Header parseSelectionHeader() {
+        var attrs = parseAttributeSpecifierSequence();
+        if (!atDeclaration()) {
+            if (!attrs.isEmpty()) throw cur.error("attributes are not allowed on a selection expression");
+            return new Stmt.Header(null, parseExpression());
+        }
+        if (cur.at("static_assert")) {
+            throw cur.error("static_assert is not allowed in a selection header");
+        }
+        var specs = parseDeclarationSpecifiers(true);
+        var declarators = parseInitDeclaratorList(specs, parseDeclarator(DeclaratorKind.NAMED));
+        var decl = new Decl.Declaration(attrs, specs, declarators);
+        if (cur.accept(";")) {
+            return new Stmt.Header(decl, parseExpression());
+        }
+        if (cur.at(")")) {
+            if (declarators.size() != 1 || declarators.get(0).initializer() == null) {
+                throw cur.error("a simple-declaration must declare exactly one initialized object");
+            }
+            return new Stmt.Header(decl, null);
+        }
+        throw cur.error("expected ';' or ')' in selection header");
+    }
+
+    // for ( expressionopt ; expressionopt ; expressionopt ) secondary-block
+    // for ( declaration expressionopt ; expressionopt ) secondary-block
+    private Stmt parseForStatement() {
+        Token kw = cur.expect("for");
+        cur.expect("(");
+        scopes.push();
+        Decl.Declaration initDecl = null;
+        Expr initExpr = null;
+        var attrs = parseAttributeSpecifierSequence();
+        if (atDeclaration()) {
+            Decl d = parseDeclaration(attrs);
+            if (!(d instanceof Decl.Declaration decl)) throw cur.error("expected a declaration in 'for' clause");
+            initDecl = decl;
+        } else {
+            if (!cur.at(";")) initExpr = parseExpression();
+            cur.expect(";");
+        }
+        Expr cond = cur.at(";") ? null : parseExpression();
+        cur.expect(";");
+        Expr step = cur.at(")") ? null : parseExpression();
+        cur.expect(")");
+        Stmt body = parseStatement();
+        scopes.pop();
+        return new Stmt.For(kw, initDecl, initExpr, cond, step, body);
     }
 
     // ---- A.3.1 expressions (6.5) ----------------------------------------------
