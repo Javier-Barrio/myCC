@@ -1,6 +1,7 @@
 package org.jbm.cc.parse;
 
 import org.jbm.cc.ast.AstPrinter;
+import org.jbm.cc.ast.Decl;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.Scanner;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -485,5 +487,76 @@ class ParserTest {
                 assertThrows(ParseException.class, () -> block(s), s);
             }
         }
+    }
+
+    // ---- A.3.4 external definitions (6.9) ------------------------------
+
+    @Nested
+    class ExternalDefinitions {
+
+        @Test
+        void functionDefinition() {
+            assertEquals("(fundef main (fn int ()) (block (return 0)))", unit("int main(void) { return 0; }"));
+            assertEquals("(fundef static inline f (fn (ptr char) ((s (ptr (const char))) (n int))) (block (return s)))",
+                    unit("static inline char *f(const char *s, int n) { return s; }"));
+        }
+
+        @Test
+        void declarationThenDefinition() {
+            assertEquals("(decl (f (fn int ((int)))))\n(fundef f (fn int ((x int))) (block (return x)))",
+                    unit("int f(int); int f(int x) { return x; }"));
+        }
+
+        @Test
+        void parametersAreInScopeInTheBodyAndHideTypedefs() {
+            assertEquals("(decl typedef (T int))\n(fundef f (fn void ((T int))) (block (expr (= T 1))))",
+                    unit("typedef int T; void f(int T) { T = 1; }"));
+            // ...but only inside that function.
+            assertEquals("(decl typedef (T int))\n(fundef f (fn void ((T int))) (block))\n(decl (x T))",
+                    unit("typedef int T; void f(int T) {} T x;"));
+        }
+
+        @Test
+        void fileScopeTypedefsAreVisibleInBodies() {
+            assertEquals("(decl typedef (T int))\n(fundef f (fn void ()) (block (decl (p (ptr T))) (expr (* a b))))",
+                    unit("typedef int T; void f(void) { T *p; a * b; }"));
+        }
+
+        @Test
+        void mixedTranslationUnit() {
+            assertEquals(String.join("\n",
+                            "(decl (values (array int 8)))",
+                            "(decl typedef (P (ptr (struct S))))",
+                            "(fundef get (fn P ()) (block (return nullptr)))",
+                            "(decl (struct S (n int)))"),
+                    unit("int values[8]; typedef struct S *P; P get(void) { return nullptr; } struct S { int n; };"));
+        }
+
+        @Test
+        void externalDefinitionErrors() {
+            fails("int x = 1 { }");
+            fails("int f(void) { } }");
+            fails("int f(void) { return 0; ");
+            fails("int (*p)(void) { }");
+        }
+    }
+
+    // ---- end to end ----------------------------------------------------
+
+    @Test
+    void mainDriverProgramParses() {
+        List<Decl> decls = Parser.parse(preprocess(org.jbm.Main.SOURCE));
+        assertEquals(4, decls.size());
+        assertInstanceOf(Decl.Declaration.class, decls.get(0));
+        assertInstanceOf(Decl.Declaration.class, decls.get(1));
+        assertInstanceOf(Decl.FunctionDefinition.class, decls.get(2));
+        assertInstanceOf(Decl.FunctionDefinition.class, decls.get(3));
+
+        String printed = AstPrinter.print(decls);
+        assertTrue(printed.startsWith("(decl (values (array int 8)))\n"), printed);
+        assertTrue(printed.contains("(decl (size_str (ptr (const char)) \"8\"))"), printed);
+        assertTrue(printed.contains("(fundef get_count (fn int ()) (block (return 8)))"), printed);
+        assertTrue(printed.contains("(while (< i (call get_count)) (block (expr (= ([] values i) (* i i)))"), printed);
+        assertTrue(printed.contains("(expr (= total (?: (> total ([] values i)) total ([] values i))))"), printed);
     }
 }

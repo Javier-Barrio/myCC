@@ -22,7 +22,7 @@ import java.util.function.UnaryOperator;
 
 /**
  * Recursive-descent parser for the C2y phrase structure grammar (N3886
- * Annex A.3), being built up section by section (see docs/parser-plan.md). Consumes the phase-7 token list produced by
+ * Annex A.3). Consumes the phase-7 token list produced by
  * {@code TokenConversion.convert} and produces the {@code org.jbm.cc.ast}
  * tree. Methods are grouped and named after the Annex A nonterminals.
  * <p>
@@ -45,7 +45,7 @@ public final class Parser {
         this.cur = new TokenCursor(tokens);
     }
 
-    /** Parses a whole translation-unit (6.9.1) - declarations only until phase 4. */
+    /** Parses a whole translation-unit (6.9.1). */
     public static List<Decl> parse(TokenSet tokens) {
         return new Parser(tokens).parseTranslationUnit();
     }
@@ -112,14 +112,55 @@ public final class Parser {
 
     // ---- A.3.4 external definitions (6.9) -----------------------------------
 
-    // translation-unit (6.9.1). Function definitions arrive with the
-    // statement grammar; until then a unit is a sequence of declarations.
     public List<Decl> parseTranslationUnit() {
         var decls = new ArrayList<Decl>();
         while (!cur.atEof()) {
-            decls.add(parseDeclaration());
+            decls.add(parseExternalDeclaration());
         }
         return decls;
+    }
+
+    // external-declaration: function-definition | declaration. Both start
+    // with attributes, declaration-specifiers and a declarator; a '{' after
+    // the first declarator makes it a function-definition (6.9.2).
+    private Decl parseExternalDeclaration() {
+        var attrs = parseAttributeSpecifierSequence();
+        if (cur.at("static_assert")) {
+            var assertion = parseStaticAssertion();
+            cur.expect(";");
+            return assertion;
+        }
+        if (!attrs.isEmpty() && cur.accept(";")) {
+            return new Decl.AttributeDeclaration(attrs);
+        }
+        var specs = parseDeclarationSpecifiers(true);
+        if (cur.accept(";")) {
+            return new Decl.Declaration(attrs, specs, List.of());
+        }
+        var first = parseDeclarator(DeclaratorKind.NAMED);
+        if (cur.at("{")) {
+            return parseFunctionDefinition(attrs, specs, first);
+        }
+        var declarators = parseInitDeclaratorList(specs, first);
+        cur.expect(";");
+        return new Decl.Declaration(attrs, specs, declarators);
+    }
+
+    private Decl.FunctionDefinition parseFunctionDefinition(List<Attribute> attrs, Specifiers specs,
+                                                            Declarator declarator) {
+        Type type = applyDeclarator(declarator, specs);
+        if (!(type instanceof Type.Function fn)) {
+            throw cur.error("expected ';' after declarator (only a function can have a body)");
+        }
+        scopes.declareOrdinary(declarator.name().text);
+        // 6.2.1p4: parameters have block scope in the function body.
+        scopes.push();
+        for (var p : fn.parameters()) {
+            if (p.name() != null) scopes.declareOrdinary(p.name().text);
+        }
+        var body = parseCompoundStatement(false);
+        scopes.pop();
+        return new Decl.FunctionDefinition(attrs, specs, declarator.name(), fn, body);
     }
 
     // ---- A.3.2 declarations (6.7) ------------------------------------------
