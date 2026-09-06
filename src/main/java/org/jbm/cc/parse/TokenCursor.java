@@ -18,8 +18,9 @@ public final class TokenCursor {
 
     public TokenCursor(List<CppToken> tokens) {
         this.tokens = tokens;
-        Token last = tokens.isEmpty() ? null : tokens.get(tokens.size() - 1).token;
-        this.eof = last != null && last.type == TokenType.EOF ? last : new Token(TokenType.EOF, "", 0, 0);
+        this.eof = !tokens.isEmpty() && tokens.get(tokens.size() - 1).token.type == TokenType.EOF
+                ? tokens.get(tokens.size() - 1).token
+                : new Token(TokenType.EOF, "", 0, 0);
     }
 
     public Token peek() {

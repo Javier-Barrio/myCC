@@ -38,31 +38,31 @@ class AstWalkerTest {
 
         @Override
         public void walk(Decl d) {
-            if (d != null) nodes.add(d);
+            nodes.add(d);
             super.walk(d);
         }
 
         @Override
         public void walk(Stmt s) {
-            if (s != null) nodes.add(s);
+            nodes.add(s);
             super.walk(s);
         }
 
         @Override
         public void walk(Expr e) {
-            if (e != null) nodes.add(e);
+            nodes.add(e);
             super.walk(e);
         }
 
         @Override
         public void walk(Type t) {
-            if (t != null) nodes.add(t);
+            nodes.add(t);
             super.walk(t);
         }
 
         @Override
         public void walk(Initializer i) {
-            if (i != null) nodes.add(i);
+            nodes.add(i);
             super.walk(i);
         }
     }
@@ -165,9 +165,12 @@ class AstWalkerTest {
     }
 
     private static void collectReachable(Object o, Set<Object> out) {
-        if (o == null) return;
         if (o instanceof List<?> list) {
             for (Object item : list) collectReachable(item, out);
+            return;
+        }
+        if (o instanceof java.util.Optional<?> optional) {
+            optional.ifPresent(v -> collectReachable(v, out));
             return;
         }
         if (!(o instanceof Record) || !o.getClass().getPackageName().equals(Expr.class.getPackageName())) return;
@@ -293,13 +296,13 @@ class AstWalkerTest {
 
             @Override
             protected void walkParameter(Type.Parameter p) {
-                seen.add("param " + p.name().text);
+                seen.add("param " + p.name().orElseThrow().text);
                 super.walkParameter(p);
             }
 
             @Override
             protected void walkMember(Type.MemberDecl m) {
-                seen.add("member " + ((Type.Member) m).name().text);
+                seen.add("member " + ((Type.Member) m).name().orElseThrow().text);
                 super.walkMember(m);
             }
 

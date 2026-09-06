@@ -49,16 +49,16 @@ public final class Desugar extends AstRewriter {
 
     @Override
     public Object visit(Stmt.ExprStmt s) {
-        Expr expr = rewriteVoid(s.expr());
+        var expr = rewriteOptional(s.expr(), this::rewriteVoid);
         return expr == s.expr() ? s : new Stmt.ExprStmt(s.token(), expr);
     }
 
     @Override
     public Object visit(Stmt.For s) {
-        var initDecl = (Decl.Declaration) rewrite(s.initDecl());
-        Expr initExpr = rewriteVoid(s.initExpr());
-        Expr cond = rewrite(s.condition());
-        Expr step = rewriteVoid(s.step());
+        var initDecl = rewriteOptional(s.initDecl(), d -> (Decl.Declaration) rewrite(d));
+        var initExpr = rewriteOptional(s.initExpr(), this::rewriteVoid);
+        var cond = rewriteOptional(s.condition(), this::rewrite);
+        var step = rewriteOptional(s.step(), this::rewriteVoid);
         Stmt body = rewrite(s.body());
         if (initDecl == s.initDecl() && initExpr == s.initExpr() && cond == s.condition()
                 && step == s.step() && body == s.body()) return s;

@@ -5,6 +5,7 @@ import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
 
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -62,11 +63,8 @@ public final class TokenConversion {
                 tokens.add(t);
                 continue;
             }
-            var type = classifyPpNumber(t.token.text);
-            if (type == null) {
-                throw new ConversionException(
-                        "pp-number is not a valid integer or floating constant", t.token);
-            }
+            var type = classifyPpNumber(t.token.text).orElseThrow(() -> new ConversionException(
+                    "pp-number is not a valid integer or floating constant", t.token));
             var converted = new CppToken(
                     new Token(type, t.token.text, t.token.line, t.token.column));
             converted.hideSet.addAll(t.hideSet);
@@ -77,15 +75,15 @@ public final class TokenConversion {
         return result;
     }
 
-    // The constant type this pp-number converts to, or null if it is not a
+    // The constant type this pp-number converts to, or empty if it is not a
     // valid constant (e.g. `0xE+2`, `123abc`, `0x1.8` without exponent).
-    static TokenType classifyPpNumber(String text) {
+    static Optional<TokenType> classifyPpNumber(String text) {
         if (INTEGER.matcher(text).matches()) {
-            return TokenType.INTEGER_CONSTANT;
+            return Optional.of(TokenType.INTEGER_CONSTANT);
         }
         if (DECIMAL_FLOAT.matcher(text).matches() || HEX_FLOAT.matcher(text).matches()) {
-            return TokenType.FLOATING_CONSTANT;
+            return Optional.of(TokenType.FLOATING_CONSTANT);
         }
-        return null;
+        return Optional.empty();
     }
 }

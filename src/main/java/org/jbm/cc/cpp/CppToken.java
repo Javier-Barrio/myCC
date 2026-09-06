@@ -1,5 +1,7 @@
 package org.jbm.cc.cpp;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.LinkedHashSet;
 
 public class CppToken {
@@ -8,7 +10,7 @@ public class CppToken {
 
     // Set once the occurrence is resolved against the macro table; non-null
     // iff token.type is OBJECT_MACRO or CALL_MACRO.
-    public Macro macro;
+    public @Nullable Macro macro;
 
     // Whether white space separates this occurrence from the previous
     // token. Starts as what the lexer saw; macro expansion gives the first

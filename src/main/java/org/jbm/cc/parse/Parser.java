@@ -17,6 +17,7 @@ import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
@@ -148,19 +149,19 @@ public final class Parser {
 
     private Decl.FunctionDefinition parseFunctionDefinition(List<Attribute> attrs, Specifiers specs,
                                                             Declarator declarator) {
-        Type type = applyDeclarator(declarator, specs);
-        if (!(type instanceof Type.Function fn)) {
+        if (!(applyDeclarator(declarator, specs).orElse(null) instanceof Type.Function fn)) {
             throw cur.error("expected ';' after declarator (only a function can have a body)");
         }
-        scopes.declareOrdinary(declarator.name().text);
+        Token name = declarator.name().orElseThrow();
+        scopes.declareOrdinary(name.text);
         // 6.2.1p4: parameters have block scope in the function body.
         scopes.push();
         for (var p : fn.parameters()) {
-            if (p.name() != null) scopes.declareOrdinary(p.name().text);
+            p.name().ifPresent(n -> scopes.declareOrdinary(n.text));
         }
         var body = parseCompoundStatement(false);
         scopes.pop();
-        return new Decl.FunctionDefinition(attrs, specs, declarator.name(), fn, body);
+        return new Decl.FunctionDefinition(attrs, specs, name, fn, body);
     }
 
     // ---- A.3.2 declarations (6.7) ------------------------------------------
@@ -202,26 +203,27 @@ public final class Parser {
     // scope (its scope starts right after the declarator, 6.2.1p7, so
     // `int x = x;` sees the new x), then parses the initializer if any.
     private Decl.InitDeclarator parseInitDeclaratorRest(Specifiers specs, Declarator declarator) {
-        Type type = applyDeclarator(declarator, specs);
-        String name = declarator.name().text;
+        Optional<Type> type = applyDeclarator(declarator, specs);
+        Token name = declarator.name().orElseThrow();
         if (specs.isTypedef()) {
-            scopes.declareTypedef(name, type);
+            scopes.declareTypedef(name.text, type.orElseThrow(
+                    () -> cur.error("'auto' cannot be used in a typedef")));
         } else {
-            scopes.declareOrdinary(name);
+            scopes.declareOrdinary(name.text);
         }
-        Initializer init = null;
+        Optional<Initializer> init = Optional.empty();
         if (cur.accept("=")) {
-            init = parseInitializer();
-        } else if (type == null) {
-            throw cur.error("'auto' declaration of '" + name + "' requires an initializer");
+            init = Optional.of(parseInitializer());
+        } else if (type.isEmpty()) {
+            throw cur.error("'auto' declaration of '" + name.text + "' requires an initializer");
         }
-        return new Decl.InitDeclarator(declarator.name(), type, declarator.attributes(), init);
+        return new Decl.InitDeclarator(name, type, declarator.attributes(), init);
     }
 
-    private Type applyDeclarator(Declarator declarator, Specifiers specs) {
-        // A null specifier type is `auto` type inference; only a plain
-        // identifier declarator is meaningful then.
-        return specs.type() == null ? null : declarator.build().apply(specs.type());
+    // An absent specifier type is `auto` type inference; only a plain
+    // identifier declarator is meaningful then.
+    private static Optional<Type> applyDeclarator(Declarator declarator, Specifiers specs) {
+        return specs.type().map(declarator.build());
     }
 
     /**
@@ -233,17 +235,17 @@ public final class Parser {
         Token start = cur.peek();
         var storage = new ArrayList<Token>();
         var functionSpecs = new ArrayList<Token>();
-        Specifiers.Alignas alignas = null;
+        Optional<Specifiers.Alignas> alignas = Optional.empty();
         Quals quals = Quals.NONE;
 
         // Type-specifier bookkeeping. `named` holds a specifier that is a
         // complete type by itself (struct, enum, typedef-name, typeof,
         // _Atomic(T), _BitInt(N)); the rest are the combinable keywords.
-        Type named = null;
-        Token base = null;         // void char int float double bool _DecimalN
-        Token signedness = null;   // signed | unsigned
-        Token shortTok = null;
-        Token complexTok = null;
+        Optional<Type> named = Optional.empty();
+        Optional<Token> base = Optional.empty();        // void char int float double bool _DecimalN
+        Optional<Token> signedness = Optional.empty();  // signed | unsigned
+        boolean seenShort = false;
+        boolean seenComplex = false;
         int longCount = 0;
         boolean seenTypeSpecifier = false;
 
@@ -261,7 +263,7 @@ public final class Parser {
                 // `typedef int T; unsigned T x;` T is the declarator.
                 if (seenTypeSpecifier || !scopes.isTypeName(t.text)) break;
                 cur.next();
-                named = new Type.TypedefName(t, scopes.typedefType(t.text), Quals.NONE);
+                named = Optional.of(new Type.TypedefName(t, scopes.typedefType(t.text).orElseThrow(), Quals.NONE));
                 seenTypeSpecifier = true;
                 continue;
             }
@@ -278,45 +280,49 @@ public final class Parser {
                 if (seenTypeSpecifier) throw cur.error("cannot combine '_Atomic(...)' with other type specifiers");
                 cur.next();
                 cur.expect("(");
-                named = parseTypeName().withQuals(Quals.NONE.plus("_Atomic"));
+                named = Optional.of(parseTypeName().withQuals(Quals.NONE.plus("_Atomic")));
                 cur.expect(")");
                 seenTypeSpecifier = true;
             } else if (TYPE_QUALIFIERS.contains(t.text)) {
                 quals = quals.plus(cur.next().text);
             } else if (t.text.equals("alignas")) {
-                alignas = parseAlignmentSpecifier();
+                alignas = Optional.of(parseAlignmentSpecifier());
             } else if (TYPE_SPECIFIERS.contains(t.text)) {
                 seenTypeSpecifier = true;
                 switch (t.text) {
                     case "signed", "unsigned" -> {
-                        if (signedness != null) throw cur.error("duplicate signedness specifier");
-                        signedness = cur.next();
+                        if (signedness.isPresent()) throw cur.error("duplicate signedness specifier");
+                        signedness = Optional.of(cur.next());
                     }
                     case "short" -> {
-                        if (shortTok != null) throw cur.error("duplicate 'short'");
-                        shortTok = cur.next();
+                        if (seenShort) throw cur.error("duplicate 'short'");
+                        seenShort = true;
+                        cur.next();
                     }
                     case "long" -> {
                         if (++longCount > 2) throw cur.error("too many 'long' specifiers");
                         cur.next();
                     }
                     case "_Complex" -> {
-                        if (complexTok != null) throw cur.error("duplicate '_Complex'");
-                        complexTok = cur.next();
+                        if (seenComplex) throw cur.error("duplicate '_Complex'");
+                        seenComplex = true;
+                        cur.next();
                     }
-                    case "struct", "union" -> named = parseStructOrUnionSpecifier();
-                    case "enum" -> named = parseEnumSpecifier();
-                    case "typeof", "typeof_unqual" -> named = parseTypeofSpecifier();
+                    case "struct", "union" -> named = Optional.of(parseStructOrUnionSpecifier());
+                    case "enum" -> named = Optional.of(parseEnumSpecifier());
+                    case "typeof", "typeof_unqual" -> named = Optional.of(parseTypeofSpecifier());
                     case "_BitInt" -> {
                         cur.next();
                         cur.expect("(");
                         Expr width = parseConditionalExpression();
                         cur.expect(")");
-                        named = new Type.BitInt(t, false, width, Quals.NONE);
+                        named = Optional.of(new Type.BitInt(t, false, width, Quals.NONE));
                     }
                     default -> {
-                        if (base != null) throw cur.error("cannot combine '" + t.text + "' with '" + base.text + "'");
-                        base = cur.next();
+                        if (base.isPresent()) {
+                            throw cur.error("cannot combine '" + t.text + "' with '" + base.get().text + "'");
+                        }
+                        base = Optional.of(cur.next());
                     }
                 }
             } else {
@@ -324,48 +330,48 @@ public final class Parser {
             }
         }
 
-        Type type = foldTypeSpecifiers(start, named, base, signedness, shortTok, complexTok, longCount);
-        if (type == null && !storage.stream().anyMatch(s -> s.text.equals("auto"))) {
+        Optional<Type> type = foldTypeSpecifiers(start, named, base, signedness, seenShort, seenComplex, longCount);
+        if (type.isEmpty() && storage.stream().noneMatch(s -> s.text.equals("auto"))) {
             if (!seenTypeSpecifier && cur.peek() == start) {
                 throw cur.error("expected declaration specifiers");
             }
             throw new ParseException("expected a type specifier", start);
         }
-        if (type != null) {
-            type = type.withQuals(type.quals().plus(quals));
-        }
+        final Quals fQuals = quals;
+        type = type.map(t -> t.withQuals(t.quals().plus(fQuals)));
         return new Specifiers(start, storage, functionSpecs, alignas, type);
     }
 
     // Folds the collected type-specifier keywords into one type per the
-    // multiset table of 6.7.3.1p2. Returns null when no type specifier at
-    // all was given (legal only with `auto`).
-    private Type foldTypeSpecifiers(Token start, Type named, Token base, Token signedness,
-                                    Token shortTok, Token complexTok, int longCount) {
-        boolean modifiers = signedness != null || shortTok != null || longCount > 0 || complexTok != null;
-        boolean unsigned = signedness != null && signedness.text.equals("unsigned");
+    // multiset table of 6.7.3.1p2. Empty when no type specifier at all was
+    // given (legal only with `auto`).
+    private Optional<Type> foldTypeSpecifiers(Token start, Optional<Type> named, Optional<Token> base,
+                                              Optional<Token> signedness, boolean seenShort,
+                                              boolean seenComplex, int longCount) {
+        boolean modifiers = signedness.isPresent() || seenShort || longCount > 0 || seenComplex;
+        boolean unsigned = signedness.map(s -> s.text.equals("unsigned")).orElse(false);
 
-        if (named != null) {
-            if (named instanceof Type.BitInt bi && signedness != null && shortTok == null
-                    && longCount == 0 && complexTok == null) {
-                return new Type.BitInt(bi.token(), unsigned, bi.width(), Quals.NONE);
+        if (named.isPresent()) {
+            if (named.get() instanceof Type.BitInt bi && signedness.isPresent() && !seenShort
+                    && longCount == 0 && !seenComplex) {
+                return Optional.of(new Type.BitInt(bi.token(), unsigned, bi.width(), Quals.NONE));
             }
-            if (modifiers || base != null) throw new ParseException("invalid type specifier combination", start);
+            if (modifiers || base.isPresent()) throw new ParseException("invalid type specifier combination", start);
             return named;
         }
-        if (base == null && !modifiers) return null;
+        if (base.isEmpty() && !modifiers) return Optional.empty();
 
-        String b = base == null ? "int" : base.text;
-        boolean complex = complexTok != null;
+        String b = base.map(t -> t.text).orElse("int");
+        boolean complex = seenComplex;
         Type.Kind kind;
         switch (b) {
             case "char" -> {
-                if (shortTok != null || longCount > 0 || complex) throw bad(start, b);
-                kind = signedness == null ? Type.Kind.CHAR : unsigned ? Type.Kind.UCHAR : Type.Kind.SCHAR;
+                if (seenShort || longCount > 0 || complex) throw bad(start, b);
+                kind = signedness.isEmpty() ? Type.Kind.CHAR : unsigned ? Type.Kind.UCHAR : Type.Kind.SCHAR;
             }
             case "int" -> {
                 if (complex) throw bad(start, b);
-                if (shortTok != null) {
+                if (seenShort) {
                     if (longCount > 0) throw bad(start, "short long");
                     kind = unsigned ? Type.Kind.USHORT : Type.Kind.SHORT;
                 } else if (longCount == 1) {
@@ -377,11 +383,11 @@ public final class Parser {
                 }
             }
             case "float" -> {
-                if (signedness != null || shortTok != null || longCount > 0) throw bad(start, b);
+                if (signedness.isPresent() || seenShort || longCount > 0) throw bad(start, b);
                 kind = Type.Kind.FLOAT;
             }
             case "double" -> {
-                if (signedness != null || shortTok != null || longCount > 1) throw bad(start, b);
+                if (signedness.isPresent() || seenShort || longCount > 1) throw bad(start, b);
                 kind = longCount == 1 ? Type.Kind.LDOUBLE : Type.Kind.DOUBLE;
             }
             default -> {
@@ -397,7 +403,7 @@ public final class Parser {
                 };
             }
         }
-        return new Type.Basic(start, kind, complex, Quals.NONE);
+        return Optional.of(new Type.Basic(start, kind, complex, Quals.NONE));
     }
 
     private static ParseException bad(Token at, String what) {
@@ -410,9 +416,9 @@ public final class Parser {
         cur.expect("(");
         Specifiers.Alignas result;
         if (startsTypeName(cur.peek())) {
-            result = new Specifiers.Alignas(kw, parseTypeName(), null);
+            result = new Specifiers.Alignas(kw, Optional.of(parseTypeName()), Optional.empty());
         } else {
-            result = new Specifiers.Alignas(kw, null, parseConditionalExpression());
+            result = new Specifiers.Alignas(kw, Optional.empty(), Optional.of(parseConditionalExpression()));
         }
         cur.expect(")");
         return result;
@@ -422,14 +428,15 @@ public final class Parser {
     private Type parseStructOrUnionSpecifier() {
         Token kw = cur.next();
         parseAttributeSpecifierSequence();
-        Token tag = cur.atIdentifier() ? cur.next() : null;
-        List<Type.MemberDecl> members = null;
+        Optional<Token> tag = cur.atIdentifier() ? Optional.of(cur.next()) : Optional.empty();
+        Optional<List<Type.MemberDecl>> members = Optional.empty();
         if (cur.accept("{")) {
-            members = new ArrayList<>();
+            var list = new ArrayList<Type.MemberDecl>();
             while (!cur.accept("}")) {
-                parseMemberDeclaration(members);
+                parseMemberDeclaration(list);
             }
-        } else if (tag == null) {
+            members = Optional.of(list);
+        } else if (tag.isEmpty()) {
             throw cur.error("expected identifier or '{' after '" + kw.text + "'");
         }
         return new Type.Struct(kw, tag, members, Quals.NONE);
@@ -446,19 +453,20 @@ public final class Parser {
             return;
         }
         var specs = parseDeclarationSpecifiers(false);
+        Type base = specs.type().orElseThrow(); // no storage classes, so no `auto`
         if (cur.accept(";")) {
-            out.add(new Type.Member(attrs, specs.type(), null, null));
+            out.add(new Type.Member(attrs, base, Optional.empty(), Optional.empty()));
             return;
         }
         do {
-            Token name = null;
-            Type type = specs.type();
+            Optional<Token> name = Optional.empty();
+            Type type = base;
             if (!cur.at(":")) {
                 var declarator = parseDeclarator(DeclaratorKind.NAMED);
                 name = declarator.name();
                 type = declarator.build().apply(type);
             }
-            Expr width = cur.accept(":") ? parseConditionalExpression() : null;
+            Optional<Expr> width = cur.accept(":") ? Optional.of(parseConditionalExpression()) : Optional.empty();
             out.add(new Type.Member(attrs, type, name, width));
         } while (cur.accept(","));
         cur.expect(";");
@@ -468,26 +476,27 @@ public final class Parser {
     private Type parseEnumSpecifier() {
         Token kw = cur.expect("enum");
         parseAttributeSpecifierSequence();
-        Token tag = cur.atIdentifier() ? cur.next() : null;
-        Type underlying = null;
+        Optional<Token> tag = cur.atIdentifier() ? Optional.of(cur.next()) : Optional.empty();
+        Optional<Type> underlying = Optional.empty();
         if (cur.accept(":")) {
             underlying = parseDeclarationSpecifiers(false).type();
         }
-        List<Type.Enumerator> enumerators = null;
+        Optional<List<Type.Enumerator>> enumerators = Optional.empty();
         if (cur.accept("{")) {
-            enumerators = new ArrayList<>();
+            var list = new ArrayList<Type.Enumerator>();
             while (!cur.at("}")) {
                 Token name = cur.expectIdentifier();
                 var attrs = parseAttributeSpecifierSequence();
-                Expr value = cur.accept("=") ? parseConditionalExpression() : null;
+                Optional<Expr> value = cur.accept("=") ? Optional.of(parseConditionalExpression()) : Optional.empty();
                 // Enumeration constants are ordinary identifiers in the
                 // enclosing scope (6.2.1), so they hide typedef names.
                 scopes.declareOrdinary(name.text);
-                enumerators.add(new Type.Enumerator(name, attrs, value));
+                list.add(new Type.Enumerator(name, attrs, value));
                 if (!cur.accept(",")) break;
             }
             cur.expect("}");
-        } else if (tag == null) {
+            enumerators = Optional.of(list);
+        } else if (tag.isEmpty()) {
             throw cur.error("expected identifier or '{' after 'enum'");
         }
         return new Type.Enum(kw, tag, underlying, enumerators, Quals.NONE);
@@ -499,9 +508,9 @@ public final class Parser {
         cur.expect("(");
         Type result;
         if (startsTypeName(cur.peek())) {
-            result = new Type.Typeof(kw, null, parseTypeName(), Quals.NONE);
+            result = new Type.Typeof(kw, Optional.empty(), Optional.of(parseTypeName()), Quals.NONE);
         } else {
-            result = new Type.Typeof(kw, parseExpression(), null, Quals.NONE);
+            result = new Type.Typeof(kw, Optional.of(parseExpression()), Optional.empty(), Quals.NONE);
         }
         cur.expect(")");
         return result;
@@ -510,7 +519,8 @@ public final class Parser {
     /** type-name (6.7.8): specifier-qualifier-list abstract-declaratoropt. */
     private Type parseTypeName() {
         var specs = parseDeclarationSpecifiers(false);
-        return parseDeclarator(DeclaratorKind.ABSTRACT).build().apply(specs.type());
+        Type base = specs.type().orElseThrow(); // no storage classes, so no `auto`
+        return parseDeclarator(DeclaratorKind.ABSTRACT).build().apply(base);
     }
 
     // ---- declarators (6.7.7, 6.7.8) ------------------------------------------
@@ -528,7 +538,7 @@ public final class Parser {
      * as closures, so `int (*a)[3]` and `int *a[3]` come out right without
      * any inside-out bookkeeping.
      */
-    private record Declarator(Token name, UnaryOperator<Type> build, List<Attribute> attributes) {
+    private record Declarator(Optional<Token> name, UnaryOperator<Type> build, List<Attribute> attributes) {
     }
 
     private Declarator parseDeclarator(DeclaratorKind kind) {
@@ -545,12 +555,12 @@ public final class Parser {
     }
 
     private Declarator parseDirectDeclarator(DeclaratorKind kind) {
-        Token name = null;
+        Optional<Token> name = Optional.empty();
         UnaryOperator<Type> build = t -> t;
         List<Attribute> attrs = List.of();
 
         if (cur.atIdentifier() && kind != DeclaratorKind.ABSTRACT) {
-            name = cur.next();
+            name = Optional.of(cur.next());
             attrs = parseAttributeSpecifierSequence();
         } else if (cur.at("(") && startsNestedDeclarator(kind)) {
             cur.next();
@@ -606,18 +616,18 @@ public final class Parser {
         Quals quals = parseTypeQualifierList();
         if (!isStatic && cur.accept("static")) isStatic = true;
         boolean star = false;
-        Expr size = null;
+        Optional<Expr> size = Optional.empty();
         if (cur.at("*") && cur.at(1, "]")) {
             cur.next();
             star = true;
         } else if (!cur.at("]")) {
-            size = parseAssignmentExpression();
+            size = Optional.of(parseAssignmentExpression());
         } else if (isStatic) {
             throw cur.error("'static' array parameter requires a size");
         }
         cur.expect("]");
         final boolean fStatic = isStatic, fStar = star;
-        final Expr fSize = size;
+        final Optional<Expr> fSize = size;
         return t -> new Type.Array(bracket, t, fSize, fStar, fStatic, quals);
     }
 
@@ -653,7 +663,7 @@ public final class Parser {
         scopes.pop();
         cur.expect(")");
         // 6.7.7.4p10: a lone unnamed `void` means no parameters.
-        if (params.size() == 1 && !variadic && params.get(0).name() == null
+        if (params.size() == 1 && !variadic && params.get(0).name().isEmpty()
                 && params.get(0).type() instanceof Type.Basic b
                 && b.kind() == Type.Kind.VOID && b.quals().isEmpty()) {
             params.clear();
@@ -664,11 +674,10 @@ public final class Parser {
     private Type.Parameter parseParameterDeclaration() {
         var attrs = parseAttributeSpecifierSequence();
         var specs = parseDeclarationSpecifiers(true);
-        if (specs.type() == null) throw cur.error("parameter declaration requires a type");
+        Type base = specs.type().orElseThrow(() -> cur.error("parameter declaration requires a type"));
         var declarator = parseDeclarator(DeclaratorKind.PARAMETER);
-        if (declarator.name() != null) scopes.declareOrdinary(declarator.name().text);
-        return new Type.Parameter(attrs, specs.storageClasses(),
-                declarator.build().apply(specs.type()), declarator.name());
+        declarator.name().ifPresent(n -> scopes.declareOrdinary(n.text));
+        return new Type.Parameter(attrs, specs.storageClasses(), declarator.build().apply(base), declarator.name());
     }
 
     // ---- initializers (6.7.11) ---------------------------------------------
@@ -726,15 +735,12 @@ public final class Parser {
     // vendor prefixes commonly use them (gnu::const).
     private Attribute parseAttribute() {
         Token name = parseAttributeName();
-        Token prefix = null;
+        Optional<Token> prefix = Optional.empty();
         if (cur.accept("::")) {
-            prefix = name;
+            prefix = Optional.of(name);
             name = parseAttributeName();
         }
-        List<Token> args = null;
-        if (cur.at("(")) {
-            args = parseBalancedTokenSequence();
-        }
+        Optional<List<Token>> args = cur.at("(") ? Optional.of(parseBalancedTokenSequence()) : Optional.empty();
         return new Attribute(name, prefix, args);
     }
 
@@ -781,7 +787,7 @@ public final class Parser {
         var attrs = parseAttributeSpecifierSequence();
         if (atLabel()) {
             Stmt.Label label = parseLabel();
-            return new Stmt.Labeled(label, parseStatement());
+            return new Stmt.Labeled(label, Optional.of(parseStatement()));
         }
         return parseUnlabeledStatement(attrs);
     }
@@ -800,7 +806,7 @@ public final class Parser {
         if (cur.at("case")) {
             Token kw = cur.next();
             Expr low = parseConditionalExpression();
-            Expr high = cur.accept("...") ? parseConditionalExpression() : null;
+            Optional<Expr> high = cur.accept("...") ? Optional.of(parseConditionalExpression()) : Optional.empty();
             cur.expect(":");
             return new Stmt.CaseLabel(kw, low, high);
         }
@@ -832,7 +838,7 @@ public final class Parser {
             return new Decl.AttributeDeclaration(attrs);
         }
         if (atLabel()) {
-            return new Stmt.Labeled(parseLabel(), null);
+            return new Stmt.Labeled(parseLabel(), Optional.empty());
         }
         if (atDeclaration()) {
             return parseDeclaration(attrs);
@@ -853,7 +859,7 @@ public final class Parser {
                     Stmt.Header header = parseSelectionHeader();
                     cur.expect(")");
                     Stmt thenBranch = parseStatement();
-                    Stmt elseBranch = cur.accept("else") ? parseStatement() : null;
+                    Optional<Stmt> elseBranch = cur.accept("else") ? Optional.of(parseStatement()) : Optional.empty();
                     scopes.pop();
                     return new Stmt.If(t, header, thenBranch, elseBranch);
                 }
@@ -895,13 +901,13 @@ public final class Parser {
                 }
                 case "continue", "break" -> {
                     cur.next();
-                    Token label = cur.atIdentifier() ? cur.next() : null;
+                    Optional<Token> label = cur.atIdentifier() ? Optional.of(cur.next()) : Optional.empty();
                     cur.expect(";");
                     return t.text.equals("break") ? new Stmt.Break(t, label) : new Stmt.Continue(t, label);
                 }
                 case "return" -> {
                     cur.next();
-                    Expr value = cur.at(";") ? null : parseExpression();
+                    Optional<Expr> value = cur.at(";") ? Optional.empty() : Optional.of(parseExpression());
                     cur.expect(";");
                     return new Stmt.Return(t, value);
                 }
@@ -910,11 +916,11 @@ public final class Parser {
         }
         // expression-statement
         if (cur.accept(";")) {
-            return new Stmt.ExprStmt(t, null);
+            return new Stmt.ExprStmt(t, Optional.empty());
         }
         Expr expr = parseExpression();
         cur.expect(";");
-        return new Stmt.ExprStmt(t, expr);
+        return new Stmt.ExprStmt(t, Optional.of(expr));
     }
 
     // selection-header (6.8.5.1):
@@ -926,7 +932,7 @@ public final class Parser {
         var attrs = parseAttributeSpecifierSequence();
         if (!atDeclaration()) {
             if (!attrs.isEmpty()) throw cur.error("attributes are not allowed on a selection expression");
-            return new Stmt.Header(null, parseExpression());
+            return new Stmt.Header(Optional.empty(), Optional.of(parseExpression()));
         }
         if (cur.at("static_assert")) {
             throw cur.error("static_assert is not allowed in a selection header");
@@ -935,13 +941,13 @@ public final class Parser {
         var declarators = parseInitDeclaratorList(specs, parseDeclarator(DeclaratorKind.NAMED));
         var decl = new Decl.Declaration(attrs, specs, declarators);
         if (cur.accept(";")) {
-            return new Stmt.Header(decl, parseExpression());
+            return new Stmt.Header(Optional.of(decl), Optional.of(parseExpression()));
         }
         if (cur.at(")")) {
-            if (declarators.size() != 1 || declarators.get(0).initializer() == null) {
+            if (declarators.size() != 1 || declarators.get(0).initializer().isEmpty()) {
                 throw cur.error("a simple-declaration must declare exactly one initialized object");
             }
-            return new Stmt.Header(decl, null);
+            return new Stmt.Header(Optional.of(decl), Optional.empty());
         }
         throw cur.error("expected ';' or ')' in selection header");
     }
@@ -952,20 +958,20 @@ public final class Parser {
         Token kw = cur.expect("for");
         cur.expect("(");
         scopes.push();
-        Decl.Declaration initDecl = null;
-        Expr initExpr = null;
+        Optional<Decl.Declaration> initDecl = Optional.empty();
+        Optional<Expr> initExpr = Optional.empty();
         var attrs = parseAttributeSpecifierSequence();
         if (atDeclaration()) {
             Decl d = parseDeclaration(attrs);
             if (!(d instanceof Decl.Declaration decl)) throw cur.error("expected a declaration in 'for' clause");
-            initDecl = decl;
+            initDecl = Optional.of(decl);
         } else {
-            if (!cur.at(";")) initExpr = parseExpression();
+            if (!cur.at(";")) initExpr = Optional.of(parseExpression());
             cur.expect(";");
         }
-        Expr cond = cur.at(";") ? null : parseExpression();
+        Optional<Expr> cond = cur.at(";") ? Optional.empty() : Optional.of(parseExpression());
         cur.expect(";");
-        Expr step = cur.at(")") ? null : parseExpression();
+        Optional<Expr> step = cur.at(")") ? Optional.empty() : Optional.of(parseExpression());
         cur.expect(")");
         Stmt body = parseStatement();
         scopes.pop();
@@ -1021,8 +1027,9 @@ public final class Parser {
         Expr left = parseCastExpression();
         while (true) {
             Token t = cur.peek();
-            Integer prec = t.type == TokenType.PUNCTUATOR ? BINARY_PRECEDENCE.get(t.text) : null;
-            if (prec == null || prec < minPrec) return left;
+            // 0: not a binary operator (every operator has precedence >= 1).
+            int prec = t.type == TokenType.PUNCTUATOR ? BINARY_PRECEDENCE.getOrDefault(t.text, 0) : 0;
+            if (prec < minPrec) return left;
             cur.next();
             Expr right = parseBinaryExpression(prec + 1);
             left = new Expr.Binary(t, left, right);
@@ -1116,10 +1123,10 @@ public final class Parser {
         Token kw = cur.expect("static_assert");
         cur.expect("(");
         Expr cond = parseConditionalExpression();
-        Expr.StringLiteral message = null;
+        Optional<Expr.StringLiteral> message = Optional.empty();
         if (cur.accept(",")) {
             if (cur.peek().type != TokenType.STRING_LITERAL) throw cur.error("expected string literal");
-            message = parseStringLiteral();
+            message = Optional.of(parseStringLiteral());
         }
         cur.expect(")");
         return new Expr.StaticAssertion(kw, cond, message);
@@ -1226,17 +1233,17 @@ public final class Parser {
     private Expr parseGenericSelection() {
         Token kw = cur.expect("_Generic");
         cur.expect("(");
-        Expr controllingExpr = null;
-        Type controllingType = null;
+        Optional<Expr> controllingExpr = Optional.empty();
+        Optional<Type> controllingType = Optional.empty();
         if (startsTypeName(cur.peek())) {
-            controllingType = parseTypeName();
+            controllingType = Optional.of(parseTypeName());
         } else {
-            controllingExpr = parseAssignmentExpression();
+            controllingExpr = Optional.of(parseAssignmentExpression());
         }
         cur.expect(",");
         var associations = new ArrayList<Expr.Generic.Association>();
         do {
-            Type type = cur.accept("default") ? null : parseTypeName();
+            Optional<Type> type = cur.accept("default") ? Optional.empty() : Optional.of(parseTypeName());
             cur.expect(":");
             associations.add(new Expr.Generic.Association(type, parseAssignmentExpression()));
         } while (cur.accept(","));

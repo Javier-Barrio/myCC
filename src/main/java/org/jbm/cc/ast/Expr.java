@@ -3,10 +3,12 @@ package org.jbm.cc.ast;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Expressions (C2y 6.5). Every node keeps the token it is anchored at, for
  * diagnostics; literals keep their spelling and are decoded by sema.
+ * Optional parts of the grammar are {@link Optional}s; nothing is null.
  */
 public sealed interface Expr {
 
@@ -41,13 +43,13 @@ public sealed interface Expr {
     }
 
     /**
-     * generic-selection (6.5.2.1). Exactly one of controllingExpr /
-     * controllingType is non-null.
+     * generic-selection (6.5.2.1). The controlling operand is an expression
+     * or (C2y) a type-name: exactly one of the two is present.
      */
-    record Generic(Token keyword, Expr controllingExpr, Type controllingType,
+    record Generic(Token keyword, Optional<Expr> controllingExpr, Optional<Type> controllingType,
                    List<Association> associations) implements Expr {
-        /** type is null for the {@code default} association. */
-        public record Association(Type type, Expr expr) {
+        /** type is absent for the {@code default} association. */
+        public record Association(Optional<Type> type, Expr expr) {
         }
 
         @Override
@@ -117,7 +119,7 @@ public sealed interface Expr {
     }
 
     /** static-assertion used as a unary-expression (6.5.4.6) or as a declaration (6.7.1). */
-    record StaticAssertion(Token keyword, Expr condition, StringLiteral message)
+    record StaticAssertion(Token keyword, Expr condition, Optional<StringLiteral> message)
             implements Expr, Decl, Type.MemberDecl {
         @Override
         public <R> R accept(Visitor<R> v) {

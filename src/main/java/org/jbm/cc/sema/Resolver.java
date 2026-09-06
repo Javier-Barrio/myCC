@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -39,9 +40,10 @@ public final class Resolver extends AstWalker {
 
     // Per-function state: the label namespace (6.2.1p3), gotos to resolve
     // once the whole body is seen, and the enclosing loops/switches that a
-    // break or continue may target, innermost first.
-    private Map<String, Stmt.Labeled> labels;
-    private List<Stmt.Goto> gotos;
+    // break or continue may target, innermost first. Reset per function;
+    // labels and jumps cannot occur outside one.
+    private Map<String, Stmt.Labeled> labels = new HashMap<>();
+    private List<Stmt.Goto> gotos = new ArrayList<>();
     private final Deque<JumpTarget> jumpTargets = new ArrayDeque<>();
 
     private record JumpTarget(Stmt stmt, Set<String> labels, boolean isLoop) {
@@ -76,12 +78,12 @@ public final class Resolver extends AstWalker {
             // The declared type may contain array sizes and prototypes to
             // resolve; its struct/enum specifier is shared with the
             // declaration specifiers and is skipped on this second visit.
-            walk(id.type());
+            id.type().ifPresent(this::walk);
             // The identifier's scope starts right after its declarator
             // (6.2.1p7), so it is declared before its initializer is walked.
-            Symbol symbol = declare(id.name(), id.type(), d.specifiers(), id.initializer() != null);
+            Symbol symbol = declare(id.name(), id.type(), d.specifiers(), id.initializer().isPresent());
             bindings.declarators.put(id, symbol);
-            walk(id.initializer());
+            id.initializer().ifPresent(this::walk);
         }
         return null;
     }
@@ -89,7 +91,7 @@ public final class Resolver extends AstWalker {
     @Override
     public Void visit(Decl.FunctionDefinition d) {
         walkSpecifiers(d.specifiers());
-        Symbol symbol = declare(d.name(), d.type(), d.specifiers(), true);
+        Symbol symbol = declare(d.name(), Optional.of(d.type()), d.specifiers(), true);
         bindings.functions.put(d, symbol);
 
         labels = new HashMap<>();
@@ -113,8 +115,6 @@ public final class Resolver extends AstWalker {
             if (target == null) throw new SemaException("label '" + g.label().text + "' used but not defined", g.label());
             bindings.gotos.put(g, target);
         }
-        labels = null;
-        gotos = null;
         return null;
     }
 
@@ -125,12 +125,14 @@ public final class Resolver extends AstWalker {
     }
 
     private void declareParameter(Type.Parameter p) {
-        if (p.name() == null) return;
-        Symbol existing = table.lookupHere(p.name().text);
-        if (existing != null) throw redeclaration(p.name(), existing);
-        Symbol symbol = new Symbol.Parameter(nextId++, p.name(), p.type(), table.depth());
-        table.declare(symbol);
-        bindings.parameters.put(p, symbol);
+        p.name().ifPresent(name -> {
+            table.lookupHere(name.text).ifPresent(existing -> {
+                throw redeclaration(name, existing);
+            });
+            Symbol symbol = new Symbol.Parameter(nextId++, name, p.type(), table.depth());
+            table.declare(symbol);
+            bindings.parameters.put(p, symbol);
+        });
     }
 
     /**
@@ -142,13 +144,14 @@ public final class Resolver extends AstWalker {
      * (tentative definitions, prototypes) and all declarations denote one
      * symbol; in a block only extern redeclarations are allowed.
      */
-    private Symbol declare(Token name, Type type, Specifiers specs, boolean defined) {
+    private Symbol declare(Token name, Optional<Type> type, Specifiers specs, boolean defined) {
         int depth = table.depth();
         Class<? extends Symbol> kind = specs.isTypedef() ? Symbol.Typedef.class
-                : type instanceof Type.Function ? Symbol.Function.class
+                : type.filter(t -> t instanceof Type.Function).isPresent() ? Symbol.Function.class
                 : Symbol.Variable.class;
-        Symbol existing = table.lookupHere(name.text);
-        if (existing != null) {
+        var found = table.lookupHere(name.text);
+        if (found.isPresent()) {
+            Symbol existing = found.get();
             boolean sameKind = existing.getClass() == kind;
             boolean fileScopeRedeclaration = depth == 0 && sameKind;
             boolean externRedeclaration = depth > 0 && sameKind && specs.has("extern")
@@ -167,9 +170,9 @@ public final class Resolver extends AstWalker {
         boolean isStatic = specs.has("static");
         Symbol symbol;
         if (kind == Symbol.Typedef.class) {
-            symbol = new Symbol.Typedef(nextId++, name, type, depth);
+            symbol = new Symbol.Typedef(nextId++, name, type.orElseThrow(), depth);
         } else if (kind == Symbol.Function.class) {
-            symbol = new Symbol.Function(nextId++, name, type, depth,
+            symbol = new Symbol.Function(nextId++, name, type.orElseThrow(), depth,
                     isStatic ? Symbol.Linkage.INTERNAL : Symbol.Linkage.EXTERNAL, defined);
         } else {
             boolean isExtern = specs.has("extern");
@@ -198,31 +201,32 @@ public final class Resolver extends AstWalker {
         // every declarator's type (`struct S {...} a, *b;`), so it is
         // resolved once.
         if (bindings.tags.containsKey(t)) return null;
-        resolveTag(t, t.tag(), t.keyword().text, t.members() != null);
-        if (t.members() != null) {
-            for (var m : t.members()) walkMember(m);
-        }
+        resolveTag(t, t.keyword(), t.tag(), t.keyword().text, t.members().isPresent());
+        t.members().ifPresent(members -> {
+            for (var m : members) walkMember(m);
+        });
         return null;
     }
 
     @Override
     public Void visit(Type.Enum t) {
         if (bindings.tags.containsKey(t)) return null;
-        resolveTag(t, t.tag(), "enum", t.enumerators() != null);
-        walk(t.underlying());
-        if (t.enumerators() != null) {
-            for (var e : t.enumerators()) {
+        resolveTag(t, t.keyword(), t.tag(), "enum", t.enumerators().isPresent());
+        t.underlying().ifPresent(this::walk);
+        t.enumerators().ifPresent(enumerators -> {
+            for (var e : enumerators) {
                 // An enumerator's scope begins just after its definition
                 // (6.2.1p7), so `B = A + 1` sees A but not B.
-                walk(e.value());
-                Symbol existing = table.lookupHere(e.name().text);
-                if (existing != null) throw redeclaration(e.name(), existing);
+                e.value().ifPresent(this::walk);
+                table.lookupHere(e.name().text).ifPresent(existing -> {
+                    throw redeclaration(e.name(), existing);
+                });
                 Symbol symbol = new Symbol.Enumerator(nextId++, e.name(), t, table.depth());
                 table.declare(symbol);
                 if (table.depth() == 0) bindings.fileScope.add(symbol);
                 bindings.enumerators.put(e, symbol);
             }
-        }
+        });
         return null;
     }
 
@@ -230,34 +234,29 @@ public final class Resolver extends AstWalker {
     // the current scope (completing a forward declaration made there); any
     // other mention refers to a visible tag, or declares an incomplete one
     // in the current scope if none is visible.
-    private void resolveTag(Type node, Token tag, String keyword, boolean isDefinition) {
-        Token at = tag != null ? tag : ((node instanceof Type.Struct s) ? s.keyword() : ((Type.Enum) node).keyword());
-        if (tag == null) {
-            var anonymous = new TagSymbol(null, keyword, at, table.depth());
-            anonymous.definition = isDefinition ? node : null;
+    private void resolveTag(Type node, Token keywordToken, Optional<Token> tag, String keyword, boolean isDefinition) {
+        if (tag.isEmpty()) {
+            var anonymous = new TagSymbol(Optional.empty(), keyword, keywordToken, table.depth());
+            if (isDefinition) anonymous.define(node);
             bindings.tags.put(node, anonymous);
             return;
         }
-        TagSymbol symbol;
-        if (isDefinition || standaloneTagDeclaration) {
-            symbol = table.lookupTagHere(tag.text);
-            if (symbol == null) {
-                symbol = new TagSymbol(tag.text, keyword, tag, table.depth());
-                table.declareTag(symbol);
-            } else if (isDefinition && symbol.isComplete()) {
-                throw new SemaException("redefinition of '" + keyword + " " + tag.text + "'", tag);
-            }
-        } else {
-            symbol = table.lookupTag(tag.text);
-            if (symbol == null) {
-                symbol = new TagSymbol(tag.text, keyword, tag, table.depth());
-                table.declareTag(symbol);
-            }
+        Token name = tag.get();
+        Optional<TagSymbol> visible = isDefinition || standaloneTagDeclaration
+                ? table.lookupTagHere(name.text)
+                : table.lookupTag(name.text);
+        TagSymbol symbol = visible.orElseGet(() -> {
+            var declared = new TagSymbol(Optional.of(name.text), keyword, name, table.depth());
+            table.declareTag(declared);
+            return declared;
+        });
+        if (isDefinition && visible.isPresent() && symbol.isComplete()) {
+            throw new SemaException("redefinition of '" + keyword + " " + name.text + "'", name);
         }
         if (!symbol.keyword.equals(keyword)) {
-            throw new SemaException("'" + tag.text + "' declared as " + symbol.keyword + " but used as " + keyword, tag);
+            throw new SemaException("'" + name.text + "' declared as " + symbol.keyword + " but used as " + keyword, name);
         }
-        if (isDefinition) symbol.definition = node;
+        if (isDefinition) symbol.define(node);
         bindings.tags.put(node, symbol);
     }
 
@@ -276,8 +275,8 @@ public final class Resolver extends AstWalker {
 
     @Override
     public Void visit(Expr.Identifier e) {
-        Symbol symbol = table.lookup(e.name().text);
-        if (symbol == null) throw new SemaException("use of undeclared identifier '" + e.name().text + "'", e.name());
+        Symbol symbol = table.lookup(e.name().text).orElseThrow(
+                () -> new SemaException("use of undeclared identifier '" + e.name().text + "'", e.name()));
         if (symbol instanceof Symbol.Typedef) {
             throw new SemaException("'" + e.name().text + "' names a type, not a value", e.name());
         }
@@ -301,7 +300,7 @@ public final class Resolver extends AstWalker {
     private void walkBlockItems(List<BlockItem> items) {
         var names = new LinkedHashSet<String>();
         for (var item : items) {
-            if (item instanceof Stmt.Labeled labeled && labeled.body() == null) {
+            if (item instanceof Stmt.Labeled labeled && labeled.body().isEmpty()) {
                 if (labeled.label() instanceof Stmt.NameLabel l) {
                     defineLabel(l.name(), labeled);
                     names.add(l.name().text);
@@ -323,7 +322,9 @@ public final class Resolver extends AstWalker {
 
     @Override
     public Void visit(Stmt.Labeled s) {
-        // `a: b: while (...)` - collect every name down to the real statement.
+        // `a: b: while (...)` - collect every name down to the real
+        // statement. Only bare labels (block-items) lack a body, and
+        // walkBlockItems handles those before they get here.
         var names = new LinkedHashSet<String>();
         Stmt body = s;
         while (body instanceof Stmt.Labeled labeled) {
@@ -334,7 +335,7 @@ public final class Resolver extends AstWalker {
                 checkCaseLabel(labeled.label());
                 walkLabel(labeled.label());
             }
-            body = labeled.body();
+            body = labeled.body().orElseThrow();
         }
         walkTarget(body, names);
         return null;
@@ -373,7 +374,7 @@ public final class Resolver extends AstWalker {
         table.push();
         walkHeader(s.header());
         walk(s.thenBranch());
-        walk(s.elseBranch());
+        s.elseBranch().ifPresent(this::walk);
         table.pop();
         return null;
     }
@@ -410,10 +411,10 @@ public final class Resolver extends AstWalker {
     @Override
     public Void visit(Stmt.For s) {
         table.push();
-        walk(s.initDecl());
-        walk(s.initExpr());
-        walk(s.condition());
-        walk(s.step());
+        s.initDecl().ifPresent(this::walk);
+        s.initExpr().ifPresent(this::walk);
+        s.condition().ifPresent(this::walk);
+        s.step().ifPresent(this::walk);
         enterTarget(s, true);
         walk(s.body());
         jumpTargets.pop();
@@ -441,15 +442,14 @@ public final class Resolver extends AstWalker {
 
     // break: innermost loop or switch, or the one labeled `label`;
     // continue: innermost loop, or the loop labeled `label` (6.8.7.2-3).
-    private Stmt findJumpTarget(Token keyword, Token label, boolean loopOnly) {
+    private Stmt findJumpTarget(Token keyword, Optional<Token> label, boolean loopOnly) {
         for (var target : jumpTargets) {
             if (loopOnly && !target.isLoop()) continue;
-            if (label == null || target.labels().contains(label.text)) return target.stmt();
+            if (label.isEmpty() || target.labels().contains(label.get().text)) return target.stmt();
         }
-        if (label != null) {
-            throw new SemaException("'" + keyword.text + " " + label.text + "': no enclosing "
-                    + (loopOnly ? "loop" : "loop or switch") + " labeled '" + label.text + "'", label);
-        }
-        throw new SemaException("'" + keyword.text + "' not within a " + (loopOnly ? "loop" : "loop or switch"), keyword);
+        String what = loopOnly ? "loop" : "loop or switch";
+        throw label.map(l -> new SemaException("'" + keyword.text + " " + l.text + "': no enclosing "
+                        + what + " labeled '" + l.text + "'", l))
+                .orElseGet(() -> new SemaException("'" + keyword.text + "' not within a " + what, keyword));
     }
 }

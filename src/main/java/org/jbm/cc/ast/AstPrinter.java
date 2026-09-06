@@ -3,6 +3,7 @@ package org.jbm.cc.ast;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -36,19 +37,18 @@ public final class AstPrinter implements Visitor<String> {
     }
 
     public static String print(Decl d) {
-        return d == null ? "_" : d.accept(INSTANCE);
+        return d.accept(INSTANCE);
     }
 
     public static String print(Stmt s) {
-        return s == null ? "_" : s.accept(INSTANCE);
+        return s.accept(INSTANCE);
     }
 
     public static String print(Expr e) {
-        return e == null ? "_" : e.accept(INSTANCE);
+        return e.accept(INSTANCE);
     }
 
     public static String print(Type t) {
-        if (t == null) return "_";
         String core = t.accept(INSTANCE);
         var q = t.quals();
         if (q.isEmpty()) return core;
@@ -61,7 +61,12 @@ public final class AstPrinter implements Visitor<String> {
     }
 
     public static String print(Initializer init) {
-        return init == null ? "_" : init.accept(INSTANCE);
+        return init.accept(INSTANCE);
+    }
+
+    /** An absent optional part prints as {@code _}. */
+    private static String absent(Optional<String> printed) {
+        return printed.orElse("_");
     }
 
     // ---- expressions ----------------------------------------------------
@@ -84,9 +89,10 @@ public final class AstPrinter implements Visitor<String> {
     @Override
     public String visit(Expr.Generic e) {
         var sb = new StringBuilder("(_Generic ");
-        sb.append(e.controllingType() != null ? typeOperand(e.controllingType()) : print(e.controllingExpr()));
+        sb.append(e.controllingType().map(AstPrinter::typeOperand)
+                .orElseGet(() -> print(e.controllingExpr().orElseThrow())));
         for (var a : e.associations()) {
-            sb.append(" (").append(a.type() == null ? "default" : print(a.type()))
+            sb.append(" (").append(a.type().map(AstPrinter::print).orElse("default"))
                     .append(' ').append(print(a.expr())).append(')');
         }
         return sb.append(')').toString();
@@ -133,9 +139,9 @@ public final class AstPrinter implements Visitor<String> {
 
     @Override
     public String visit(Expr.StaticAssertion e) {
-        return e.message() == null
-                ? list("static_assert", print(e.condition()))
-                : list("static_assert", print(e.condition()), print(e.message()));
+        return e.message()
+                .map(m -> list("static_assert", print(e.condition()), print(m)))
+                .orElseGet(() -> list("static_assert", print(e.condition())));
     }
 
     @Override
@@ -190,7 +196,7 @@ public final class AstPrinter implements Visitor<String> {
         if (t.isStatic()) sb.append("static ");
         sb.append(print(t.element()));
         if (t.isStar()) sb.append(" *");
-        else if (t.size() != null) sb.append(' ').append(print(t.size()));
+        else t.size().ifPresent(size -> sb.append(' ').append(print(size)));
         return sb.append(')').toString();
     }
 
@@ -206,25 +212,25 @@ public final class AstPrinter implements Visitor<String> {
     @Override
     public String visit(Type.Struct t) {
         var sb = new StringBuilder("(").append(t.keyword().text);
-        if (t.tag() != null) sb.append(' ').append(t.tag().text);
-        if (t.members() != null) {
-            for (var m : t.members()) sb.append(' ').append(member(m));
-        }
+        t.tag().ifPresent(tag -> sb.append(' ').append(tag.text));
+        t.members().ifPresent(members -> {
+            for (var m : members) sb.append(' ').append(member(m));
+        });
         return sb.append(')').toString();
     }
 
     @Override
     public String visit(Type.Enum t) {
         var sb = new StringBuilder("(enum");
-        if (t.tag() != null) sb.append(' ').append(t.tag().text);
-        if (t.underlying() != null) sb.append(" : ").append(print(t.underlying()));
-        if (t.enumerators() != null) {
-            for (var en : t.enumerators()) {
+        t.tag().ifPresent(tag -> sb.append(' ').append(tag.text));
+        t.underlying().ifPresent(u -> sb.append(" : ").append(print(u)));
+        t.enumerators().ifPresent(enumerators -> {
+            for (var en : enumerators) {
                 sb.append(" (").append(en.name().text);
-                if (en.value() != null) sb.append(' ').append(print(en.value()));
+                en.value().ifPresent(v -> sb.append(' ').append(print(v)));
                 sb.append(')');
             }
-        }
+        });
         return sb.append(')').toString();
     }
 
@@ -235,13 +241,14 @@ public final class AstPrinter implements Visitor<String> {
 
     @Override
     public String visit(Type.Typeof t) {
-        return list(t.keyword().text, t.type() != null ? typeOperand(t.type()) : print(t.expr()));
+        return list(t.keyword().text, t.type().map(AstPrinter::typeOperand)
+                .orElseGet(() -> print(t.expr().orElseThrow())));
     }
 
     private static String parameter(Type.Parameter p) {
         var sb = new StringBuilder("(");
         for (var s : p.storageClasses()) sb.append(s.text).append(' ');
-        if (p.name() != null) sb.append(p.name().text).append(' ');
+        p.name().ifPresent(name -> sb.append(name.text).append(' '));
         return sb.append(print(p.type())).append(')').toString();
     }
 
@@ -249,9 +256,9 @@ public final class AstPrinter implements Visitor<String> {
         if (m instanceof Expr.StaticAssertion sa) return print((Expr) sa);
         var x = (Type.Member) m;
         var sb = new StringBuilder("(");
-        if (x.name() != null) sb.append(x.name().text).append(' ');
+        x.name().ifPresent(name -> sb.append(name.text).append(' '));
         sb.append(print(x.type()));
-        if (x.bitWidth() != null) sb.append(" : ").append(print(x.bitWidth()));
+        x.bitWidth().ifPresent(w -> sb.append(" : ").append(print(w)));
         return sb.append(')').toString();
     }
 
@@ -261,11 +268,11 @@ public final class AstPrinter implements Visitor<String> {
     public String visit(Decl.Declaration d) {
         var sb = new StringBuilder("(decl").append(specifiers(d.specifiers()));
         if (d.declarators().isEmpty()) {
-            sb.append(' ').append(print(d.specifiers().type()));
+            sb.append(' ').append(absent(d.specifiers().type().map(AstPrinter::print)));
         }
         for (var id : d.declarators()) {
-            sb.append(" (").append(id.name().text).append(' ').append(print(id.type()));
-            if (id.initializer() != null) sb.append(' ').append(print(id.initializer()));
+            sb.append(" (").append(id.name().text).append(' ').append(absent(id.type().map(AstPrinter::print)));
+            id.initializer().ifPresent(init -> sb.append(' ').append(print(init)));
             sb.append(')');
         }
         return sb.append(')').toString();
@@ -286,19 +293,18 @@ public final class AstPrinter implements Visitor<String> {
         var sb = new StringBuilder();
         for (var t : s.storageClasses()) sb.append(' ').append(t.text);
         for (var t : s.functionSpecifiers()) sb.append(' ').append(t.text);
-        if (s.alignment() != null) {
-            sb.append(" (alignas ").append(s.alignment().type() != null
-                    ? typeOperand(s.alignment().type()) : print(s.alignment().expr())).append(')');
-        }
+        s.alignment().ifPresent(a -> sb.append(" (alignas ")
+                .append(a.type().map(AstPrinter::typeOperand).orElseGet(() -> print(a.expr().orElseThrow())))
+                .append(')'));
         return sb.toString();
     }
 
     private static String attributes(List<Attribute> attrs) {
         return attrs.stream().map(a -> {
             var sb = new StringBuilder("[[");
-            if (a.prefix() != null) sb.append(a.prefix().text).append("::");
+            a.prefix().ifPresent(p -> sb.append(p.text).append("::"));
             sb.append(a.name().text);
-            if (a.arguments() != null) sb.append('(').append(texts(a.arguments())).append(')');
+            a.arguments().ifPresent(args -> sb.append('(').append(texts(args)).append(')'));
             return sb.append("]]").toString();
         }).collect(Collectors.joining(" "));
     }
@@ -332,9 +338,9 @@ public final class AstPrinter implements Visitor<String> {
         String label;
         if (s.label() instanceof Stmt.NameLabel l) label = "(label " + l.name().text;
         else if (s.label() instanceof Stmt.CaseLabel l) {
-            label = "(case " + print(l.low()) + (l.high() != null ? " " + print(l.high()) : "");
+            label = "(case " + print(l.low()) + l.high().map(h -> " " + print(h)).orElse("");
         } else label = "(default";
-        return label + (s.body() != null ? " " + print(s.body()) : "") + ')';
+        return label + s.body().map(b -> " " + print(b)).orElse("") + ')';
     }
 
     @Override
@@ -346,14 +352,14 @@ public final class AstPrinter implements Visitor<String> {
 
     @Override
     public String visit(Stmt.ExprStmt s) {
-        return s.expr() == null ? "(expr)" : list("expr", print(s.expr()));
+        return s.expr().map(e -> list("expr", print(e))).orElse("(expr)");
     }
 
     @Override
     public String visit(Stmt.If s) {
-        return s.elseBranch() == null
-                ? list("if", header(s.header()), print(s.thenBranch()))
-                : list("if", header(s.header()), print(s.thenBranch()), print(s.elseBranch()));
+        return s.elseBranch()
+                .map(e -> list("if", header(s.header()), print(s.thenBranch()), print(e)))
+                .orElseGet(() -> list("if", header(s.header()), print(s.thenBranch())));
     }
 
     @Override
@@ -373,8 +379,10 @@ public final class AstPrinter implements Visitor<String> {
 
     @Override
     public String visit(Stmt.For s) {
-        String init = s.initDecl() != null ? print(s.initDecl()) : print(s.initExpr());
-        return list("for", init, print(s.condition()), print(s.step()), print(s.body()));
+        String init = s.initDecl().map(AstPrinter::print)
+                .or(() -> s.initExpr().map(AstPrinter::print)).orElse("_");
+        return list("for", init, absent(s.condition().map(AstPrinter::print)),
+                absent(s.step().map(AstPrinter::print)), print(s.body()));
     }
 
     @Override
@@ -384,24 +392,23 @@ public final class AstPrinter implements Visitor<String> {
 
     @Override
     public String visit(Stmt.Continue s) {
-        return s.label() == null ? "(continue)" : list("continue", s.label().text);
+        return s.label().map(l -> list("continue", l.text)).orElse("(continue)");
     }
 
     @Override
     public String visit(Stmt.Break s) {
-        return s.label() == null ? "(break)" : list("break", s.label().text);
+        return s.label().map(l -> list("break", l.text)).orElse("(break)");
     }
 
     @Override
     public String visit(Stmt.Return s) {
-        return s.value() == null ? "(return)" : list("return", print(s.value()));
+        return s.value().map(v -> list("return", print(v))).orElse("(return)");
     }
 
     private static String header(Stmt.Header h) {
-        if (h.declaration() == null) return print(h.condition());
-        return h.condition() == null
-                ? list("header", print(h.declaration()))
-                : list("header", print(h.declaration()), print(h.condition()));
+        if (h.declaration().isEmpty()) return print(h.condition().orElseThrow());
+        String decl = print(h.declaration().get());
+        return h.condition().map(c -> list("header", decl, print(c))).orElseGet(() -> list("header", decl));
     }
 
     // ---- helpers --------------------------------------------------------

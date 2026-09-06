@@ -1,11 +1,14 @@
 package org.jbm.cc.cpp;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.*;
 
 /**
- * Tokenizer for raw C++ source, prior to any preprocessing (no line
- * splicing, no macro expansion, no directive handling). The C preprocessor
- * itself lives in {@link org.jbm.cc.cpp}.
+ * Tokenizer for C source: translation phases 2 and 3 (line splicing,
+ * then decomposition into preprocessing tokens), plus the recognition of
+ * {@code #define} / {@code #undef} lines that the expander needs. Macro
+ * expansion itself is {@link Scanner}'s job.
  */
 public class CppTokenizer {
 
@@ -367,7 +370,7 @@ public class CppTokenizer {
         return new Token(TokenType.UNKNOWN, String.valueOf(c), startLine, startCol);
     }
 
-    private String matchLiteralPrefix() {
+    private @Nullable String matchLiteralPrefix() {
         for (String p : STRING_PREFIXES) {
             if (src.startsWith(p, pos)) {
                 return p;

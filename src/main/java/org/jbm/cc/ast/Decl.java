@@ -3,6 +3,7 @@ package org.jbm.cc.ast;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Declarations (C2y 6.7.1) and external definitions (6.9). */
 public sealed interface Decl extends BlockItem
@@ -22,8 +23,12 @@ public sealed interface Decl extends BlockItem
         }
     }
 
-    /** init-declarator: the declared name, its full type, and the initializer if any. */
-    record InitDeclarator(Token name, Type type, List<Attribute> attributes, Initializer initializer) {
+    /**
+     * init-declarator: the declared name, its full type (absent only for
+     * {@code auto} type inference), and the initializer if any.
+     */
+    record InitDeclarator(Token name, Optional<Type> type, List<Attribute> attributes,
+                          Optional<Initializer> initializer) {
     }
 
     /** function-definition (6.9.2). type is the declarator's {@link Type.Function}. */

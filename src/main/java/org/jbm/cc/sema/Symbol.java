@@ -3,6 +3,8 @@ package org.jbm.cc.sema;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
+import java.util.Optional;
+
 /**
  * An entity in the ordinary-identifier namespace (C2y 6.2.3). One Symbol
  * per entity; redeclarations at file scope bind to the same Symbol. The
@@ -19,15 +21,20 @@ public sealed abstract class Symbol
 
     public final int id;
     public final String name;
-    public final Type type;
+    /**
+     * The syntactic type of the first declaration - absent only for an
+     * {@code auto} object whose type the typing pass infers. Sema's
+     * semantic type, composed across all declarations, comes later.
+     */
+    public final Optional<Type> declaredType;
     public final Token declaredAt;
     /** 0 for file scope. */
     public final int scopeDepth;
 
-    Symbol(int id, Token declaredAt, Type type, int scopeDepth) {
+    Symbol(int id, Token declaredAt, Optional<Type> declaredType, int scopeDepth) {
         this.id = id;
         this.name = declaredAt.text;
-        this.type = type;
+        this.declaredType = declaredType;
         this.declaredAt = declaredAt;
         this.scopeDepth = scopeDepth;
     }
@@ -59,9 +66,9 @@ public sealed abstract class Symbol
         private final Linkage linkage;
         private boolean defined;
 
-        Variable(int id, Token declaredAt, Type type, int scopeDepth, Storage storage, Linkage linkage,
-                 boolean defined) {
-            super(id, declaredAt, type, scopeDepth);
+        Variable(int id, Token declaredAt, Optional<Type> declaredType, int scopeDepth, Storage storage,
+                 Linkage linkage, boolean defined) {
+            super(id, declaredAt, declaredType, scopeDepth);
             this.storage = storage;
             this.linkage = linkage;
             this.defined = defined;
@@ -86,7 +93,7 @@ public sealed abstract class Symbol
     /** A function parameter: automatic storage, no linkage, block scope of the body (6.2.1p4). */
     public static final class Parameter extends Symbol {
         Parameter(int id, Token declaredAt, Type type, int scopeDepth) {
-            super(id, declaredAt, type, scopeDepth);
+            super(id, declaredAt, Optional.of(type), scopeDepth);
         }
     }
 
@@ -95,7 +102,7 @@ public sealed abstract class Symbol
         private boolean defined;
 
         Function(int id, Token declaredAt, Type type, int scopeDepth, Linkage linkage, boolean defined) {
-            super(id, declaredAt, type, scopeDepth);
+            super(id, declaredAt, Optional.of(type), scopeDepth);
             this.linkage = linkage;
             this.defined = defined;
         }
@@ -116,19 +123,19 @@ public sealed abstract class Symbol
         }
     }
 
-    /** A typedef name (6.7.9); type is the type it stands for. */
+    /** A typedef name (6.7.9); declaredType is the type it stands for. */
     public static final class Typedef extends Symbol {
         Typedef(int id, Token declaredAt, Type type, int scopeDepth) {
-            super(id, declaredAt, type, scopeDepth);
+            super(id, declaredAt, Optional.of(type), scopeDepth);
         }
     }
 
-    /** An enumeration constant (6.7.3.3); type is the enum specifier that declares it. */
+    /** An enumeration constant (6.7.3.3); enumType is the enum specifier that declares it. */
     public static final class Enumerator extends Symbol {
         public final Type.Enum enumType;
 
         Enumerator(int id, Token declaredAt, Type.Enum enumType, int scopeDepth) {
-            super(id, declaredAt, enumType, scopeDepth);
+            super(id, declaredAt, Optional.of(enumType), scopeDepth);
             this.enumType = enumType;
         }
     }

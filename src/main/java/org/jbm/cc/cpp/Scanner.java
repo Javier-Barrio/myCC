@@ -3,10 +3,12 @@ package org.jbm.cc.cpp;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Macro expander implementing Dave Prosser's expand/subst/glue/hsadd
@@ -45,7 +47,7 @@ public class Scanner {
         // T is an object-like macro:
         // expand(subst(ts(T), {}, {}, HS ∪ {T}, {}) • TS')
         if (definition != null && definition.type == TokenType.OBJECT_MACRO) {
-            var hs = hideSetPlus(first, null);
+            var hs = hideSetPlus(first, Optional.empty());
             var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                     new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
             return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(rest));
@@ -63,7 +65,7 @@ public class Scanner {
                 var fp = new ArrayList<TokenSet>();
                 definition.params.forEach(p -> fp.add(TokenSet.from(new CppToken(p))));
 
-                var hs = hideSetPlus(first, closeParen);
+                var hs = hideSetPlus(first, Optional.of(closeParen));
                 var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                         fp, args, hs, TokenSet.empty());
                 return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(remainder));
@@ -228,7 +230,7 @@ public class Scanner {
     }
 
     // Resolves what macro (if any) this occurrence refers to.
-    private Token definitionOf(CppToken t) {
+    private @Nullable Token definitionOf(CppToken t) {
         return switch (t.token.type) {
             // Resolved at scan time; carries the definition in force at its
             // position in the source (matters across #undef/redefine).
@@ -242,10 +244,10 @@ public class Scanner {
 
     // HS ∪ {T}; or (HS ∩ HS') ∪ {T} when the invocation's closing paren
     // carries hide set HS'. Wrapped as a TokenSet for hsAdd.
-    private static TokenSet hideSetPlus(CppToken occurrence, CppToken closeParen) {
+    private static TokenSet hideSetPlus(CppToken occurrence, Optional<CppToken> closeParen) {
         var list = new ArrayList<CppToken>();
         for (var t : occurrence.hideSet) {
-            if (closeParen == null || hideSetContains(closeParen, t.text)) {
+            if (closeParen.map(c -> hideSetContains(c, t.text)).orElse(true)) {
                 list.add(new CppToken(t));
             }
         }
