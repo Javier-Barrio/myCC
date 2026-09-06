@@ -10,14 +10,22 @@ public class CppToken {
     // iff token.type is OBJECT_MACRO or CALL_MACRO.
     public Macro macro;
 
+    // Whether white space separates this occurrence from the previous
+    // token. Starts as what the lexer saw; macro expansion gives the first
+    // token of a replacement the spacing of the macro name or parameter it
+    // replaced (6.10.5.3p2 relies on this for the stringize operator).
+    public boolean spaceBefore;
+
     public CppToken(CppTokenizer.Token token) {
         this.token = token;
+        this.spaceBefore = token.spaceBefore;
     }
 
     public CppToken clone() {
         CppToken clone = new CppToken(this.token);
         clone.hideSet.addAll(this.hideSet);
         clone.macro = this.macro;
+        clone.spaceBefore = this.spaceBefore;
         return clone;
     }
 }

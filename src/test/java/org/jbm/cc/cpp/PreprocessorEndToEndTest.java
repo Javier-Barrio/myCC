@@ -124,7 +124,7 @@ class PreprocessorEndToEndTest {
                 """,
                 "int", "version", "=", "(", "1", "*", "100", "+", "2", ")", ";",
                 "int", "nine", "=", "(", "(", "3", ")", "*", "(", "3", ")", ")", ";",
-                "const", "char", "*", "version_str", "=", "\"(1*100+2)\"", ";");
+                "const", "char", "*", "version_str", "=", "\"(1 * 100 + 2)\"", ";");
     }
 
     // For long expected expansions: compare against the token spellings of
@@ -164,7 +164,7 @@ class PreprocessorEndToEndTest {
                 #define ASSERT_MSG(cond) "check: " #cond
                 const char* m = ASSERT_MSG(x > 0);
                 """,
-                "const", "char", "*", "m", "=", "\"check: \"", "\"x>0\"", ";");
+                "const", "char", "*", "m", "=", "\"check: \"", "\"x > 0\"", ";");
     }
 
     @Test
@@ -251,12 +251,41 @@ class PreprocessorEndToEndTest {
     }
 
     @Test
-    void stringizeConcatenatesArgumentTokensWithoutWhitespace() {
+    void stringizeKeepsOneSpaceWhereTheArgumentHadWhiteSpace() {
+        // 6.10.5.3p2: each run of white space between the argument's tokens
+        // becomes a single space; leading and trailing white space is dropped.
         assertExpandsTo("""
                 #define STR(x) #x
                 const char* s = STR(1 + 2);
                 """,
-                "const", "char", "*", "s", "=", "\"1+2\"", ";");
+                "const", "char", "*", "s", "=", "\"1 + 2\"", ";");
+        assertExpandsTo("""
+                #define STR(x) #x
+                const char* s = STR(  a   +b /* c */ );
+                """,
+                "const", "char", "*", "s", "=", "\"a +b\"", ";");
+        assertExpandsTo("""
+                #define STR(x) #x
+                const char* s = STR(hello world);
+                """,
+                "const", "char", "*", "s", "=", "\"hello world\"", ";");
+    }
+
+    @Test
+    void expandedTokensTakeTheSpacingOfWhatTheyReplace() {
+        // ONE's replacement `1` is written with a space after ONE on its
+        // #define line, but in the result it is spaced as ONE was.
+        assertExpandsTo("""
+                #define ONE 1
+                #define STR(x) #x
+                #define XSTR(x) STR(x)
+                const char* a = XSTR(ONE+ONE);
+                const char* b = XSTR(ONE + ONE);
+                const char* c = XSTR([ONE]);
+                """,
+                "const", "char", "*", "a", "=", "\"1+1\"", ";",
+                "const", "char", "*", "b", "=", "\"1 + 1\"", ";",
+                "const", "char", "*", "c", "=", "\"[1]\"", ";");
     }
 
     @Test

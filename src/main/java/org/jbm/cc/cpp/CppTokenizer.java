@@ -86,6 +86,11 @@ public class CppTokenizer {
         public final int line;
         public final int column;
 
+        // Whether white space (or a comment) separated this token from the
+        // previous one in the source. The expander keeps a per-occurrence
+        // copy on CppToken, which is what the stringize operator reads.
+        public boolean spaceBefore;
+
         // Populated only for OBJECT_MACRO/CALL_MACRO tokens: the
         // replacement-list tokens found on the rest of the
         // `#define NAME ...` / `#define NAME(params) ...` line.
@@ -179,6 +184,11 @@ public class CppTokenizer {
     // the macro table.
     private enum DirectiveState { NONE, HASH, DEFINE, UNDEF }
 
+    // The source after translation phase 2 (5.1.1.2): every backslash
+    // immediately followed by a new-line is deleted, splicing physical
+    // lines into one logical line. Line numbers count logical lines, so a
+    // `#define` continued over several physical lines is one line - which
+    // is also how the expander tells where a directive ends.
     private final String src;
     private int pos;
     private int line = 1;
@@ -188,7 +198,7 @@ public class CppTokenizer {
     private final Map<String, Token> macroTable = new LinkedHashMap<>();
 
     public CppTokenizer(String source) {
-        this.src = source;
+        this.src = splice(source);
     }
 
     // Used to lex a lookahead slice (the rest of a #define line) without
@@ -199,6 +209,21 @@ public class CppTokenizer {
         this.line = startLine;
         this.col = startCol;
         this.atLineStart = false;
+    }
+
+    private static String splice(String source) {
+        var sb = new StringBuilder(source.length());
+        int i = 0;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            if (c == '\\' && i + 1 < source.length() && source.charAt(i + 1) == '\n') {
+                i += 2;
+                continue;
+            }
+            sb.append(c);
+            i++;
+        }
+        return sb.toString();
     }
 
     public static List<Token> tokenize(String source) {
@@ -262,7 +287,15 @@ public class CppTokenizer {
     }
 
     private Token next() {
+        int before = pos;
         skipWhitespaceAndComments();
+        boolean separated = pos > before;
+        Token t = scanToken();
+        t.spaceBefore = separated;
+        return t;
+    }
+
+    private Token scanToken() {
         if (pos >= src.length()) {
             return new Token(TokenType.EOF, "", line, col);
         }
