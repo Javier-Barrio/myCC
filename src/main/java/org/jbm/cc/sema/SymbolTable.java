@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Block-structured symbol table with the ordinary and tag namespaces
@@ -38,35 +39,40 @@ final class SymbolTable {
         return scopes.size() - 1;
     }
 
-    Symbol lookup(String name) {
-        for (Scope s : scopes) {
-            Symbol sym = s.ordinary.get(name);
-            if (sym != null) return sym;
-        }
-        return null;
+    private Scope current() {
+        return scopes.getFirst();
     }
 
-    Symbol lookupHere(String name) {
-        return scopes.peek().ordinary.get(name);
+    Optional<Symbol> lookup(String name) {
+        for (Scope s : scopes) {
+            Symbol sym = s.ordinary.get(name);
+            if (sym != null) return Optional.of(sym);
+        }
+        return Optional.empty();
+    }
+
+    Optional<Symbol> lookupHere(String name) {
+        return Optional.ofNullable(current().ordinary.get(name));
     }
 
     void declare(Symbol symbol) {
-        scopes.peek().ordinary.put(symbol.name, symbol);
+        current().ordinary.put(symbol.name, symbol);
     }
 
-    TagSymbol lookupTag(String name) {
+    Optional<TagSymbol> lookupTag(String name) {
         for (Scope s : scopes) {
             TagSymbol tag = s.tags.get(name);
-            if (tag != null) return tag;
+            if (tag != null) return Optional.of(tag);
         }
-        return null;
+        return Optional.empty();
     }
 
-    TagSymbol lookupTagHere(String name) {
-        return scopes.peek().tags.get(name);
+    Optional<TagSymbol> lookupTagHere(String name) {
+        return Optional.ofNullable(current().tags.get(name));
     }
 
+    /** Declares a named tag; anonymous tags are never looked up, so they are not entered. */
     void declareTag(TagSymbol tag) {
-        scopes.peek().tags.put(tag.name, tag);
+        current().tags.put(tag.name.orElseThrow(), tag);
     }
 }

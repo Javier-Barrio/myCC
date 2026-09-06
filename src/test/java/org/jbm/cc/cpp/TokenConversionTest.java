@@ -5,9 +5,9 @@ import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,7 +38,7 @@ class TokenConversionTest {
     void classifiesIntegerConstants() {
         for (String s : List.of("0", "42", "07", "0x1F", "0b101", "0o17", "0O7", "1'000'000",
                 "42u", "42U", "42l", "42LL", "100ULL", "0xABuL", "5llu", "5wb", "5uWB", "0x1FWBu")) {
-            assertEquals(TokenType.INTEGER_CONSTANT, TokenConversion.classifyPpNumber(s), s);
+            assertEquals(Optional.of(TokenType.INTEGER_CONSTANT), TokenConversion.classifyPpNumber(s), s);
         }
     }
 
@@ -47,7 +47,7 @@ class TokenConversionTest {
         for (String s : List.of("1.23", "1.", ".5", "1e10", "1E-5", "1.e5",
                 "2.5f", "3.14L", "1e3", "0x1p+2", "0x1.8p3", "0x.8p-1",
                 "1.0df", "2.5DD", "3e1dl", "1.0i", "2.0fj", "3.0if", "0x1p1J")) {
-            assertEquals(TokenType.FLOATING_CONSTANT, TokenConversion.classifyPpNumber(s), s);
+            assertEquals(Optional.of(TokenType.FLOATING_CONSTANT), TokenConversion.classifyPpNumber(s), s);
         }
     }
 
@@ -55,7 +55,7 @@ class TokenConversionTest {
     void rejectsPpNumbersThatAreNoValidConstant() {
         for (String s : List.of("0xE+2", "123abc", "1.2.3", "1e", "0x",
                 "0x1.8", "1.5x", "42uu", "1e+", "0o8", "5wbwb", "1.0ii", "1.0fl")) {
-            assertNull(TokenConversion.classifyPpNumber(s), s);
+            assertTrue(TokenConversion.classifyPpNumber(s).isEmpty(), s);
         }
     }
 

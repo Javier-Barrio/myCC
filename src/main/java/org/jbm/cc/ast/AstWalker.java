@@ -7,10 +7,11 @@ import java.util.List;
  * children. Passes extend it and override the node kinds they care about;
  * an override that still wants the children walked calls {@code super}.
  * <p>
- * The {@code walk*} helpers are null-safe and are the way to descend into
- * child nodes; the non-sealed helper records (parameters, members,
- * enumerators, labels, headers, initializer items, specifiers) have their
- * own {@code walk} hook so a pass can intercept them too.
+ * The {@code walk*} helpers are the way to descend into child nodes; the
+ * non-sealed helper records (parameters, members, enumerators, labels,
+ * headers, initializer items, specifiers) have their own {@code walk}
+ * hook so a pass can intercept them too. Optional children are walked
+ * with {@code ifPresent}; a required child is dereferenced.
  * <p>
  * A {@link Type.TypedefName} is deliberately a leaf: descending into the
  * aliased type would re-visit the typedef's original struct/enum body at
@@ -26,42 +27,42 @@ public abstract class AstWalker implements Visitor<Void> {
 
     public void walk(BlockItem item) {
         if (item instanceof Decl d) walk(d);
-        else if (item != null) walk((Stmt) item);
+        else walk((Stmt) item);
     }
 
     public void walk(Decl d) {
-        if (d != null) d.accept(this);
+        d.accept(this);
     }
 
     public void walk(Stmt s) {
-        if (s != null) s.accept(this);
+        s.accept(this);
     }
 
     public void walk(Expr e) {
-        if (e != null) e.accept(this);
+        e.accept(this);
     }
 
     public void walk(Type t) {
-        if (t != null) t.accept(this);
+        t.accept(this);
     }
 
     public void walk(Initializer i) {
-        if (i != null) i.accept(this);
+        i.accept(this);
     }
 
     // ---- non-sealed helper records ------------------------------------------
 
     protected void walkSpecifiers(Specifiers s) {
-        walk(s.type());
-        if (s.alignment() != null) {
-            walk(s.alignment().type());
-            walk(s.alignment().expr());
-        }
+        s.type().ifPresent(this::walk);
+        s.alignment().ifPresent(a -> {
+            a.type().ifPresent(this::walk);
+            a.expr().ifPresent(this::walk);
+        });
     }
 
     protected void walkInitDeclarator(Decl.InitDeclarator d) {
-        walk(d.type());
-        walk(d.initializer());
+        d.type().ifPresent(this::walk);
+        d.initializer().ifPresent(this::walk);
     }
 
     protected void walkParameter(Type.Parameter p) {
@@ -71,26 +72,26 @@ public abstract class AstWalker implements Visitor<Void> {
     protected void walkMember(Type.MemberDecl m) {
         if (m instanceof Type.Member member) {
             walk(member.type());
-            walk(member.bitWidth());
+            member.bitWidth().ifPresent(this::walk);
         } else {
             walk((Expr) m);
         }
     }
 
     protected void walkEnumerator(Type.Enumerator e) {
-        walk(e.value());
+        e.value().ifPresent(this::walk);
     }
 
     protected void walkLabel(Stmt.Label label) {
         if (label instanceof Stmt.CaseLabel c) {
             walk(c.low());
-            walk(c.high());
+            c.high().ifPresent(this::walk);
         }
     }
 
     protected void walkHeader(Stmt.Header h) {
-        walk(h.declaration());
-        walk(h.condition());
+        h.declaration().ifPresent(this::walk);
+        h.condition().ifPresent(this::walk);
     }
 
     protected void walkItem(Initializer.Item item) {
@@ -119,10 +120,10 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Expr.Generic e) {
-        walk(e.controllingExpr());
-        walk(e.controllingType());
+        e.controllingExpr().ifPresent(this::walk);
+        e.controllingType().ifPresent(this::walk);
         for (var a : e.associations()) {
-            walk(a.type());
+            a.type().ifPresent(this::walk);
             walk(a.expr());
         }
         return null;
@@ -176,7 +177,7 @@ public abstract class AstWalker implements Visitor<Void> {
     @Override
     public Void visit(Expr.StaticAssertion e) {
         walk(e.condition());
-        walk(e.message());
+        e.message().ifPresent(this::walk);
         return null;
     }
 
@@ -221,7 +222,7 @@ public abstract class AstWalker implements Visitor<Void> {
     @Override
     public Void visit(Stmt.Labeled s) {
         walkLabel(s.label());
-        walk(s.body());
+        s.body().ifPresent(this::walk);
         return null;
     }
 
@@ -233,7 +234,7 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Stmt.ExprStmt s) {
-        walk(s.expr());
+        s.expr().ifPresent(this::walk);
         return null;
     }
 
@@ -241,7 +242,7 @@ public abstract class AstWalker implements Visitor<Void> {
     public Void visit(Stmt.If s) {
         walkHeader(s.header());
         walk(s.thenBranch());
-        walk(s.elseBranch());
+        s.elseBranch().ifPresent(this::walk);
         return null;
     }
 
@@ -268,10 +269,10 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Stmt.For s) {
-        walk(s.initDecl());
-        walk(s.initExpr());
-        walk(s.condition());
-        walk(s.step());
+        s.initDecl().ifPresent(this::walk);
+        s.initExpr().ifPresent(this::walk);
+        s.condition().ifPresent(this::walk);
+        s.step().ifPresent(this::walk);
         walk(s.body());
         return null;
     }
@@ -293,7 +294,7 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Stmt.Return s) {
-        walk(s.value());
+        s.value().ifPresent(this::walk);
         return null;
     }
 
@@ -341,7 +342,7 @@ public abstract class AstWalker implements Visitor<Void> {
     @Override
     public Void visit(Type.Array t) {
         walk(t.element());
-        walk(t.size());
+        t.size().ifPresent(this::walk);
         return null;
     }
 
@@ -354,18 +355,18 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Type.Struct t) {
-        if (t.members() != null) {
-            for (var m : t.members()) walkMember(m);
-        }
+        t.members().ifPresent(members -> {
+            for (var m : members) walkMember(m);
+        });
         return null;
     }
 
     @Override
     public Void visit(Type.Enum t) {
-        walk(t.underlying());
-        if (t.enumerators() != null) {
-            for (var e : t.enumerators()) walkEnumerator(e);
-        }
+        t.underlying().ifPresent(this::walk);
+        t.enumerators().ifPresent(enumerators -> {
+            for (var e : enumerators) walkEnumerator(e);
+        });
         return null;
     }
 
@@ -376,8 +377,8 @@ public abstract class AstWalker implements Visitor<Void> {
 
     @Override
     public Void visit(Type.Typeof t) {
-        walk(t.expr());
-        walk(t.type());
+        t.expr().ifPresent(this::walk);
+        t.type().ifPresent(this::walk);
         return null;
     }
 

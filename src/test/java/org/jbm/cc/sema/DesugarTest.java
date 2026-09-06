@@ -84,8 +84,8 @@ class DesugarTest {
         // enumerators twice.
         var result = Desugar.desugar(parse("int i; struct S { enum { Q } q; } s = {++i}, t;"));
         var decl = (Decl.Declaration) result.get(1);
-        assertSame(decl.specifiers().type(), decl.declarators().get(0).type());
-        assertSame(decl.specifiers().type(), decl.declarators().get(1).type());
+        assertSame(decl.specifiers().type().orElseThrow(), decl.declarators().get(0).type().orElseThrow());
+        assertSame(decl.specifiers().type().orElseThrow(), decl.declarators().get(1).type().orElseThrow());
         assertEquals("(decl (i int))\n(decl (s (struct S (q (enum (Q)))) {(+= i 1)}) (t (struct S (q (enum (Q))))))",
                 AstPrinter.print(result));
         Resolver.resolve(result);
@@ -106,7 +106,7 @@ class DesugarTest {
     void synthesizedTokensPointAtTheOperator() {
         var result = Desugar.desugar(parse("int x = ++i;"));
         var assign = (org.jbm.cc.ast.Expr.Assign) ((org.jbm.cc.ast.Initializer.Expression)
-                ((Decl.Declaration) result.get(0)).declarators().get(0).initializer()).expr();
+                ((Decl.Declaration) result.get(0)).declarators().get(0).initializer().orElseThrow()).expr();
         assertEquals("+=", assign.op().text);
         assertEquals(9, assign.op().column);
         assertEquals("1", ((org.jbm.cc.ast.Expr.Literal) assign.value()).token().text);

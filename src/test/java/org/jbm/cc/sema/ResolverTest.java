@@ -142,7 +142,7 @@ class ResolverTest {
         assertEquals(List.of("Typedef", "Enumerator", "Variable", "Function"),
                 b.fileScope.stream().map(s -> s.getClass().getSimpleName()).toList());
         var a = (Symbol.Enumerator) b.fileScope.get(1);
-        assertEquals("E", a.enumType.tag().text);
+        assertEquals("E", a.enumType.tag().orElseThrow().text);
         assertTrue(b.parameters.values().iterator().next() instanceof Symbol.Parameter);
         assertEquals(Symbol.Linkage.NONE, b.fileScope.get(0).linkage());
     }
@@ -211,7 +211,7 @@ class ResolverTest {
         var tag = tags.get(0);
         assertTrue(tag.isComplete());
         assertEquals(4, b.tags.size(), "all four specifier nodes are bound");
-        assertTrue(((Type.Struct) tag.definition).members() != null);
+        assertTrue(((Type.Struct) tag.definition().orElseThrow()).members().isPresent());
     }
 
     @Test

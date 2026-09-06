@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
@@ -37,19 +38,18 @@ public abstract class AstRewriter implements Visitor<Object> {
     }
 
     public Decl rewrite(Decl d) {
-        return d == null ? null : (Decl) d.accept(this);
+        return (Decl) d.accept(this);
     }
 
     public Stmt rewrite(Stmt s) {
-        return s == null ? null : (Stmt) s.accept(this);
+        return (Stmt) s.accept(this);
     }
 
     public Expr rewrite(Expr e) {
-        return e == null ? null : (Expr) e.accept(this);
+        return (Expr) e.accept(this);
     }
 
     public Type rewrite(Type t) {
-        if (t == null) return null;
         Type done = memo.get(t);
         if (done != null) return done;
         Type result = (Type) t.accept(this);
@@ -58,7 +58,7 @@ public abstract class AstRewriter implements Visitor<Object> {
     }
 
     public Initializer rewrite(Initializer i) {
-        return i == null ? null : (Initializer) i.accept(this);
+        return (Initializer) i.accept(this);
     }
 
     /** Applies f to every element; returns the same list when no element changed. */
@@ -75,25 +75,29 @@ public abstract class AstRewriter implements Visitor<Object> {
         return out == null ? items : Collections.unmodifiableList(out);
     }
 
+    /** Applies f to a present value; returns the same Optional when the value did not change. */
+    protected static <T> Optional<T> rewriteOptional(Optional<T> value, UnaryOperator<T> f) {
+        if (value.isEmpty()) return value;
+        T result = f.apply(value.get());
+        return result == value.get() ? value : Optional.of(result);
+    }
+
     // ---- non-sealed helper records --------------------------------------------
 
     protected Specifiers rewriteSpecifiers(Specifiers s) {
-        Type type = rewrite(s.type());
-        Specifiers.Alignas alignment = s.alignment();
-        if (alignment != null) {
-            Type at = rewrite(alignment.type());
-            Expr ae = rewrite(alignment.expr());
-            if (at != alignment.type() || ae != alignment.expr()) {
-                alignment = new Specifiers.Alignas(alignment.keyword(), at, ae);
-            }
-        }
+        var type = rewriteOptional(s.type(), this::rewrite);
+        var alignment = rewriteOptional(s.alignment(), a -> {
+            var at = rewriteOptional(a.type(), this::rewrite);
+            var ae = rewriteOptional(a.expr(), this::rewrite);
+            return at == a.type() && ae == a.expr() ? a : new Specifiers.Alignas(a.keyword(), at, ae);
+        });
         if (type == s.type() && alignment == s.alignment()) return s;
         return new Specifiers(s.token(), s.storageClasses(), s.functionSpecifiers(), alignment, type);
     }
 
     protected Decl.InitDeclarator rewriteInitDeclarator(Decl.InitDeclarator d) {
-        Type type = rewrite(d.type());
-        Initializer init = rewrite(d.initializer());
+        var type = rewriteOptional(d.type(), this::rewrite);
+        var init = rewriteOptional(d.initializer(), this::rewrite);
         if (type == d.type() && init == d.initializer()) return d;
         return new Decl.InitDeclarator(d.name(), type, d.attributes(), init);
     }
@@ -107,28 +111,28 @@ public abstract class AstRewriter implements Visitor<Object> {
         if (m instanceof Expr.StaticAssertion sa) return (Type.MemberDecl) rewrite((Expr) sa);
         var member = (Type.Member) m;
         Type type = rewrite(member.type());
-        Expr width = rewrite(member.bitWidth());
+        var width = rewriteOptional(member.bitWidth(), this::rewrite);
         if (type == member.type() && width == member.bitWidth()) return m;
         return new Type.Member(member.attributes(), type, member.name(), width);
     }
 
     protected Type.Enumerator rewriteEnumerator(Type.Enumerator e) {
-        Expr value = rewrite(e.value());
+        var value = rewriteOptional(e.value(), this::rewrite);
         return value == e.value() ? e : new Type.Enumerator(e.name(), e.attributes(), value);
     }
 
     protected Stmt.Label rewriteLabel(Stmt.Label label) {
         if (label instanceof Stmt.CaseLabel c) {
             Expr low = rewrite(c.low());
-            Expr high = rewrite(c.high());
+            var high = rewriteOptional(c.high(), this::rewrite);
             if (low != c.low() || high != c.high()) return new Stmt.CaseLabel(c.keyword(), low, high);
         }
         return label;
     }
 
     protected Stmt.Header rewriteHeader(Stmt.Header h) {
-        var decl = (Decl.Declaration) rewrite(h.declaration());
-        Expr cond = rewrite(h.condition());
+        var decl = rewriteOptional(h.declaration(), d -> (Decl.Declaration) rewrite(d));
+        var cond = rewriteOptional(h.condition(), this::rewrite);
         if (decl == h.declaration() && cond == h.condition()) return h;
         return new Stmt.Header(decl, cond);
     }
@@ -165,10 +169,10 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Expr.Generic e) {
-        Expr ce = rewrite(e.controllingExpr());
-        Type ct = rewrite(e.controllingType());
+        var ce = rewriteOptional(e.controllingExpr(), this::rewrite);
+        var ct = rewriteOptional(e.controllingType(), this::rewrite);
         var assocs = rewriteAll(e.associations(), a -> {
-            Type t = rewrite(a.type());
+            var t = rewriteOptional(a.type(), this::rewrite);
             Expr x = rewrite(a.expr());
             return t == a.type() && x == a.expr() ? a : new Expr.Generic.Association(t, x);
         });
@@ -270,7 +274,7 @@ public abstract class AstRewriter implements Visitor<Object> {
     @Override
     public Object visit(Stmt.Labeled s) {
         Stmt.Label label = rewriteLabel(s.label());
-        Stmt body = rewrite(s.body());
+        var body = rewriteOptional(s.body(), this::rewrite);
         return label == s.label() && body == s.body() ? s : new Stmt.Labeled(label, body);
     }
 
@@ -282,7 +286,7 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Stmt.ExprStmt s) {
-        Expr expr = rewrite(s.expr());
+        var expr = rewriteOptional(s.expr(), this::rewrite);
         return expr == s.expr() ? s : new Stmt.ExprStmt(s.token(), expr);
     }
 
@@ -290,7 +294,7 @@ public abstract class AstRewriter implements Visitor<Object> {
     public Object visit(Stmt.If s) {
         Stmt.Header header = rewriteHeader(s.header());
         Stmt thenBranch = rewrite(s.thenBranch());
-        Stmt elseBranch = rewrite(s.elseBranch());
+        var elseBranch = rewriteOptional(s.elseBranch(), this::rewrite);
         if (header == s.header() && thenBranch == s.thenBranch() && elseBranch == s.elseBranch()) return s;
         return new Stmt.If(s.keyword(), header, thenBranch, elseBranch);
     }
@@ -318,10 +322,10 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Stmt.For s) {
-        var initDecl = (Decl.Declaration) rewrite(s.initDecl());
-        Expr initExpr = rewrite(s.initExpr());
-        Expr cond = rewrite(s.condition());
-        Expr step = rewrite(s.step());
+        var initDecl = rewriteOptional(s.initDecl(), d -> (Decl.Declaration) rewrite(d));
+        var initExpr = rewriteOptional(s.initExpr(), this::rewrite);
+        var cond = rewriteOptional(s.condition(), this::rewrite);
+        var step = rewriteOptional(s.step(), this::rewrite);
         Stmt body = rewrite(s.body());
         if (initDecl == s.initDecl() && initExpr == s.initExpr() && cond == s.condition()
                 && step == s.step() && body == s.body()) return s;
@@ -345,7 +349,7 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Stmt.Return s) {
-        Expr value = rewrite(s.value());
+        var value = rewriteOptional(s.value(), this::rewrite);
         return value == s.value() ? s : new Stmt.Return(s.keyword(), value);
     }
 
@@ -395,7 +399,7 @@ public abstract class AstRewriter implements Visitor<Object> {
     @Override
     public Object visit(Type.Array t) {
         Type element = rewrite(t.element());
-        Expr size = rewrite(t.size());
+        var size = rewriteOptional(t.size(), this::rewrite);
         if (element == t.element() && size == t.size()) return t;
         return new Type.Array(t.bracket(), element, size, t.isStar(), t.isStatic(), t.quals());
     }
@@ -410,15 +414,14 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Type.Struct t) {
-        if (t.members() == null) return t;
-        var members = rewriteAll(t.members(), this::rewriteMember);
+        var members = rewriteOptional(t.members(), ms -> rewriteAll(ms, this::rewriteMember));
         return members == t.members() ? t : new Type.Struct(t.keyword(), t.tag(), members, t.quals());
     }
 
     @Override
     public Object visit(Type.Enum t) {
-        Type underlying = rewrite(t.underlying());
-        var enumerators = t.enumerators() == null ? null : rewriteAll(t.enumerators(), this::rewriteEnumerator);
+        var underlying = rewriteOptional(t.underlying(), this::rewrite);
+        var enumerators = rewriteOptional(t.enumerators(), es -> rewriteAll(es, this::rewriteEnumerator));
         if (underlying == t.underlying() && enumerators == t.enumerators()) return t;
         return new Type.Enum(t.keyword(), t.tag(), underlying, enumerators, t.quals());
     }
@@ -430,8 +433,8 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     @Override
     public Object visit(Type.Typeof t) {
-        Expr expr = rewrite(t.expr());
-        Type type = rewrite(t.type());
+        var expr = rewriteOptional(t.expr(), this::rewrite);
+        var type = rewriteOptional(t.type(), this::rewrite);
         return expr == t.expr() && type == t.type() ? t : new Type.Typeof(t.keyword(), expr, type, t.quals());
     }
 

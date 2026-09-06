@@ -60,7 +60,7 @@ public final class Bindings {
     }
 
     public Symbol symbolOf(Type.Parameter p) {
-        return require(parameters.get(p), p.name() == null ? "<unnamed parameter>" : p.name().text);
+        return require(parameters.get(p), p.name().map(n -> n.text).orElse("<unnamed parameter>"));
     }
 
     public TagSymbol tagOf(Type t) {

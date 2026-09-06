@@ -3,13 +3,14 @@ package org.jbm.cc.ast;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Types as the parser derives them from declaration specifiers and
  * declarators (C2y 6.7.3 - 6.7.9). These are syntactic: typedef names keep
  * their name and the type they were declared as, struct/enum tags are not
  * looked up, and typeof stays unresolved. Every variant carries its
- * qualifiers.
+ * qualifiers. Optional parts are {@link Optional}s; nothing is null.
  */
 public sealed interface Type {
 
@@ -99,11 +100,11 @@ public sealed interface Type {
     }
 
     /**
-     * array-declarator (6.7.7.1). size is null for an incomplete array,
+     * array-declarator (6.7.7.1). size is absent for an incomplete array,
      * isStar marks {@code [*]}; isStatic and the qualifiers only occur in
      * parameter declarations.
      */
-    record Array(Token bracket, Type element, Expr size, boolean isStar, boolean isStatic,
+    record Array(Token bracket, Type element, Optional<Expr> size, boolean isStar, boolean isStatic,
                  Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
@@ -130,15 +131,16 @@ public sealed interface Type {
         }
     }
 
-    /** parameter-declaration (6.7.7.1); name is null for an abstract declarator. */
-    record Parameter(List<Attribute> attributes, List<Token> storageClasses, Type type, Token name) {
+    /** parameter-declaration (6.7.7.1); name is absent for an abstract declarator. */
+    record Parameter(List<Attribute> attributes, List<Token> storageClasses, Type type, Optional<Token> name) {
     }
 
     /**
      * struct-or-union-specifier (6.7.3.2). keyword is {@code struct} or
-     * {@code union}; members is null when no member list is given.
+     * {@code union}; members is absent when no member list is given.
      */
-    record Struct(Token keyword, Token tag, List<MemberDecl> members, Quals quals) implements Type {
+    record Struct(Token keyword, Optional<Token> tag, Optional<List<MemberDecl>> members, Quals quals)
+            implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Struct(keyword, tag, members, q);
@@ -154,13 +156,14 @@ public sealed interface Type {
     sealed interface MemberDecl permits Member, Expr.StaticAssertion {
     }
 
-    /** member-declarator (6.7.3.2); name is null for an anonymous member or unnamed bit-field. */
-    record Member(List<Attribute> attributes, Type type, Token name, Expr bitWidth) implements MemberDecl {
+    /** member-declarator (6.7.3.2); name is absent for an anonymous member or unnamed bit-field. */
+    record Member(List<Attribute> attributes, Type type, Optional<Token> name, Optional<Expr> bitWidth)
+            implements MemberDecl {
     }
 
-    /** enum-specifier (6.7.3.3); enumerators is null when no list is given. */
-    record Enum(Token keyword, Token tag, Type underlying, List<Enumerator> enumerators,
-                Quals quals) implements Type {
+    /** enum-specifier (6.7.3.3); enumerators is absent when no list is given. */
+    record Enum(Token keyword, Optional<Token> tag, Optional<Type> underlying,
+                Optional<List<Enumerator>> enumerators, Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Enum(keyword, tag, underlying, enumerators, q);
@@ -172,7 +175,7 @@ public sealed interface Type {
         }
     }
 
-    record Enumerator(Token name, List<Attribute> attributes, Expr value) {
+    record Enumerator(Token name, List<Attribute> attributes, Optional<Expr> value) {
     }
 
     /** typedef-name (6.7.9), with the type it was declared as. */
@@ -188,8 +191,8 @@ public sealed interface Type {
         }
     }
 
-    /** typeof / typeof_unqual (6.7.3.6). Exactly one of expr / type is non-null. */
-    record Typeof(Token keyword, Expr expr, Type type, Quals quals) implements Type {
+    /** typeof / typeof_unqual (6.7.3.6). Exactly one of expr / type is present. */
+    record Typeof(Token keyword, Optional<Expr> expr, Optional<Type> type, Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Typeof(keyword, expr, type, q);
