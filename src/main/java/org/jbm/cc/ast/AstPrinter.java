@@ -17,10 +17,14 @@ import java.util.stream.Collectors;
  * type ({@code sizeof}, {@code _Generic}, {@code typeof}) the type is
  * wrapped as {@code (type T)}. Absent optional parts print as {@code _}.
  */
-public final class AstPrinter {
+public final class AstPrinter implements Visitor<String> {
+
+    private static final AstPrinter INSTANCE = new AstPrinter();
 
     private AstPrinter() {
     }
+
+    // ---- entry points ------------------------------------------------------
 
     public static String print(List<? extends Decl> translationUnit) {
         return translationUnit.stream().map(AstPrinter::print).collect(Collectors.joining("\n"));
@@ -31,61 +35,21 @@ public final class AstPrinter {
         return print((Stmt) item);
     }
 
-    // ---- expressions ----------------------------------------------------
+    public static String print(Decl d) {
+        return d == null ? "_" : d.accept(INSTANCE);
+    }
+
+    public static String print(Stmt s) {
+        return s == null ? "_" : s.accept(INSTANCE);
+    }
 
     public static String print(Expr e) {
-        if (e == null) return "_";
-        if (e instanceof Expr.Identifier x) return x.name().text;
-        if (e instanceof Expr.Literal x) return x.token().text;
-        if (e instanceof Expr.StringLiteral x) return texts(x.parts());
-        if (e instanceof Expr.Generic x) {
-            var sb = new StringBuilder("(_Generic ");
-            sb.append(x.controllingType() != null ? typeOperand(x.controllingType()) : print(x.controllingExpr()));
-            for (var a : x.associations()) {
-                sb.append(" (").append(a.type() == null ? "default" : print(a.type()))
-                        .append(' ').append(print(a.expr())).append(')');
-            }
-            return sb.append(')').toString();
-        }
-        if (e instanceof Expr.Index x) return list("[]", print(x.array()), print(x.index()));
-        if (e instanceof Expr.Call x) {
-            var sb = new StringBuilder("(call ").append(print(x.callee()));
-            for (var a : x.arguments()) sb.append(' ').append(print(a));
-            return sb.append(')').toString();
-        }
-        if (e instanceof Expr.Member x) return list(x.op().text, print(x.object()), x.name().text);
-        if (e instanceof Expr.Postfix x) return list("post" + x.op().text, print(x.operand()));
-        if (e instanceof Expr.CompoundLiteral x) {
-            var sb = new StringBuilder("(compound ");
-            for (var s : x.storageClasses()) sb.append(s.text).append(' ');
-            return sb.append(print(x.type())).append(' ').append(print(x.initializer())).append(')').toString();
-        }
-        if (e instanceof Expr.Unary x) return list(x.op().text, print(x.operand()));
-        if (e instanceof Expr.TypeOperator x) return list(x.op().text, typeOperand(x.type()));
-        if (e instanceof Expr.StaticAssertion x) {
-            return x.message() == null
-                    ? list("static_assert", print(x.condition()))
-                    : list("static_assert", print(x.condition()), print(x.message()));
-        }
-        if (e instanceof Expr.Cast x) return list("cast", print(x.type()), print(x.operand()));
-        if (e instanceof Expr.Binary x) return list(x.op().text, print(x.left()), print(x.right()));
-        if (e instanceof Expr.Conditional x) {
-            return list("?:", print(x.condition()), print(x.thenExpr()), print(x.elseExpr()));
-        }
-        if (e instanceof Expr.Assign x) return list(x.op().text, print(x.target()), print(x.value()));
-        if (e instanceof Expr.Comma x) return list(",", print(x.left()), print(x.right()));
-        throw new IllegalArgumentException(e.getClass().getName());
+        return e == null ? "_" : e.accept(INSTANCE);
     }
-
-    private static String typeOperand(Type t) {
-        return list("type", print(t));
-    }
-
-    // ---- types ----------------------------------------------------------
 
     public static String print(Type t) {
         if (t == null) return "_";
-        String core = printUnqualified(t);
+        String core = t.accept(INSTANCE);
         var q = t.quals();
         if (q.isEmpty()) return core;
         var sb = new StringBuilder("(");
@@ -96,63 +60,192 @@ public final class AstPrinter {
         return sb.append(core).append(')').toString();
     }
 
-    private static String printUnqualified(Type t) {
-        if (t instanceof Type.Basic x) return (x.isComplex() ? "_Complex " : "") + x.kind().spelling;
-        if (t instanceof Type.BitInt x) {
-            return list((x.isUnsigned() ? "unsigned " : "") + "_BitInt", print(x.width()));
-        }
-        if (t instanceof Type.Pointer x) return list("ptr", print(x.target()));
-        if (t instanceof Type.Array x) {
-            var sb = new StringBuilder("(array ");
-            if (x.isStatic()) sb.append("static ");
-            sb.append(print(x.element()));
-            if (x.isStar()) sb.append(" *");
-            else if (x.size() != null) sb.append(' ').append(print(x.size()));
-            return sb.append(')').toString();
-        }
-        if (t instanceof Type.Function x) {
-            var sb = new StringBuilder("(fn ").append(print(x.returnType())).append(" (");
-            sb.append(x.parameters().stream().map(AstPrinter::print).collect(Collectors.joining(" ")));
-            sb.append(')');
-            if (x.isVariadic()) sb.append(" ...");
-            return sb.append(')').toString();
-        }
-        if (t instanceof Type.Struct x) {
-            var sb = new StringBuilder("(").append(x.keyword().text);
-            if (x.tag() != null) sb.append(' ').append(x.tag().text);
-            if (x.members() != null) {
-                for (var m : x.members()) sb.append(' ').append(print(m));
-            }
-            return sb.append(')').toString();
-        }
-        if (t instanceof Type.Enum x) {
-            var sb = new StringBuilder("(enum");
-            if (x.tag() != null) sb.append(' ').append(x.tag().text);
-            if (x.underlying() != null) sb.append(" : ").append(print(x.underlying()));
-            if (x.enumerators() != null) {
-                for (var en : x.enumerators()) {
-                    sb.append(" (").append(en.name().text);
-                    if (en.value() != null) sb.append(' ').append(print(en.value()));
-                    sb.append(')');
-                }
-            }
-            return sb.append(')').toString();
-        }
-        if (t instanceof Type.TypedefName x) return x.name().text;
-        if (t instanceof Type.Typeof x) {
-            return list(x.keyword().text, x.type() != null ? typeOperand(x.type()) : print(x.expr()));
-        }
-        throw new IllegalArgumentException(t.getClass().getName());
+    public static String print(Initializer init) {
+        return init == null ? "_" : init.accept(INSTANCE);
     }
 
-    private static String print(Type.Parameter p) {
+    // ---- expressions ----------------------------------------------------
+
+    @Override
+    public String visit(Expr.Identifier e) {
+        return e.name().text;
+    }
+
+    @Override
+    public String visit(Expr.Literal e) {
+        return e.token().text;
+    }
+
+    @Override
+    public String visit(Expr.StringLiteral e) {
+        return texts(e.parts());
+    }
+
+    @Override
+    public String visit(Expr.Generic e) {
+        var sb = new StringBuilder("(_Generic ");
+        sb.append(e.controllingType() != null ? typeOperand(e.controllingType()) : print(e.controllingExpr()));
+        for (var a : e.associations()) {
+            sb.append(" (").append(a.type() == null ? "default" : print(a.type()))
+                    .append(' ').append(print(a.expr())).append(')');
+        }
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Expr.Index e) {
+        return list("[]", print(e.array()), print(e.index()));
+    }
+
+    @Override
+    public String visit(Expr.Call e) {
+        var sb = new StringBuilder("(call ").append(print(e.callee()));
+        for (var a : e.arguments()) sb.append(' ').append(print(a));
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Expr.Member e) {
+        return list(e.op().text, print(e.object()), e.name().text);
+    }
+
+    @Override
+    public String visit(Expr.Postfix e) {
+        return list("post" + e.op().text, print(e.operand()));
+    }
+
+    @Override
+    public String visit(Expr.CompoundLiteral e) {
+        var sb = new StringBuilder("(compound ");
+        for (var s : e.storageClasses()) sb.append(s.text).append(' ');
+        return sb.append(print(e.type())).append(' ').append(print(e.initializer())).append(')').toString();
+    }
+
+    @Override
+    public String visit(Expr.Unary e) {
+        return list(e.op().text, print(e.operand()));
+    }
+
+    @Override
+    public String visit(Expr.TypeOperator e) {
+        return list(e.op().text, typeOperand(e.type()));
+    }
+
+    @Override
+    public String visit(Expr.StaticAssertion e) {
+        return e.message() == null
+                ? list("static_assert", print(e.condition()))
+                : list("static_assert", print(e.condition()), print(e.message()));
+    }
+
+    @Override
+    public String visit(Expr.Cast e) {
+        return list("cast", print(e.type()), print(e.operand()));
+    }
+
+    @Override
+    public String visit(Expr.Binary e) {
+        return list(e.op().text, print(e.left()), print(e.right()));
+    }
+
+    @Override
+    public String visit(Expr.Conditional e) {
+        return list("?:", print(e.condition()), print(e.thenExpr()), print(e.elseExpr()));
+    }
+
+    @Override
+    public String visit(Expr.Assign e) {
+        return list(e.op().text, print(e.target()), print(e.value()));
+    }
+
+    @Override
+    public String visit(Expr.Comma e) {
+        return list(",", print(e.left()), print(e.right()));
+    }
+
+    private static String typeOperand(Type t) {
+        return list("type", print(t));
+    }
+
+    // ---- types (unqualified; print(Type) adds the qualifier wrapper) -------
+
+    @Override
+    public String visit(Type.Basic t) {
+        return (t.isComplex() ? "_Complex " : "") + t.kind().spelling;
+    }
+
+    @Override
+    public String visit(Type.BitInt t) {
+        return list((t.isUnsigned() ? "unsigned " : "") + "_BitInt", print(t.width()));
+    }
+
+    @Override
+    public String visit(Type.Pointer t) {
+        return list("ptr", print(t.target()));
+    }
+
+    @Override
+    public String visit(Type.Array t) {
+        var sb = new StringBuilder("(array ");
+        if (t.isStatic()) sb.append("static ");
+        sb.append(print(t.element()));
+        if (t.isStar()) sb.append(" *");
+        else if (t.size() != null) sb.append(' ').append(print(t.size()));
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Type.Function t) {
+        var sb = new StringBuilder("(fn ").append(print(t.returnType())).append(" (");
+        sb.append(t.parameters().stream().map(AstPrinter::parameter).collect(Collectors.joining(" ")));
+        sb.append(')');
+        if (t.isVariadic()) sb.append(" ...");
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Type.Struct t) {
+        var sb = new StringBuilder("(").append(t.keyword().text);
+        if (t.tag() != null) sb.append(' ').append(t.tag().text);
+        if (t.members() != null) {
+            for (var m : t.members()) sb.append(' ').append(member(m));
+        }
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Type.Enum t) {
+        var sb = new StringBuilder("(enum");
+        if (t.tag() != null) sb.append(' ').append(t.tag().text);
+        if (t.underlying() != null) sb.append(" : ").append(print(t.underlying()));
+        if (t.enumerators() != null) {
+            for (var en : t.enumerators()) {
+                sb.append(" (").append(en.name().text);
+                if (en.value() != null) sb.append(' ').append(print(en.value()));
+                sb.append(')');
+            }
+        }
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Type.TypedefName t) {
+        return t.name().text;
+    }
+
+    @Override
+    public String visit(Type.Typeof t) {
+        return list(t.keyword().text, t.type() != null ? typeOperand(t.type()) : print(t.expr()));
+    }
+
+    private static String parameter(Type.Parameter p) {
         var sb = new StringBuilder("(");
         for (var s : p.storageClasses()) sb.append(s.text).append(' ');
         if (p.name() != null) sb.append(p.name().text).append(' ');
         return sb.append(print(p.type())).append(')').toString();
     }
 
-    private static String print(Type.MemberDecl m) {
+    private static String member(Type.MemberDecl m) {
         if (m instanceof Expr.StaticAssertion sa) return print((Expr) sa);
         var x = (Type.Member) m;
         var sb = new StringBuilder("(");
@@ -164,26 +257,29 @@ public final class AstPrinter {
 
     // ---- declarations ---------------------------------------------------
 
-    public static String print(Decl d) {
-        if (d instanceof Expr.StaticAssertion sa) return print((Expr) sa);
-        if (d instanceof Decl.AttributeDeclaration x) return list("attrs", attributes(x.attributes()));
-        if (d instanceof Decl.Declaration x) {
-            var sb = new StringBuilder("(decl").append(specifiers(x.specifiers()));
-            if (x.declarators().isEmpty()) {
-                sb.append(' ').append(print(x.specifiers().type()));
-            }
-            for (var id : x.declarators()) {
-                sb.append(" (").append(id.name().text).append(' ').append(print(id.type()));
-                if (id.initializer() != null) sb.append(' ').append(print(id.initializer()));
-                sb.append(')');
-            }
-            return sb.append(')').toString();
+    @Override
+    public String visit(Decl.Declaration d) {
+        var sb = new StringBuilder("(decl").append(specifiers(d.specifiers()));
+        if (d.declarators().isEmpty()) {
+            sb.append(' ').append(print(d.specifiers().type()));
         }
-        if (d instanceof Decl.FunctionDefinition x) {
-            return "(fundef" + specifiers(x.specifiers()) + ' ' + x.name().text + ' '
-                    + print(x.type()) + ' ' + print(x.body()) + ')';
+        for (var id : d.declarators()) {
+            sb.append(" (").append(id.name().text).append(' ').append(print(id.type()));
+            if (id.initializer() != null) sb.append(' ').append(print(id.initializer()));
+            sb.append(')');
         }
-        throw new IllegalArgumentException(d.getClass().getName());
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Decl.FunctionDefinition d) {
+        return "(fundef" + specifiers(d.specifiers()) + ' ' + d.name().text + ' '
+                + print(d.type()) + ' ' + print(d.body()) + ')';
+    }
+
+    @Override
+    public String visit(Decl.AttributeDeclaration d) {
+        return list("attrs", attributes(d.attributes()));
     }
 
     private static String specifiers(Specifiers s) {
@@ -197,23 +293,6 @@ public final class AstPrinter {
         return sb.toString();
     }
 
-    public static String print(Initializer init) {
-        if (init == null) return "_";
-        if (init instanceof Initializer.Expression x) return print(x.expr());
-        var braced = (Initializer.Braced) init;
-        return "{" + braced.items().stream().map(AstPrinter::print).collect(Collectors.joining(" ")) + "}";
-    }
-
-    private static String print(Initializer.Item item) {
-        if (item.designators().isEmpty()) return print(item.initializer());
-        var sb = new StringBuilder("(");
-        for (var d : item.designators()) {
-            if (d instanceof Initializer.ArrayDesignator a) sb.append('[').append(print(a.index())).append("] ");
-            else sb.append('.').append(((Initializer.MemberDesignator) d).name().text).append(' ');
-        }
-        return sb.append(print(item.initializer())).append(')').toString();
-    }
-
     private static String attributes(List<Attribute> attrs) {
         return attrs.stream().map(a -> {
             var sb = new StringBuilder("[[");
@@ -224,44 +303,101 @@ public final class AstPrinter {
         }).collect(Collectors.joining(" "));
     }
 
-    // ---- statements -----------------------------------------------------
+    // ---- initializers ---------------------------------------------------
 
-    public static String print(Stmt s) {
-        if (s == null) return "_";
-        if (s instanceof Stmt.Labeled x) {
-            String label;
-            if (x.label() instanceof Stmt.NameLabel l) label = "(label " + l.name().text;
-            else if (x.label() instanceof Stmt.CaseLabel l) {
-                label = "(case " + print(l.low()) + (l.high() != null ? " " + print(l.high()) : "");
-            } else label = "(default";
-            return label + (x.body() != null ? " " + print(x.body()) : "") + ')';
-        }
-        if (s instanceof Stmt.Compound x) {
-            var sb = new StringBuilder("(block");
-            for (var item : x.items()) sb.append(' ').append(print(item));
-            return sb.append(')').toString();
-        }
-        if (s instanceof Stmt.ExprStmt x) return x.expr() == null ? "(expr)" : list("expr", print(x.expr()));
-        if (s instanceof Stmt.If x) {
-            return x.elseBranch() == null
-                    ? list("if", print(x.header()), print(x.thenBranch()))
-                    : list("if", print(x.header()), print(x.thenBranch()), print(x.elseBranch()));
-        }
-        if (s instanceof Stmt.Switch x) return list("switch", print(x.header()), print(x.body()));
-        if (s instanceof Stmt.While x) return list("while", print(x.condition()), print(x.body()));
-        if (s instanceof Stmt.DoWhile x) return list("do", print(x.body()), print(x.condition()));
-        if (s instanceof Stmt.For x) {
-            String init = x.initDecl() != null ? print(x.initDecl()) : print(x.initExpr());
-            return list("for", init, print(x.condition()), print(x.step()), print(x.body()));
-        }
-        if (s instanceof Stmt.Goto x) return list("goto", x.label().text);
-        if (s instanceof Stmt.Continue x) return x.label() == null ? "(continue)" : list("continue", x.label().text);
-        if (s instanceof Stmt.Break x) return x.label() == null ? "(break)" : list("break", x.label().text);
-        if (s instanceof Stmt.Return x) return x.value() == null ? "(return)" : list("return", print(x.value()));
-        throw new IllegalArgumentException(s.getClass().getName());
+    @Override
+    public String visit(Initializer.Expression i) {
+        return print(i.expr());
     }
 
-    private static String print(Stmt.Header h) {
+    @Override
+    public String visit(Initializer.Braced i) {
+        return "{" + i.items().stream().map(AstPrinter::item).collect(Collectors.joining(" ")) + "}";
+    }
+
+    private static String item(Initializer.Item item) {
+        if (item.designators().isEmpty()) return print(item.initializer());
+        var sb = new StringBuilder("(");
+        for (var d : item.designators()) {
+            if (d instanceof Initializer.ArrayDesignator a) sb.append('[').append(print(a.index())).append("] ");
+            else sb.append('.').append(((Initializer.MemberDesignator) d).name().text).append(' ');
+        }
+        return sb.append(print(item.initializer())).append(')').toString();
+    }
+
+    // ---- statements -----------------------------------------------------
+
+    @Override
+    public String visit(Stmt.Labeled s) {
+        String label;
+        if (s.label() instanceof Stmt.NameLabel l) label = "(label " + l.name().text;
+        else if (s.label() instanceof Stmt.CaseLabel l) {
+            label = "(case " + print(l.low()) + (l.high() != null ? " " + print(l.high()) : "");
+        } else label = "(default";
+        return label + (s.body() != null ? " " + print(s.body()) : "") + ')';
+    }
+
+    @Override
+    public String visit(Stmt.Compound s) {
+        var sb = new StringBuilder("(block");
+        for (var item : s.items()) sb.append(' ').append(print(item));
+        return sb.append(')').toString();
+    }
+
+    @Override
+    public String visit(Stmt.ExprStmt s) {
+        return s.expr() == null ? "(expr)" : list("expr", print(s.expr()));
+    }
+
+    @Override
+    public String visit(Stmt.If s) {
+        return s.elseBranch() == null
+                ? list("if", header(s.header()), print(s.thenBranch()))
+                : list("if", header(s.header()), print(s.thenBranch()), print(s.elseBranch()));
+    }
+
+    @Override
+    public String visit(Stmt.Switch s) {
+        return list("switch", header(s.header()), print(s.body()));
+    }
+
+    @Override
+    public String visit(Stmt.While s) {
+        return list("while", print(s.condition()), print(s.body()));
+    }
+
+    @Override
+    public String visit(Stmt.DoWhile s) {
+        return list("do", print(s.body()), print(s.condition()));
+    }
+
+    @Override
+    public String visit(Stmt.For s) {
+        String init = s.initDecl() != null ? print(s.initDecl()) : print(s.initExpr());
+        return list("for", init, print(s.condition()), print(s.step()), print(s.body()));
+    }
+
+    @Override
+    public String visit(Stmt.Goto s) {
+        return list("goto", s.label().text);
+    }
+
+    @Override
+    public String visit(Stmt.Continue s) {
+        return s.label() == null ? "(continue)" : list("continue", s.label().text);
+    }
+
+    @Override
+    public String visit(Stmt.Break s) {
+        return s.label() == null ? "(break)" : list("break", s.label().text);
+    }
+
+    @Override
+    public String visit(Stmt.Return s) {
+        return s.value() == null ? "(return)" : list("return", print(s.value()));
+    }
+
+    private static String header(Stmt.Header h) {
         if (h.declaration() == null) return print(h.condition());
         return h.condition() == null
                 ? list("header", print(h.declaration()))

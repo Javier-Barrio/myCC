@@ -17,6 +17,8 @@ public sealed interface Type {
 
     Type withQuals(Quals quals);
 
+    <R> R accept(Visitor<R> visitor);
+
     /** type-qualifier set (6.7.4.1). */
     record Quals(boolean isConst, boolean isVolatile, boolean isRestrict, boolean isAtomic) {
         public static final Quals NONE = new Quals(false, false, false, false);
@@ -64,6 +66,11 @@ public sealed interface Type {
         public Type withQuals(Quals q) {
             return new Basic(token, kind, isComplex, q);
         }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
     }
 
     /** _BitInt ( constant-expression ), optionally unsigned (6.7.3.1). */
@@ -72,12 +79,22 @@ public sealed interface Type {
         public Type withQuals(Quals q) {
             return new BitInt(token, isUnsigned, width, q);
         }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
     }
 
     record Pointer(Token star, Type target, Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Pointer(star, target, q);
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
         }
     }
 
@@ -92,6 +109,11 @@ public sealed interface Type {
         public Type withQuals(Quals q) {
             return new Array(bracket, element, size, isStar, isStatic, q);
         }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
     }
 
     /** function-declarator (6.7.7.1). {@code (void)} yields an empty parameter list. */
@@ -100,6 +122,11 @@ public sealed interface Type {
         @Override
         public Type withQuals(Quals q) {
             return new Function(paren, returnType, parameters, isVariadic, q);
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
         }
     }
 
@@ -115,6 +142,11 @@ public sealed interface Type {
         @Override
         public Type withQuals(Quals q) {
             return new Struct(keyword, tag, members, q);
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
         }
     }
 
@@ -133,6 +165,11 @@ public sealed interface Type {
         public Type withQuals(Quals q) {
             return new Enum(keyword, tag, underlying, enumerators, q);
         }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
     }
 
     record Enumerator(Token name, List<Attribute> attributes, Expr value) {
@@ -144,6 +181,11 @@ public sealed interface Type {
         public Type withQuals(Quals q) {
             return new TypedefName(name, aliased, q);
         }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
     }
 
     /** typeof / typeof_unqual (6.7.3.6). Exactly one of expr / type is non-null. */
@@ -151,6 +193,11 @@ public sealed interface Type {
         @Override
         public Type withQuals(Quals q) {
             return new Typeof(keyword, expr, type, q);
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
         }
     }
 }
