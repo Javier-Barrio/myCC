@@ -182,6 +182,46 @@ class CppTokenizerTest {
     }
 
     @Test
+    void backslashNewlineSplicesPhysicalLines() {
+        // Translation phase 2: the pair is deleted, even inside a token.
+        assertTokens("int x\\\n= 1;\nab\\\ncd",
+                TokenType.KEYWORD, "int",
+                TokenType.IDENTIFIER, "x",
+                TokenType.PUNCTUATOR, "=",
+                TokenType.PP_NUMBER, "1",
+                TokenType.PUNCTUATOR, ";",
+                TokenType.IDENTIFIER, "abcd");
+    }
+
+    @Test
+    void tokensAfterASpliceStayOnTheLogicalLine() {
+        // The spliced text is one logical line; the expander relies on
+        // this to know where a #define ends.
+        List<Token> tokens = tokenize("a \\\nb\nc");
+        assertEquals("a@1:1 b@1:3 c@2:1", tokens.stream()
+                .filter(t -> t.type != TokenType.EOF)
+                .map(t -> t.text + "@" + t.line + ":" + t.column)
+                .reduce((x, y) -> x + " " + y).orElseThrow());
+    }
+
+    @Test
+    void aSplicedDefineIsOneLogicalLine() {
+        List<Token> tokens = tokenize("#define A 1 + \\\n    2\nint x = A;");
+        Token a = tokens.stream().filter(t -> t.type == TokenType.OBJECT_MACRO).findFirst().orElseThrow();
+        assertEquals(List.of("1", "+", "2"), a.expansion.stream().map(t -> t.text).toList());
+        // and a '#' on the continuation is not a directive: it is inside the line
+        assertTokens("x \\\n# y", TokenType.IDENTIFIER, "x", TokenType.STRINGIZE, "#", TokenType.IDENTIFIER, "y");
+    }
+
+    @Test
+    void tokensRememberWhetherWhiteSpacePrecededThem() {
+        List<Token> tokens = tokenize("a b+c /*x*/d\n e");
+        assertEquals(List.of("a:false", "b:true", "+:false", "c:false", "d:true", "e:true"),
+                tokens.stream().filter(t -> t.type != TokenType.EOF)
+                        .map(t -> t.text + ":" + t.spaceBefore).toList());
+    }
+
+    @Test
     void lineCommentsAreSkipped() {
         assertTokens("int x; // trailing comment\nint y;",
                 TokenType.KEYWORD, "int",
@@ -485,17 +525,6 @@ class CppTokenizerTest {
                 TokenType.IDENTIFIER, "define",
                 TokenType.OBJECT_MACRO, "C",
                 TokenType.PP_NUMBER, "2");
-    }
-
-    @Test
-    void backslashNewlineIsNotSplicedPriorToPreprocessing() {
-        List<Token> tokens = tokenize("foo\\\nbar");
-        assertEquals(TokenType.IDENTIFIER, tokens.get(0).type);
-        assertEquals("foo", tokens.get(0).text);
-        assertEquals(TokenType.UNKNOWN, tokens.get(1).type);
-        assertEquals("\\", tokens.get(1).text);
-        assertEquals(TokenType.IDENTIFIER, tokens.get(2).type);
-        assertEquals("bar", tokens.get(2).text);
     }
 
     @Test

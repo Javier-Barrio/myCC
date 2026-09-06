@@ -48,7 +48,7 @@ public class Scanner {
             var hs = hideSetPlus(first, null);
             var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                     new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
-            return doExpand(replaced.concat(rest));
+            return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(rest));
         }
 
         // T is a function-like macro followed by '(' actuals ')':
@@ -66,7 +66,7 @@ public class Scanner {
                 var hs = hideSetPlus(first, closeParen);
                 var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                         fp, args, hs, TokenSet.empty());
-                return doExpand(replaced.concat(remainder));
+                return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(remainder));
             }
         }
 
@@ -125,28 +125,35 @@ public class Scanner {
                         int j = paramIndex(params, restp.tokens.get(0));
                         if (j >= 0 && j < args.size()) {
                             var restpp = new TokenSet(restp.tokens.subList(1, restp.tokens.size()));
-                            return substitute(restpp, params, args, hs, outSet.concat(args.get(j)));
+                            return substitute(restpp, params, args, hs,
+                                    outSet.concat(withLeadingSpace(args.get(j), first.spaceBefore)));
                         }
                     }
                     return substitute(restp, params, args, hs, outSet);
                 }
                 // Leave the ## in place; it will glue OS's new tail next.
-                return substitute(rest, params, args, hs, outSet.concat(arg));
+                return substitute(rest, params, args, hs, outSet.concat(withLeadingSpace(arg, first.spaceBefore)));
             }
 
             // IS = T • IS', T ∈ FP: plain occurrence, substitute the fully
             // macro-expanded actual.
-            return substitute(rest, params, args, hs, outSet.concat(doExpand(arg)));
+            return substitute(rest, params, args, hs,
+                    outSet.concat(withLeadingSpace(doExpand(arg), first.spaceBefore)));
         }
 
         // Ordinary token: copy through.
         return substitute(rest, params, args, hs, outSet.concat(TokenSet.from(first)));
     }
 
-    // The '#' operator: quote the actual's spelling as one string literal.
+    // The '#' operator (6.10.5.3): quote the actual's spelling as one string
+    // literal, with each run of white space between its tokens as one space
+    // and leading/trailing white space dropped.
     CppToken stringize(TokenSet set) {
         var str = new StringBuilder("\"");
         for (var t : set.tokens) {
+            if (str.length() > 1 && t.spaceBefore) {
+                str.append(' ');
+            }
             var text = t.token.text;
             if (t.token.type == TokenType.STRING_LITERAL || t.token.type == TokenType.CHARACTER_LITERAL) {
                 text = text.replace("\\", "\\\\").replace("\"", "\\\"");
@@ -175,6 +182,7 @@ public class Scanner {
             var r = rhs.tokens.get(0);
             var text = l.token.text + r.token.text;
             var pasted = new CppToken(new Token(pastedType(text), text, l.token.line, l.token.column));
+            pasted.spaceBefore = l.spaceBefore;
             l.hideSet.stream()
                     .filter(h -> hideSetContains(r, h.text))
                     .forEach(pasted.hideSet::add);
@@ -182,6 +190,18 @@ public class Scanner {
         }
         var lhsRest = new TokenSet(lhs.tokens.subList(1, lhs.tokens.size()));
         return new TokenSet(lhs.tokens.get(0), glue(lhsRest, rhs));
+    }
+
+    // A copy of `ts` whose first token is separated from what precedes it
+    // iff `space`: the tokens that replace a macro name or a parameter take
+    // over the spacing of the token they replace, not the spacing they had
+    // on their #define line.
+    private static TokenSet withLeadingSpace(TokenSet ts, boolean space) {
+        var result = new TokenSet(ts.tokens); // clones each token
+        if (!result.tokens.isEmpty()) {
+            result.tokens.get(0).spaceBefore = space;
+        }
+        return result;
     }
 
     // Re-lex the pasted spelling so e.g. "A" ## "B" -> identifier AB, which
