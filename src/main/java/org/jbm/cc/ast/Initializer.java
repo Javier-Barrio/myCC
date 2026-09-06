@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -9,7 +10,7 @@ public sealed interface Initializer {
 
     <R> R accept(Visitor<R> visitor);
 
-    record Expression(Expr expr) implements Initializer {
+    record Expression(@NonNull Expr expr) implements Initializer {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -17,7 +18,7 @@ public sealed interface Initializer {
     }
 
     /** braced-initializer: { initializer-list ,opt } or { }. */
-    record Braced(Token brace, List<Item> items) implements Initializer {
+    record Braced(@NonNull Token brace, @NonNull List<Item> items) implements Initializer {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -25,17 +26,17 @@ public sealed interface Initializer {
     }
 
     /** designationopt initializer. */
-    record Item(List<Designator> designators, Initializer initializer) {
+    record Item(@NonNull List<Designator> designators, @NonNull Initializer initializer) {
     }
 
     sealed interface Designator {
     }
 
     /** [ constant-expression ] */
-    record ArrayDesignator(Token bracket, Expr index) implements Designator {
+    record ArrayDesignator(@NonNull Token bracket, @NonNull Expr index) implements Designator {
     }
 
     /** . identifier */
-    record MemberDesignator(Token dot, Token name) implements Designator {
+    record MemberDesignator(@NonNull Token dot, @NonNull Token name) implements Designator {
     }
 }

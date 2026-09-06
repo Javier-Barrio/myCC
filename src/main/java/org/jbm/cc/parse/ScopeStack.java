@@ -1,5 +1,6 @@
 package org.jbm.cc.parse;
 
+import lombok.NonNull;
 import org.jbm.cc.ast.Type;
 
 import java.util.ArrayDeque;
@@ -31,16 +32,16 @@ public final class ScopeStack {
         scopes.pop();
     }
 
-    public void declareTypedef(String name, Type type) {
+    public void declareTypedef(@NonNull String name, @NonNull Type type) {
         scopes.getFirst().put(name, Optional.of(type));
     }
 
-    public void declareOrdinary(String name) {
+    public void declareOrdinary(@NonNull String name) {
         scopes.getFirst().put(name, Optional.empty());
     }
 
     /** The type a typedef name currently denotes; empty if the name is not (or is no longer) one. */
-    public Optional<Type> typedefType(String name) {
+    public Optional<Type> typedefType(@NonNull String name) {
         for (var scope : scopes) {
             var entry = scope.get(name);
             if (entry != null) return entry;
@@ -48,7 +49,7 @@ public final class ScopeStack {
         return Optional.empty();
     }
 
-    public boolean isTypeName(String name) {
+    public boolean isTypeName(@NonNull String name) {
         return typedefType(name).isPresent();
     }
 }

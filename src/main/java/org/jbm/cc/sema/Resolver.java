@@ -1,5 +1,6 @@
 package org.jbm.cc.sema;
 
+import lombok.NonNull;
 import org.jbm.cc.ast.AstWalker;
 import org.jbm.cc.ast.BlockItem;
 import org.jbm.cc.ast.Decl;
@@ -61,7 +62,7 @@ public final class Resolver extends AstWalker {
     private Resolver() {
     }
 
-    public static Bindings resolve(List<? extends Decl> translationUnit) {
+    public static Bindings resolve(@NonNull List<? extends Decl> translationUnit) {
         var resolver = new Resolver();
         resolver.walkUnit(translationUnit);
         return resolver.bindings;

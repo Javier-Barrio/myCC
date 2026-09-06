@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -62,7 +63,10 @@ public sealed interface Type {
         }
     }
 
-    record Basic(Token token, Kind kind, boolean isComplex, Quals quals) implements Type {
+    record Basic(@NonNull Token token,
+                 @NonNull Kind kind,
+                 boolean isComplex,
+                 @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Basic(token, kind, isComplex, q);
@@ -75,7 +79,10 @@ public sealed interface Type {
     }
 
     /** _BitInt ( constant-expression ), optionally unsigned (6.7.3.1). */
-    record BitInt(Token token, boolean isUnsigned, Expr width, Quals quals) implements Type {
+    record BitInt(@NonNull Token token,
+                  boolean isUnsigned,
+                  @NonNull Expr width,
+                  @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new BitInt(token, isUnsigned, width, q);
@@ -87,7 +94,7 @@ public sealed interface Type {
         }
     }
 
-    record Pointer(Token star, Type target, Quals quals) implements Type {
+    record Pointer(@NonNull Token star, @NonNull Type target, @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Pointer(star, target, q);
@@ -104,8 +111,9 @@ public sealed interface Type {
      * isStar marks {@code [*]}; isStatic and the qualifiers only occur in
      * parameter declarations.
      */
-    record Array(Token bracket, Type element, Optional<Expr> size, boolean isStar, boolean isStatic,
-                 Quals quals) implements Type {
+    record Array(@NonNull Token bracket, @NonNull Type element, @NonNull Optional<Expr> size,
+                 boolean isStar, boolean isStatic,
+                 @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Array(bracket, element, size, isStar, isStatic, q);
@@ -118,8 +126,9 @@ public sealed interface Type {
     }
 
     /** function-declarator (6.7.7.1). {@code (void)} yields an empty parameter list. */
-    record Function(Token paren, Type returnType, List<Parameter> parameters, boolean isVariadic,
-                    Quals quals) implements Type {
+    record Function(@NonNull Token paren, @NonNull Type returnType, @NonNull List<Parameter> parameters,
+                    boolean isVariadic,
+                    @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Function(paren, returnType, parameters, isVariadic, q);
@@ -132,14 +141,20 @@ public sealed interface Type {
     }
 
     /** parameter-declaration (6.7.7.1); name is absent for an abstract declarator. */
-    record Parameter(List<Attribute> attributes, List<Token> storageClasses, Type type, Optional<Token> name) {
+    record Parameter(@NonNull List<Attribute> attributes,
+                     @NonNull List<Token> storageClasses,
+                     @NonNull Type type,
+                     @NonNull Optional<Token> name) {
     }
 
     /**
      * struct-or-union-specifier (6.7.3.2). keyword is {@code struct} or
      * {@code union}; members is absent when no member list is given.
      */
-    record Struct(Token keyword, Optional<Token> tag, Optional<List<MemberDecl>> members, Quals quals)
+    record Struct(@NonNull Token keyword,
+                  @NonNull Optional<Token> tag,
+                  @NonNull Optional<List<MemberDecl>> members,
+                  @NonNull Quals quals)
             implements Type {
         @Override
         public Type withQuals(Quals q) {
@@ -157,13 +172,16 @@ public sealed interface Type {
     }
 
     /** member-declarator (6.7.3.2); name is absent for an anonymous member or unnamed bit-field. */
-    record Member(List<Attribute> attributes, Type type, Optional<Token> name, Optional<Expr> bitWidth)
+    record Member(@NonNull List<Attribute> attributes,
+                  @NonNull Type type,
+                  @NonNull Optional<Token> name,
+                  @NonNull Optional<Expr> bitWidth)
             implements MemberDecl {
     }
 
     /** enum-specifier (6.7.3.3); enumerators is absent when no list is given. */
-    record Enum(Token keyword, Optional<Token> tag, Optional<Type> underlying,
-                Optional<List<Enumerator>> enumerators, Quals quals) implements Type {
+    record Enum(@NonNull Token keyword, @NonNull Optional<Token> tag, @NonNull Optional<Type> underlying,
+                @NonNull Optional<List<Enumerator>> enumerators, @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Enum(keyword, tag, underlying, enumerators, q);
@@ -175,11 +193,13 @@ public sealed interface Type {
         }
     }
 
-    record Enumerator(Token name, List<Attribute> attributes, Optional<Expr> value) {
+    record Enumerator(@NonNull Token name,
+                      @NonNull List<Attribute> attributes,
+                      @NonNull Optional<Expr> value) {
     }
 
     /** typedef-name (6.7.9), with the type it was declared as. */
-    record TypedefName(Token name, Type aliased, Quals quals) implements Type {
+    record TypedefName(@NonNull Token name, @NonNull Type aliased, @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new TypedefName(name, aliased, q);
@@ -192,7 +212,10 @@ public sealed interface Type {
     }
 
     /** typeof / typeof_unqual (6.7.3.6). Exactly one of expr / type is present. */
-    record Typeof(Token keyword, Optional<Expr> expr, Optional<Type> type, Quals quals) implements Type {
+    record Typeof(@NonNull Token keyword,
+                  @NonNull Optional<Expr> expr,
+                  @NonNull Optional<Type> type,
+                  @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
             return new Typeof(keyword, expr, type, q);

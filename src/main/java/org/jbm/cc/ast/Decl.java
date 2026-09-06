@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -15,8 +16,8 @@ public sealed interface Decl extends BlockItem
      * declaration-specifiers init-declarator-listopt ; - declarators is
      * empty for a declaration that only introduces a tag or enumerators.
      */
-    record Declaration(List<Attribute> attributes, Specifiers specifiers,
-                       List<InitDeclarator> declarators) implements Decl {
+    record Declaration(@NonNull List<Attribute> attributes, @NonNull Specifiers specifiers,
+                       @NonNull List<InitDeclarator> declarators) implements Decl {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -27,13 +28,13 @@ public sealed interface Decl extends BlockItem
      * init-declarator: the declared name, its full type (absent only for
      * {@code auto} type inference), and the initializer if any.
      */
-    record InitDeclarator(Token name, Optional<Type> type, List<Attribute> attributes,
-                          Optional<Initializer> initializer) {
+    record InitDeclarator(@NonNull Token name, @NonNull Optional<Type> type, @NonNull List<Attribute> attributes,
+                          @NonNull Optional<Initializer> initializer) {
     }
 
     /** function-definition (6.9.2). type is the declarator's {@link Type.Function}. */
-    record FunctionDefinition(List<Attribute> attributes, Specifiers specifiers, Token name,
-                              Type.Function type, Stmt.Compound body) implements Decl {
+    record FunctionDefinition(@NonNull List<Attribute> attributes, @NonNull Specifiers specifiers, @NonNull Token name,
+                              @NonNull Type.Function type, @NonNull Stmt.Compound body) implements Decl {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -41,7 +42,7 @@ public sealed interface Decl extends BlockItem
     }
 
     /** attribute-declaration: attribute-specifier-sequence ; */
-    record AttributeDeclaration(List<Attribute> attributes) implements Decl {
+    record AttributeDeclaration(@NonNull List<Attribute> attributes) implements Decl {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);

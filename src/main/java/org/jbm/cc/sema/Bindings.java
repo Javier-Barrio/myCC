@@ -1,5 +1,6 @@
 package org.jbm.cc.sema;
 
+import lombok.NonNull;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Stmt;
@@ -47,31 +48,31 @@ public final class Bindings {
     /** File-scope symbols in declaration order. */
     public final List<Symbol> fileScope = new ArrayList<>();
 
-    public Symbol symbolOf(Expr.Identifier id) {
+    public Symbol symbolOf(@NonNull Expr.Identifier id) {
         return require(identifiers.get(id), id.name().text);
     }
 
-    public Symbol symbolOf(Decl.InitDeclarator d) {
+    public Symbol symbolOf(@NonNull Decl.InitDeclarator d) {
         return require(declarators.get(d), d.name().text);
     }
 
-    public Symbol symbolOf(Decl.FunctionDefinition f) {
+    public Symbol symbolOf(@NonNull Decl.FunctionDefinition f) {
         return require(functions.get(f), f.name().text);
     }
 
-    public Symbol symbolOf(Type.Parameter p) {
+    public Symbol symbolOf(@NonNull Type.Parameter p) {
         return require(parameters.get(p), p.name().map(n -> n.text).orElse("<unnamed parameter>"));
     }
 
-    public TagSymbol tagOf(Type t) {
+    public TagSymbol tagOf(@NonNull Type t) {
         return require(tags.get(t), t.toString());
     }
 
-    public Stmt.Labeled targetOf(Stmt.Goto g) {
+    public Stmt.Labeled targetOf(@NonNull Stmt.Goto g) {
         return require(gotos.get(g), "goto " + g.label().text);
     }
 
-    public Stmt targetOf(Stmt jump) {
+    public Stmt targetOf(@NonNull Stmt jump) {
         return require(jumps.get(jump), jump.toString());
     }
 

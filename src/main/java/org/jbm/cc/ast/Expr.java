@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -15,7 +16,7 @@ public sealed interface Expr {
     <R> R accept(Visitor<R> visitor);
 
     /** identifier (6.5.2). */
-    record Identifier(Token name) implements Expr {
+    record Identifier(@NonNull Token name) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -27,7 +28,7 @@ public sealed interface Expr {
      * predefined constants {@code true}, {@code false}, {@code nullptr}
      * (6.4.5). The token's type and text say which.
      */
-    record Literal(Token token) implements Expr {
+    record Literal(@NonNull Token token) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -35,7 +36,7 @@ public sealed interface Expr {
     }
 
     /** Adjacent string literals, concatenated in translation phase 6. */
-    record StringLiteral(List<Token> parts) implements Expr {
+    record StringLiteral(@NonNull List<Token> parts) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -46,10 +47,11 @@ public sealed interface Expr {
      * generic-selection (6.5.2.1). The controlling operand is an expression
      * or (C2y) a type-name: exactly one of the two is present.
      */
-    record Generic(Token keyword, Optional<Expr> controllingExpr, Optional<Type> controllingType,
-                   List<Association> associations) implements Expr {
+    record Generic(@NonNull Token keyword, @NonNull Optional<Expr> controllingExpr,
+                   @NonNull Optional<Type> controllingType,
+                   @NonNull List<Association> associations) implements Expr {
         /** type is absent for the {@code default} association. */
-        public record Association(Optional<Type> type, Expr expr) {
+        public record Association(@NonNull Optional<Type> type, @NonNull Expr expr) {
         }
 
         @Override
@@ -59,7 +61,7 @@ public sealed interface Expr {
     }
 
     /** postfix-expression [ expression ] (6.5.3.1). */
-    record Index(Token bracket, Expr array, Expr index) implements Expr {
+    record Index(@NonNull Token bracket, @NonNull Expr array, @NonNull Expr index) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -67,7 +69,7 @@ public sealed interface Expr {
     }
 
     /** postfix-expression ( argument-expression-list ) (6.5.3.1). */
-    record Call(Token paren, Expr callee, List<Expr> arguments) implements Expr {
+    record Call(@NonNull Token paren, @NonNull Expr callee, @NonNull List<Expr> arguments) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -75,7 +77,7 @@ public sealed interface Expr {
     }
 
     /** postfix-expression . identifier / -> identifier; op is the punctuator. */
-    record Member(Token op, Expr object, Token name) implements Expr {
+    record Member(@NonNull Token op, @NonNull Expr object, @NonNull Token name) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -83,7 +85,7 @@ public sealed interface Expr {
     }
 
     /** postfix ++ / -- (6.5.3.1). */
-    record Postfix(Token op, Expr operand) implements Expr {
+    record Postfix(@NonNull Token op, @NonNull Expr operand) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -91,8 +93,8 @@ public sealed interface Expr {
     }
 
     /** compound-literal (6.5.3.6): ( storage-class-specifiers type-name ) braced-initializer. */
-    record CompoundLiteral(Token paren, List<Token> storageClasses, Type type,
-                           Initializer.Braced initializer) implements Expr {
+    record CompoundLiteral(@NonNull Token paren, @NonNull List<Token> storageClasses, @NonNull Type type,
+                           @NonNull Initializer.Braced initializer) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -103,7 +105,7 @@ public sealed interface Expr {
      * Prefix ++ / --, the unary operators {@code & * + - ~ !}, and the
      * expression forms of {@code sizeof} and {@code _Countof} (6.5.4.1).
      */
-    record Unary(Token op, Expr operand) implements Expr {
+    record Unary(@NonNull Token op, @NonNull Expr operand) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -111,7 +113,7 @@ public sealed interface Expr {
     }
 
     /** sizeof ( type-name ), alignof ( type-name ), _Countof ( type-name ). */
-    record TypeOperator(Token op, Type type) implements Expr {
+    record TypeOperator(@NonNull Token op, @NonNull Type type) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -119,7 +121,9 @@ public sealed interface Expr {
     }
 
     /** static-assertion used as a unary-expression (6.5.4.6) or as a declaration (6.7.1). */
-    record StaticAssertion(Token keyword, Expr condition, Optional<StringLiteral> message)
+    record StaticAssertion(@NonNull Token keyword,
+                           @NonNull Expr condition,
+                           @NonNull Optional<StringLiteral> message)
             implements Expr, Decl, Type.MemberDecl {
         @Override
         public <R> R accept(Visitor<R> v) {
@@ -128,7 +132,7 @@ public sealed interface Expr {
     }
 
     /** ( type-name ) cast-expression (6.5.5). */
-    record Cast(Token paren, Type type, Expr operand) implements Expr {
+    record Cast(@NonNull Token paren, @NonNull Type type, @NonNull Expr operand) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -136,7 +140,7 @@ public sealed interface Expr {
     }
 
     /** The binary operators of 6.5.6 - 6.5.15. */
-    record Binary(Token op, Expr left, Expr right) implements Expr {
+    record Binary(@NonNull Token op, @NonNull Expr left, @NonNull Expr right) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -144,7 +148,10 @@ public sealed interface Expr {
     }
 
     /** conditional-expression (6.5.16). */
-    record Conditional(Token question, Expr condition, Expr thenExpr, Expr elseExpr) implements Expr {
+    record Conditional(@NonNull Token question,
+                       @NonNull Expr condition,
+                       @NonNull Expr thenExpr,
+                       @NonNull Expr elseExpr) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -152,7 +159,7 @@ public sealed interface Expr {
     }
 
     /** assignment-expression (6.5.17.1); op is one of = *= /= %= += -= <<= >>= &= ^= |=. */
-    record Assign(Token op, Expr target, Expr value) implements Expr {
+    record Assign(@NonNull Token op, @NonNull Expr target, @NonNull Expr value) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);
@@ -160,7 +167,7 @@ public sealed interface Expr {
     }
 
     /** expression , assignment-expression (6.5.18). */
-    record Comma(Token comma, Expr left, Expr right) implements Expr {
+    record Comma(@NonNull Token comma, @NonNull Expr left, @NonNull Expr right) implements Expr {
         @Override
         public <R> R accept(Visitor<R> v) {
             return v.visit(this);

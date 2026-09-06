@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -27,28 +28,28 @@ public final class AstPrinter implements Visitor<String> {
 
     // ---- entry points ------------------------------------------------------
 
-    public static String print(List<? extends Decl> translationUnit) {
+    public static String print(@NonNull List<? extends Decl> translationUnit) {
         return translationUnit.stream().map(AstPrinter::print).collect(Collectors.joining("\n"));
     }
 
-    public static String print(BlockItem item) {
+    public static String print(@NonNull BlockItem item) {
         if (item instanceof Decl d) return print(d);
         return print((Stmt) item);
     }
 
-    public static String print(Decl d) {
+    public static String print(@NonNull Decl d) {
         return d.accept(INSTANCE);
     }
 
-    public static String print(Stmt s) {
+    public static String print(@NonNull Stmt s) {
         return s.accept(INSTANCE);
     }
 
-    public static String print(Expr e) {
+    public static String print(@NonNull Expr e) {
         return e.accept(INSTANCE);
     }
 
-    public static String print(Type t) {
+    public static String print(@NonNull Type t) {
         String core = t.accept(INSTANCE);
         var q = t.quals();
         if (q.isEmpty()) return core;
@@ -60,7 +61,7 @@ public final class AstPrinter implements Visitor<String> {
         return sb.append(core).append(')').toString();
     }
 
-    public static String print(Initializer init) {
+    public static String print(@NonNull Initializer init) {
         return init.accept(INSTANCE);
     }
 

@@ -1,5 +1,6 @@
 package org.jbm.cc.cpp;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
@@ -56,7 +57,7 @@ public final class TokenConversion {
     private TokenConversion() {
     }
 
-    public static TokenSet convert(TokenSet set) {
+    public static TokenSet convert(@NonNull TokenSet set) {
         var tokens = new ArrayList<CppToken>();
         for (var t : set.tokens) {
             if (t.token.type != TokenType.PP_NUMBER) {

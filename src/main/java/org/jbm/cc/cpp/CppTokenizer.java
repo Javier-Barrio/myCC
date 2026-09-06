@@ -1,5 +1,6 @@
 package org.jbm.cc.cpp;
 
+import lombok.NonNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -109,7 +110,7 @@ public class CppTokenizer {
         // found in the call's `(...)`.
         public List<List<Token>> arguments = List.of();
 
-        public Token(TokenType type, String text, int line, int column) {
+        public Token(@NonNull TokenType type, @NonNull String text, int line, int column) {
             this.type = type;
             this.text = text;
             this.line = line;
@@ -200,7 +201,7 @@ public class CppTokenizer {
     private DirectiveState directiveState = DirectiveState.NONE;
     private final Map<String, Token> macroTable = new LinkedHashMap<>();
 
-    public CppTokenizer(String source) {
+    public CppTokenizer(@NonNull String source) {
         this.src = splice(source);
     }
 
@@ -229,11 +230,11 @@ public class CppTokenizer {
         return sb.toString();
     }
 
-    public static List<Token> tokenize(String source) {
+    public static List<Token> tokenize(@NonNull String source) {
         return new CppTokenizer(source).scan();
     }
 
-    public static TokenSet tokenSet(String source) {
+    public static TokenSet tokenSet(@NonNull String source) {
         CppTokenizer tokenizer = new CppTokenizer(source);
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
         set.macros = tokenizer.macroTable();

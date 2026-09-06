@@ -1,5 +1,6 @@
 package org.jbm.cc.cpp;
 
+import lombok.NonNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashSet;
@@ -18,7 +19,7 @@ public class CppToken {
     // replaced (6.10.5.3p2 relies on this for the stringize operator).
     public boolean spaceBefore;
 
-    public CppToken(CppTokenizer.Token token) {
+    public CppToken(@NonNull CppTokenizer.Token token) {
         this.token = token;
         this.spaceBefore = token.spaceBefore;
     }

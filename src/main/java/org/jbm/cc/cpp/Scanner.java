@@ -1,5 +1,6 @@
 package org.jbm.cc.cpp;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
@@ -22,7 +23,7 @@ public class Scanner {
     // than being threaded through each of them.
     private Map<String, Token> macros = Map.of();
 
-    public TokenSet expand(TokenSet tokenSet) {
+    public TokenSet expand(@NonNull TokenSet tokenSet) {
         macros = tokenSet.macros;
         return doExpand(stripDirectiveLines(tokenSet));
     }
