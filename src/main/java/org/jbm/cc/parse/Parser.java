@@ -1,5 +1,6 @@
 package org.jbm.cc.parse;
 
+import lombok.NonNull;
 import org.jbm.cc.ast.Attribute;
 import org.jbm.cc.ast.BlockItem;
 import org.jbm.cc.ast.Decl;
@@ -38,16 +39,16 @@ public final class Parser {
     private final TokenCursor cur;
     private final ScopeStack scopes = new ScopeStack();
 
-    public Parser(TokenSet tokens) {
+    public Parser(@NonNull TokenSet tokens) {
         this(tokens.tokens);
     }
 
-    public Parser(List<CppToken> tokens) {
+    public Parser(@NonNull List<CppToken> tokens) {
         this.cur = new TokenCursor(tokens);
     }
 
     /** Parses a whole translation-unit (6.9.1). */
-    public static List<Decl> parse(TokenSet tokens) {
+    public static List<Decl> parse(@NonNull TokenSet tokens) {
         return new Parser(tokens).parseTranslationUnit();
     }
 

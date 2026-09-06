@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
@@ -12,11 +13,14 @@ import java.util.Optional;
  * specifiers and qualifiers fold to. type is absent only when {@code auto}
  * asks for the type to be inferred from the initializer.
  */
-public record Specifiers(Token token, List<Token> storageClasses, List<Token> functionSpecifiers,
-                         Optional<Alignas> alignment, Optional<Type> type) {
+public record Specifiers(@NonNull Token token, @NonNull List<Token> storageClasses,
+                         @NonNull List<Token> functionSpecifiers,
+                         @NonNull Optional<Alignas> alignment, @NonNull Optional<Type> type) {
 
     /** alignment-specifier (6.7.6). Exactly one of type / expr is present. */
-    public record Alignas(Token keyword, Optional<Type> type, Optional<Expr> expr) {
+    public record Alignas(@NonNull Token keyword,
+                          @NonNull Optional<Type> type,
+                          @NonNull Optional<Expr> expr) {
     }
 
     public boolean has(String keyword) {

@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import java.util.List;
 
 /**
@@ -21,32 +22,32 @@ public abstract class AstWalker implements Visitor<Void> {
 
     // ---- entry points ----------------------------------------------------
 
-    public void walkUnit(List<? extends Decl> unit) {
+    public void walkUnit(@NonNull List<? extends Decl> unit) {
         for (Decl d : unit) walk(d);
     }
 
-    public void walk(BlockItem item) {
+    public void walk(@NonNull BlockItem item) {
         if (item instanceof Decl d) walk(d);
         else walk((Stmt) item);
     }
 
-    public void walk(Decl d) {
+    public void walk(@NonNull Decl d) {
         d.accept(this);
     }
 
-    public void walk(Stmt s) {
+    public void walk(@NonNull Stmt s) {
         s.accept(this);
     }
 
-    public void walk(Expr e) {
+    public void walk(@NonNull Expr e) {
         e.accept(this);
     }
 
-    public void walk(Type t) {
+    public void walk(@NonNull Type t) {
         t.accept(this);
     }
 
-    public void walk(Initializer i) {
+    public void walk(@NonNull Initializer i) {
         i.accept(this);
     }
 

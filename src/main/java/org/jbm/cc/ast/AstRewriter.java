@@ -1,5 +1,6 @@
 package org.jbm.cc.ast;
 
+import lombok.NonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -28,28 +29,28 @@ public abstract class AstRewriter implements Visitor<Object> {
 
     // ---- entry points -------------------------------------------------------
 
-    public List<Decl> rewriteUnit(List<? extends Decl> unit) {
+    public List<Decl> rewriteUnit(@NonNull List<? extends Decl> unit) {
         return rewriteAll(List.copyOf(unit), this::rewrite);
     }
 
-    public BlockItem rewrite(BlockItem item) {
+    public BlockItem rewrite(@NonNull BlockItem item) {
         if (item instanceof Decl d) return rewrite(d);
         return rewrite((Stmt) item);
     }
 
-    public Decl rewrite(Decl d) {
+    public Decl rewrite(@NonNull Decl d) {
         return (Decl) d.accept(this);
     }
 
-    public Stmt rewrite(Stmt s) {
+    public Stmt rewrite(@NonNull Stmt s) {
         return (Stmt) s.accept(this);
     }
 
-    public Expr rewrite(Expr e) {
+    public Expr rewrite(@NonNull Expr e) {
         return (Expr) e.accept(this);
     }
 
-    public Type rewrite(Type t) {
+    public Type rewrite(@NonNull Type t) {
         Type done = memo.get(t);
         if (done != null) return done;
         Type result = (Type) t.accept(this);
@@ -57,7 +58,7 @@ public abstract class AstRewriter implements Visitor<Object> {
         return result;
     }
 
-    public Initializer rewrite(Initializer i) {
+    public Initializer rewrite(@NonNull Initializer i) {
         return (Initializer) i.accept(this);
     }
 

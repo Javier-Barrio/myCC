@@ -1,5 +1,6 @@
 package org.jbm.cc.parse;
 
+import lombok.NonNull;
 import org.jbm.cc.cpp.CppToken;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
@@ -16,7 +17,7 @@ public final class TokenCursor {
     private final Token eof;
     private int pos;
 
-    public TokenCursor(List<CppToken> tokens) {
+    public TokenCursor(@NonNull List<CppToken> tokens) {
         this.tokens = tokens;
         this.eof = !tokens.isEmpty() && tokens.get(tokens.size() - 1).token.type == TokenType.EOF
                 ? tokens.get(tokens.size() - 1).token
@@ -42,11 +43,11 @@ public final class TokenCursor {
         return peek().type == TokenType.EOF;
     }
 
-    public boolean at(String text) {
+    public boolean at(@NonNull String text) {
         return at(0, text);
     }
 
-    public boolean at(int k, String text) {
+    public boolean at(int k, @NonNull String text) {
         Token t = peek(k);
         return (t.type == TokenType.PUNCTUATOR || t.type == TokenType.KEYWORD) && t.text.equals(text);
     }
@@ -66,13 +67,13 @@ public final class TokenCursor {
         return peek(k).type == TokenType.IDENTIFIER;
     }
 
-    public boolean accept(String text) {
+    public boolean accept(@NonNull String text) {
         if (!at(text)) return false;
         next();
         return true;
     }
 
-    public Token expect(String text) {
+    public Token expect(@NonNull String text) {
         if (!at(text)) throw error("expected '" + text + "'");
         return next();
     }
@@ -82,7 +83,7 @@ public final class TokenCursor {
         return next();
     }
 
-    public ParseException error(String message) {
+    public ParseException error(@NonNull String message) {
         return new ParseException(message, peek());
     }
 }

@@ -1,5 +1,6 @@
 package org.jbm.cc.sema;
 
+import lombok.NonNull;
 import org.jbm.cc.ast.AstRewriter;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
@@ -31,7 +32,7 @@ public final class Desugar extends AstRewriter {
     private Desugar() {
     }
 
-    public static List<Decl> desugar(List<? extends Decl> unit) {
+    public static List<Decl> desugar(@NonNull List<? extends Decl> unit) {
         return new Desugar().rewriteUnit(unit);
     }
 
