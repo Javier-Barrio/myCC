@@ -190,6 +190,33 @@ Each phase ends with the test suite green and `Main` still running.
       and an enum-type-specifier is resolved as the enum-type-specifier, matching the
       grammar but not the standard's stated intent for that case
 
+### Phase 6 - sema
+
+The parser's output is syntactic; sema turns it into what lowering needs.
+Design: one `org.jbm.cc.ast.Visitor<R>` covers every node kind of the five
+sealed hierarchies (`Expr`, `Stmt`, `Decl`, `Type`, `Initializer`), each node
+having an `accept`. `AstPrinter` is a `Visitor<String>`; `AstWalker` is a
+`Visitor<Void>` with default child traversal that passes extend. Results of a pass over the
+existing tree go in identity-keyed side tables (`sema.Bindings`), because
+records have structural equality and macro expansion produces structurally
+equal but distinct nodes; the typing pass will instead build a new tree with
+symbols and explicit casts on the nodes.
+
+- [x] `Resolver`: symbol table with the ordinary and tag namespaces, C scoping
+      (compound, selection/iteration statements, prototypes, function bodies);
+      storage duration and linkage; every identifier, declarator, parameter,
+      enumerator and tag specifier bound to its `Symbol`/`TagSymbol`; labels per
+      function with `goto` resolution; `break`/`continue` (labeled too) bound to
+      their loop or switch; `case`/`default` checked to be inside a switch.
+- [ ] constant expression evaluator (6.6): integer and address constants
+- [ ] typing pass over a new tree: literal decoding, lvalue/rvalue, decay,
+      promotions and usual arithmetic conversions made explicit as casts,
+      member resolution to offsets, `sizeof`/`_Generic` folded, calls checked
+- [ ] layout: `sizeof`/`alignof`, struct offsets and padding (x86-64 SysV)
+- [ ] initializers (6.7.11): designators, brace elision, array size completion
+- [ ] statement checks: switch case sets, return types
+- [ ] secondary blocks as blocks (compound literal / VLA lifetimes)
+
 ## Status
 
 Phases 0-4 are implemented: `Parser` covers all of A.3 and the full test suite
