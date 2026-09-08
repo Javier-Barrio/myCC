@@ -120,6 +120,16 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     }
 
     @Override
+    public Constant visit(TExpr.Member e) {
+        return null;
+    }
+
+    @Override
+    public Constant visit(TExpr.Materialize e) {
+        return null;
+    }
+
+    @Override
     public Constant visit(TExpr.IntConst e) {
         return e;
     }
