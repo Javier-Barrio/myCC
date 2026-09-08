@@ -65,6 +65,12 @@ public interface TVisitor<R> {
     R visit(TExpr.BitNot e);
     R visit(TExpr.Not e);
 
+    // ---- assignment ----
+    R visit(TExpr.Assign e);
+    R visit(TExpr.CompoundAssign e);
+    R visit(TExpr.PostfixAssign e);
+    R visit(TExpr.TargetValue e);
+
     // ---- conditional and comma ----
     R visit(TExpr.Cond e);
     R visit(TExpr.Comma e);

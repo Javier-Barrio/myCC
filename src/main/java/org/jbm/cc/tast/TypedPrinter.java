@@ -253,4 +253,24 @@ public final class TypedPrinter implements TVisitor<String> {
     public String visit(TExpr.PtrDiff e) {
         return node("ptrdiff", e, e.left(), e.right());
     }
+
+    @Override
+    public String visit(TExpr.Assign e) {
+        return node("assign", e, e.target(), e.value());
+    }
+
+    @Override
+    public String visit(TExpr.CompoundAssign e) {
+        return node("compound-assign", e, e.target(), e.newValue());
+    }
+
+    @Override
+    public String visit(TExpr.PostfixAssign e) {
+        return node("postfix-assign", e, e.target(), e.newValue());
+    }
+
+    @Override
+    public String visit(TExpr.TargetValue e) {
+        return "(target:" + e.type().spelling() + ")";
+    }
 }
