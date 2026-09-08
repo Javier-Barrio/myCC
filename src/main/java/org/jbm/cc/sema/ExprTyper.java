@@ -48,6 +48,7 @@ final class ExprTyper {
         if (e instanceof Expr.Binary b) return binary(b);
         if (e instanceof Expr.Index i) return index(i);
         if (e instanceof Expr.Unary u) return unary(u);
+        if (e instanceof Expr.Call c) return call(c);
         if (e instanceof Expr.Assign a) return assign(a);
         if (e instanceof Expr.Postfix p) return postfix(p);
         if (e instanceof Expr.Conditional c) return conditional(c);
@@ -110,6 +111,35 @@ final class ExprTyper {
             case "||" -> logical(op, l, r, TExpr.Or::new);
             default -> throw unsupported("operator " + opText, op);
         };
+    }
+
+    // ---- calls (6.5.3.3) --------------------------------------------------------------------------
+
+    private TExpr call(Expr.Call e) {
+        Token at = e.paren();
+        Rvalue callee = rvalue(type(e.callee()));
+        if (!(callee.type() instanceof CType.Pointer p && p.target() instanceof CType.Function f)) {
+            throw new SemaException("called object is not a function or function pointer ('"
+                    + callee.type().spelling() + "')", at);
+        }
+        int given = e.arguments().size(), expected = f.parameters().size();
+        if (given < expected || given > expected && !f.isVariadic()) {
+            throw new SemaException("too " + (given < expected ? "few" : "many") + " arguments to function: expected "
+                    + expected + (f.isVariadic() ? " or more" : "") + ", got " + given, at);
+        }
+        var args = new ArrayList<Rvalue>(given);
+        for (int i = 0; i < given; i++) {
+            Rvalue arg = rvalue(type(e.arguments().get(i)));
+            Token argAt = arg.token();
+            if (arg.type().isVoid()) throw new SemaException("argument " + (i + 1) + " has type void", argAt);
+            if (i < expected) {
+                args.add(assignConvert(arg, f.parameters().get(i), argAt, "passing argument " + (i + 1) + " of type"));
+            } else {
+                // Past the prototype: default argument promotions (6.5.3.3p7).
+                args.add(convert(arg, types.defaultArgumentPromote(arg.type())));
+            }
+        }
+        return new TExpr.Call(callee, args, f.returnType(), at);
     }
 
     // ---- assignment (6.5.17) -------------------------------------------------------------------

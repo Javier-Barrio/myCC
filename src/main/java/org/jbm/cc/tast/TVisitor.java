@@ -65,6 +65,9 @@ public interface TVisitor<R> {
     R visit(TExpr.BitNot e);
     R visit(TExpr.Not e);
 
+    // ---- calls ----
+    R visit(TExpr.Call e);
+
     // ---- assignment ----
     R visit(TExpr.Assign e);
     R visit(TExpr.CompoundAssign e);

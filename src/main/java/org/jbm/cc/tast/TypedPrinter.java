@@ -255,6 +255,13 @@ public final class TypedPrinter implements TVisitor<String> {
     }
 
     @Override
+    public String visit(TExpr.Call e) {
+        var sb = new StringBuilder("(call:").append(e.type().spelling()).append(' ').append(e.callee().accept(this));
+        for (TExpr a : e.arguments()) sb.append(' ').append(a.accept(this));
+        return sb.append(')').toString();
+    }
+
+    @Override
     public String visit(TExpr.Assign e) {
         return node("assign", e, e.target(), e.value());
     }

@@ -273,7 +273,7 @@ class TyperTest {
         assertEquals("(or:int (to-bool:bool (rv:int * p:int *)) (rv:bool b:bool))", expr("int *p; bool b;", "p || b"));
         assertEquals("(and:int (to-bool:bool (rv:int a:int)) (to-bool:bool (or:int (to-bool:bool (rv:int b:int)) (to-bool:bool (rv:int c:int)))))",
                 expr("int a, b, c;", "a && (b || c)"));
-        assertTrue(exprFails("void f(void);", "f() && 1").getMessage().contains("not supported"));
+        assertTrue(exprFails("void f(void);", "f() && 1").getMessage().contains("invalid operands"));
     }
 
     @Test
@@ -303,7 +303,7 @@ class TyperTest {
                 expr("int a; double d;", "a + 1, d"));
         assertEquals("(cond:int (to-bool:bool (rv:int * p:int *)) 1:int 2:int)", expr("int *p;", "p ? 1 : 2"));
         assertTrue(exprFails("int *p;", "1 ? p : 2").getMessage().contains("not supported"));
-        assertTrue(exprFails("void f(void);", "f() ? 1 : 2").getMessage().contains("not supported"));
+        assertTrue(exprFails("void f(void);", "f() ? 1 : 2").getMessage().contains("must be scalar"));
     }
 
     // ---- pointers -----------------------------------------------------------------------------
@@ -504,6 +504,50 @@ class TyperTest {
         var innerTarget = (org.jbm.cc.tast.TExpr.TargetValue) ((org.jbm.cc.tast.TExpr.Add) inner.newValue()).left();
         assertSame(inner.target(), innerTarget.target(), "and the inner one to k, not to the outer target");
         assertNotSame(outer.target(), innerTarget.target());
+    }
+
+    // ---- calls --------------------------------------------------------------------------------
+
+    @Test
+    void callsConvertArgumentsAsIfByAssignment() {
+        assertEquals("(call:int (fdecay:int (*)(void) f:int (void)))", expr("int f(void);", "f()"));
+        assertEquals("(call:int (fdecay:int (*)(char) f:int (char)) (rv:char a:char))", expr("int f(char); char a;", "f(a)"));
+        assertEquals("(call:int (fdecay:int (*)(int) f:int (int)) (int-to-int:int (rv:char a:char)))",
+                expr("int f(int); char a;", "f(a)"));
+        assertEquals("(call:void (fdecay:void (*)(double, int *) g:void (double, int *)) (int-to-float:double 1:int) (null:int * 0:int))",
+                expr("void g(double, int *);", "g(1, 0)"));
+        assertEquals("(call:int (fdecay:int (*)(const char *) f:int (const char *)) (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))",
+                expr("int f(const char *);", "f(\"x\")"));
+        assertEquals("(call:int (fdecay:int (*)(int *) f:int (int *)) (decay:int * a:int [3]))", expr("int f(int a[]); int a[3];", "f(a)"));
+        assertEquals("(call:int (fdecay:int (*)(int (*)(void)) f:int (int (*)(void))) (fdecay:int (*)(void) g:int (void)))",
+                expr("int f(int g(void)); int g(void);", "f(g)"));
+        assertEquals("(assign:int z:int (call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char)))",
+                expr("int (*fp)(char); char a; int z;", "z = fp(a)"));
+        assertEquals("(call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(*fp)(a)"));
+        assertEquals("(call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(***fp)(a)"));
+        assertEquals("(add:int (call:int (fdecay:int (*)(char) f:int (char)) (rv:char a:char)) (rv:int b:int))",
+                expr("int f(char); char a; int b;", "f(a) + b"));
+        assertEquals("(call:int (rv:int (*)(void) (deref:int (*)(void) (ptradd:int (* *)(void) (decay:int (* *)(void) t:int (*[2])(void)) (int-to-int:long 1:int)))))",
+                expr("int (*t[2])(void);", "t[1]()"));
+    }
+
+    @Test
+    void variadicArgumentsGetDefaultPromotions() {
+        assertEquals("(call:int (fdecay:int (*)(const char *, ...) printf:int (const char *, ...)) (ptr-to-ptr:const char * (decay:char * \"%d\":char [3])) (int-to-int:int (rv:char c:char)) (float-to-float:double (rv:float f:float)) (rv:int * p:int *))",
+                expr("int printf(const char *, ...); char c; float f; int *p;", "printf(\"%d\", c, f, p)"));
+        assertEquals("(call:int (fdecay:int (*)(int, ...) v:int (int, ...)) 1:int)", expr("int v(int, ...);", "v(1)"));
+    }
+
+    @Test
+    void callConstraints() {
+        assertTrue(exprFails("int f(int);", "f()").getMessage().contains("too few arguments"));
+        assertTrue(exprFails("int f(void);", "f(1)").getMessage().contains("too many arguments"));
+        assertTrue(exprFails("int v(int, ...);", "v()").getMessage().contains("too few arguments"));
+        assertTrue(exprFails("int f(int *);", "f(1)").getMessage().contains("incompatible types when passing argument 1"));
+        assertTrue(exprFails("int f(int *); const int *q;", "f(q)").getMessage().contains("discards qualifiers"));
+        assertTrue(exprFails("int a;", "a()").getMessage().contains("not a function"));
+        assertTrue(exprFails("int *p;", "p()").getMessage().contains("not a function"));
+        assertTrue(exprFails("int f(int); void g(void);", "f(g())").getMessage().contains("type void"));
     }
 
     @Test
