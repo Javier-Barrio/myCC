@@ -3,6 +3,8 @@ package org.jbm.cc.sema;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Layout;
+import org.jbm.cc.types.Tag;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
@@ -13,7 +15,7 @@ import java.util.Optional;
  * {@code struct S;}, or a reference like {@code struct S *p} - and
  * completed when the body is seen. name is absent for an anonymous type.
  */
-public final class TagSymbol {
+public final class TagSymbol implements Tag {
     public final Optional<String> name;
     /** struct, union or enum. */
     public final String keyword;
@@ -26,6 +28,9 @@ public final class TagSymbol {
     // The semantic type, set by the typing pass: a record type for a
     // struct or union, the underlying integer type for an enum.
     private @Nullable CType type;
+
+    // A struct or union's layout, once its body has been typed.
+    private @Nullable Layout layout;
 
     TagSymbol(Optional<String> name, String keyword, Token declaredAt, int scopeDepth) {
         this.name = name;
@@ -45,6 +50,30 @@ public final class TagSymbol {
 
     void define(Type body) {
         definition = body;
+    }
+
+    @Override
+    public Optional<String> name() {
+        return name;
+    }
+
+    @Override
+    public String keyword() {
+        return keyword;
+    }
+
+    @Override
+    public boolean isUnion() {
+        return keyword.equals("union");
+    }
+
+    @Override
+    public Optional<Layout> layout() {
+        return Optional.ofNullable(layout);
+    }
+
+    void setLayout(Layout layout) {
+        this.layout = layout;
     }
 
     public CType type() {

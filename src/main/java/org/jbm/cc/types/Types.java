@@ -124,6 +124,10 @@ public final class Types {
         return floating(CType.Float.Rank.LDOUBLE);
     }
 
+    public CType.Record record(@NonNull Tag tag) {
+        return (CType.Record) intern(new CType.Record(tag, Quals.NONE));
+    }
+
     public CType.Pointer pointer(@NonNull CType to) {
         return (CType.Pointer) intern(new CType.Pointer(to, Quals.NONE));
     }
@@ -170,6 +174,7 @@ public final class Types {
         else if (t instanceof CType.Float f) fresh = new CType.Float(f.rank(), quals);
         else if (t instanceof CType.Pointer p) fresh = new CType.Pointer(p.target(), quals);
         else if (t instanceof CType.Nullptr) fresh = new CType.Nullptr(quals);
+        else if (t instanceof CType.Record r) fresh = new CType.Record(r.tag(), quals);
         else if (t instanceof CType.Array a) fresh = new CType.Array(qualified(a.element(), quals), a.size());
         else throw new IllegalArgumentException("cannot qualify " + t.spelling());
         return intern(fresh);
@@ -245,6 +250,7 @@ public final class Types {
         if (t instanceof CType.Float f) return target.size(f.rank());
         if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerWidth() / 8;
         if (t instanceof CType.Array a && a.size().isPresent()) return size(a.element()) * a.size().getAsLong();
+        if (t instanceof CType.Record r && r.tag().layout().isPresent()) return r.tag().layout().get().size();
         throw new IllegalArgumentException("no size: " + t.spelling());
     }
 
@@ -255,6 +261,7 @@ public final class Types {
         if (t instanceof CType.Float f) return target.align(f.rank());
         if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerAlign();
         if (t instanceof CType.Array a) return align(a.element());
+        if (t instanceof CType.Record r && r.tag().layout().isPresent()) return r.tag().layout().get().align();
         throw new IllegalArgumentException("no alignment: " + t.spelling());
     }
 

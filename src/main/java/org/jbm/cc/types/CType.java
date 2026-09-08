@@ -18,7 +18,7 @@ import java.util.OptionalLong;
  */
 public sealed interface CType
         permits CType.Void, CType.Int, CType.BitInt, CType.Float, CType.Pointer, CType.Nullptr, CType.Array,
-        CType.Function {
+        CType.Function, CType.Record {
 
     Quals quals();
 
@@ -59,6 +59,10 @@ public sealed interface CType
     }
 
     default boolean isArray() {
+        return false;
+    }
+
+    default boolean isRecord() {
         return false;
     }
 
@@ -340,6 +344,44 @@ public sealed interface CType
         @Override
         public String spelling() {
             return Spelling.of(this);
+        }
+
+        @Override
+        public String toString() {
+            return spelling();
+        }
+    }
+
+    /**
+     * A struct or union type (6.2.5p22-23), identified by its tag: two
+     * record types are the same type iff they have the same tag, so
+     * equality is the tag's identity and interning never looks at the
+     * members. Complete once the tag has a layout.
+     */
+    record Record(Tag tag, Quals quals) implements CType {
+        @Override
+        public boolean isRecord() {
+            return true;
+        }
+
+        @Override
+        public boolean isComplete() {
+            return tag.layout().isPresent();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Record r && r.tag == tag && r.quals.equals(quals);
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(tag) * 31 + quals.hashCode();
+        }
+
+        @Override
+        public String spelling() {
+            return quals.prefix() + tag.keyword() + " " + tag.name().orElse("<anonymous>");
         }
 
         @Override
