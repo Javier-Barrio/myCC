@@ -28,17 +28,36 @@ final class ExprTyper {
 
     private final Types types;
     private final Bindings bindings;
+    private final TypeBuilder builder;
     private final Literals literals;
+    private final ConstEval constEval;
+
+    // Depth of sizeof/typeof operands being typed: no objects are created
+    // for what is not evaluated (6.5.4.4p2).
+    private int unevaluated;
 
     /** The string literals typed so far, in order; each one is its own object (6.4.5p7). */
     final List<StringData> strings = new ArrayList<>();
     private int nextId;
 
-    ExprTyper(@NonNull Types types, @NonNull Bindings bindings) {
+    ExprTyper(@NonNull Types types, @NonNull Bindings bindings, @NonNull TypeBuilder builder,
+              @NonNull ConstEval constEval) {
         this.types = types;
         this.bindings = bindings;
+        this.builder = builder;
         this.literals = new Literals(types);
+        this.constEval = constEval;
         this.nextId = bindings.symbolCount;
+    }
+
+    /** Types an operand that is not evaluated: the type is all that is wanted. */
+    TExpr typeUnevaluated(@NonNull Expr e) {
+        unevaluated++;
+        try {
+            return type(e);
+        } finally {
+            unevaluated--;
+        }
     }
 
     TExpr type(@NonNull Expr e) {
@@ -49,6 +68,8 @@ final class ExprTyper {
         if (e instanceof Expr.Index i) return index(i);
         if (e instanceof Expr.Unary u) return unary(u);
         if (e instanceof Expr.Call c) return call(c);
+        if (e instanceof Expr.TypeOperator t) return sizeOf(t.op(), builder.build(t.type()));
+        if (e instanceof Expr.StaticAssertion s) throw unsupported("static_assert as an expression", s.keyword());
         if (e instanceof Expr.Assign a) return assign(a);
         if (e instanceof Expr.Postfix p) return postfix(p);
         if (e instanceof Expr.Conditional c) return conditional(c);
@@ -75,7 +96,7 @@ final class ExprTyper {
         var name = new Token(TokenType.STRING_LITERAL, spelling, first.line, first.column);
         Symbol symbol = Symbol.anonymousStatic(nextId++, name);
         symbol.setType(types.array(value.elementType(), value.units().length));
-        strings.add(new StringData(symbol, value.units()));
+        if (unevaluated == 0) strings.add(new StringData(symbol, value.units()));
         return new TExpr.VarRef(symbol, symbol.type(), first);
     }
 
@@ -299,14 +320,14 @@ final class ExprTyper {
     }
 
     /** A null pointer constant (6.3.2.3p3) or a value of type {@code nullptr_t}. */
-    static boolean isNullish(Rvalue x) {
+    boolean isNullish(Rvalue x) {
         return x.type().isNullptr() || isNullPointerConstant(x);
     }
 
-    // An integer constant expression with value 0; until the constant
-    // evaluator exists only a literal 0 qualifies.
-    static boolean isNullPointerConstant(Rvalue x) {
-        return x instanceof TExpr.IntConst c && c.value() == 0 && c.type().isInteger();
+    // An integer constant expression with value 0.
+    boolean isNullPointerConstant(Rvalue x) {
+        if (!x.type().isInteger()) return false;
+        return constEval.fold(x).filter(c -> c instanceof TExpr.IntConst i && i.value() == 0).isPresent();
     }
 
     // 6.5.14 - 6.5.15: scalar operands, each tested against zero.
@@ -407,6 +428,11 @@ final class ExprTyper {
                     }
                 };
             }
+            case "sizeof", "_Countof" -> {
+                // The operand is not evaluated and, being under sizeof, an
+                // array does not decay (6.3.3.1p3, 6.5.4.4p2).
+                return sizeOf(op, typeUnevaluated(e.operand()).type());
+            }
             case "*" -> {
                 return deref(op, rvalue(type(e.operand())));
             }
@@ -424,6 +450,23 @@ final class ExprTyper {
 
     private static SemaException invalidOperand(Token op, Rvalue x) {
         return new SemaException("invalid operand to unary " + op.text + " ('" + x.type().spelling() + "')", op);
+    }
+
+    // ---- sizeof, alignof, _Countof (6.5.4.4 - 6.5.4.5) ------------------------------------------
+
+    // Each yields a size_t constant: the object size, the alignment, or
+    // the element count of an array; none applies to a function or an
+    // incomplete type.
+    private TExpr sizeOf(Token op, CType t) {
+        if (t.isFunction()) throw new SemaException(op.text + " of a function type", op);
+        if (op.text.equals("_Countof")) {
+            if (!(t instanceof CType.Array a)) throw new SemaException("_Countof requires an array type", op);
+            if (!a.isComplete()) throw new SemaException("_Countof of an incomplete array type", op);
+            return new TExpr.IntConst(a.size().getAsLong(), types.sizeT(), op);
+        }
+        if (!t.isComplete()) throw new SemaException(op.text + " of an incomplete type '" + t.spelling() + "'", op);
+        long value = op.text.equals("alignof") ? types.align(t) : types.size(t);
+        return new TExpr.IntConst(value, types.sizeT(), op);
     }
 
     // ---- conditional and comma (6.5.16, 6.5.18) ------------------------------------------------

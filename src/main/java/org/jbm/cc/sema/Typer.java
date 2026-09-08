@@ -3,11 +3,13 @@ package org.jbm.cc.sema;
 import lombok.NonNull;
 import org.jbm.cc.ast.AstWalker;
 import org.jbm.cc.ast.Decl;
+import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Stmt;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.tast.StringData;
 import org.jbm.cc.tast.TExpr;
+import org.jbm.cc.tast.TExpr.Rvalue;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
 import org.jbm.cc.types.X86_64SysV;
@@ -28,7 +30,9 @@ public final class Typer extends AstWalker {
     private final Types types;
     private final Bindings bindings;
     private final TypeBuilder builder;
+    private final ConstEval constEval;
     private final ExprTyper exprs;
+    private final Literals literals;
 
     // Expression statements typed so far, in order. Temporary: until the
     // statement tree exists this is how tests reach a typed expression.
@@ -42,7 +46,9 @@ public final class Typer extends AstWalker {
         this.types = types;
         this.bindings = bindings;
         this.builder = new TypeBuilder(types, bindings);
-        this.exprs = new ExprTyper(types, bindings);
+        this.constEval = new ConstEval(types);
+        this.exprs = new ExprTyper(types, bindings, builder, constEval);
+        this.literals = new Literals(types);
     }
 
     public static void type(@NonNull List<? extends Decl> unit, @NonNull Bindings bindings) {
@@ -64,6 +70,19 @@ public final class Typer extends AstWalker {
     @Override
     public Void visit(Stmt.ExprStmt s) {
         s.expr().ifPresent(e -> expressionStatements.add(exprs.type(e)));
+        return null;
+    }
+
+    // A static assertion (6.7.2), as a declaration or a member: the
+    // condition is an integer constant expression that must be nonzero.
+    @Override
+    public Void visit(Expr.StaticAssertion e) {
+        Rvalue condition = exprs.rvalue(exprs.type(e.condition()));
+        long value = constEval.requireInteger(condition, e.keyword(), "static assertion condition");
+        if (value == 0) {
+            String message = e.message().map(m -> ": " + Literals.text(literals.string(m.parts()))).orElse("");
+            throw new SemaException("static assertion failed" + message, e.keyword());
+        }
         return null;
     }
 
