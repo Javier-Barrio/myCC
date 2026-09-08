@@ -54,6 +54,16 @@ public final class Ilp32 implements Target {
     }
 
     @Override
+    public boolean bitFieldsMayStraddle() {
+        return false;
+    }
+
+    @Override
+    public boolean unnamedBitFieldsAffectAlignment() {
+        return false;
+    }
+
+    @Override
     public int pointerWidth() {
         return 32;
     }

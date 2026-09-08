@@ -203,7 +203,10 @@ final class TypeBuilder {
             var m = (Type.Member) decls.get(i);
             Token at = m.name().orElse(s.keyword());
             CType type = build(m.type());
-            if (m.bitWidth().isPresent()) throw unsupported("bit-fields", at);
+            if (m.bitWidth().isPresent()) {
+                fields.add(bitField(m, type, at, names));
+                continue;
+            }
             if (type.isFunction()) throw new SemaException("member has function type", at);
             boolean flexible = type instanceof CType.Array a && !a.isComplete();
             if (flexible) {
@@ -229,6 +232,24 @@ final class TypeBuilder {
         if (fields.isEmpty()) throw new SemaException(s.keyword().text + " has no members", s.keyword());
         tag.setLayout(Layout.of(types, tag.isUnion(), fields));
         return record;
+    }
+
+    // A bit-field (6.7.3.2p4-5): an integer type, a width that is an
+    // integer constant expression from 0 to the type's width (1 for
+    // bool), and zero only when unnamed.
+    private Layout.Field bitField(Type.Member m, CType type, Token at, java.util.Set<String> names) {
+        if (!type.isInteger()) {
+            throw new SemaException("bit-field has non-integer type '" + type.spelling() + "'", at);
+        }
+        long width = evaluate(m.bitWidth().get(), at, "bit-field width").value();
+        int max = type.isBool() ? 1 : types.width(type);
+        if (width < 0) throw new SemaException("negative bit-field width", at);
+        if (width > max) throw new SemaException("width of bit-field exceeds its type ('" + type.spelling() + "')", at);
+        if (width == 0 && m.name().isPresent()) throw new SemaException("named bit-field has zero width", at);
+        if (m.name().isPresent() && !names.add(m.name().get().text)) {
+            throw new SemaException("duplicate member '" + m.name().get().text + "'", at);
+        }
+        return new Layout.Field(m.name().map(n -> n.text), type, java.util.OptionalInt.of((int) width));
     }
 
     // ---- enumerations (6.7.3.3) --------------------------------------------------------------

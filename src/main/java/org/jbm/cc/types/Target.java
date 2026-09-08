@@ -25,6 +25,16 @@ public interface Target {
 
     int bitIntAlign(int width);
 
+    /**
+     * Whether a bit-field may straddle a boundary of its declared type's
+     * storage unit (6.7.3.2p13 leaves it to the implementation). When
+     * not, one that would is moved to the next unit.
+     */
+    boolean bitFieldsMayStraddle();
+
+    /** Whether an unnamed bit-field's declared type contributes to the record's alignment. */
+    boolean unnamedBitFieldsAffectAlignment();
+
     int pointerWidth();
 
     int pointerAlign();

@@ -336,7 +336,8 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
 
     @Override
     public String visit(TExpr.Member e) {
-        return "(member:" + e.type().spelling() + " " + e.base().accept(this) + " " + e.member().name() + ")";
+        String bits = e.member().bits().map(b -> ":" + b.bitOffset() + "/" + b.width()).orElse("");
+        return "(member:" + e.type().spelling() + " " + e.base().accept(this) + " " + e.member().name() + bits + ")";
     }
 
     @Override

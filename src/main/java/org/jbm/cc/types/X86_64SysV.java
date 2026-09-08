@@ -59,6 +59,16 @@ public final class X86_64SysV implements Target {
     }
 
     @Override
+    public boolean bitFieldsMayStraddle() {
+        return false;
+    }
+
+    @Override
+    public boolean unnamedBitFieldsAffectAlignment() {
+        return false;
+    }
+
+    @Override
     public int pointerWidth() {
         return 64;
     }
