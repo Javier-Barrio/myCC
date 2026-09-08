@@ -30,15 +30,21 @@ final class TypeBuilder {
 
     private final Types types;
     private final Bindings bindings;
-    private @Nullable IntegerEvaluator evaluator;
+    private @Nullable Hooks evaluator;
 
-    /** Evaluates an integer constant expression of the AST; supplied by the typer once expressions can be typed. */
-    interface IntegerEvaluator {
-        /** Throws when the expression does not fold or is not an integer. */
+    /**
+     * What a type can need from expressions: constant evaluation for sizes
+     * and widths, and typing for {@code typeof}. Supplied by the typer.
+     */
+    interface Hooks {
+        /** An integer constant expression's value; throws when it does not fold or is not an integer. */
         TExpr.IntConst evaluate(Expr e, Token at, String what);
 
         /** Empty when the expression does not fold; throws only on a typing error in it. */
         Optional<TExpr.IntConst> tryEvaluate(Expr e);
+
+        /** The type of an unevaluated expression, without lvalue conversion (6.7.3.6p3). */
+        CType typeOf(Expr e);
     }
 
     TypeBuilder(@NonNull Types types, @NonNull Bindings bindings) {
@@ -46,7 +52,7 @@ final class TypeBuilder {
         this.bindings = bindings;
     }
 
-    void setEvaluator(@NonNull IntegerEvaluator evaluator) {
+    void setEvaluator(@NonNull Hooks evaluator) {
         this.evaluator = evaluator;
     }
 
@@ -256,9 +262,13 @@ final class TypeBuilder {
         throw new SemaException("enumerator value " + v + " does not fit any integer type", at);
     }
 
+    // typeof / typeof_unqual (6.7.3.6): of a type-name or of an expression,
+    // which is not evaluated and keeps its own type (an array stays an
+    // array, an lvalue keeps its qualifiers). typeof_unqual strips the
+    // qualifiers, those of the element type for an array.
     private CType typeof(Type.Typeof t) {
-        if (t.type().isEmpty()) throw unsupported("typeof of an expression", t.keyword());
-        CType operand = build(t.type().get());
+        if (evaluator == null) throw new IllegalStateException("no expression hooks");
+        CType operand = t.type().isPresent() ? build(t.type().get()) : evaluator.typeOf(t.expr().orElseThrow());
         if (t.keyword().text.equals("typeof_unqual")) operand = types.unqualified(operand);
         return types.plusQuals(operand, quals(t.quals()));
     }

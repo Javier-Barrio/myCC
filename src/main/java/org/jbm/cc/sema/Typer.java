@@ -94,7 +94,7 @@ public final class Typer {
         this.constEval = new ConstEval(types);
         this.exprs = new ExprTyper(types, bindings, builder, constEval);
         this.literals = new Literals(types);
-        builder.setEvaluator(new TypeBuilder.IntegerEvaluator() {
+        builder.setEvaluator(new TypeBuilder.Hooks() {
             @Override
             public TExpr.IntConst evaluate(Expr e, Token at, String what) {
                 Rvalue v = exprs.rvalue(exprs.type(e));
@@ -110,6 +110,11 @@ public final class Typer {
                 Rvalue v = exprs.rvalue(exprs.type(e));
                 if (!v.type().isInteger()) throw new SemaException("size is not an integer", v.token());
                 return constEval.fold(v).map(c -> (TExpr.IntConst) c);
+            }
+
+            @Override
+            public CType typeOf(Expr e) {
+                return exprs.typeUnevaluated(e).type();
             }
         });
     }
