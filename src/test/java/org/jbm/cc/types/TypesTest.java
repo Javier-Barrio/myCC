@@ -4,6 +4,8 @@ import org.jbm.cc.types.CType.Int.Rank;
 import org.jbm.cc.types.CType.Int.Sign;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -167,6 +169,73 @@ class TypesTest {
         assertSame(x64.ullong(), x64.usualArithmetic(x64.llong(), x64.ulong()));
     }
 
+    // ---- arrays and functions ------------------------------------------------------------
+
+    @Test
+    void arraysAndFunctionsAreInternedAndAdjusted() {
+        assertSame(x64.array(x64.int_(), 3), x64.array(x64.int_(), 3));
+        assertNotSame(x64.array(x64.int_(), 3), x64.array(x64.int_(), 4));
+        assertNotSame(x64.array(x64.int_(), 3), x64.incompleteArray(x64.int_()));
+        assertFalse(x64.incompleteArray(x64.int_()).isComplete());
+        assertTrue(x64.array(x64.int_(), 3).isComplete());
+        assertFalse(x64.void_().isComplete());
+        var f = x64.function(x64.int_(), List.of(x64.array(x64.char_(), 4), x64.function(x64.void_(), List.of(), false),
+                x64.qualified(x64.int_(), Quals.CONST)), false);
+        assertSame(f, x64.function(x64.int_(), List.of(x64.pointer(x64.char_()),
+                x64.pointer(x64.function(x64.void_(), List.of(), false)), x64.int_()), false));
+        assertFalse(f.isComplete());
+        assertEquals(12, x64.size(x64.array(x64.int_(), 3)));
+        assertEquals(4, x64.align(x64.array(x64.int_(), 3)));
+        assertThrows(IllegalArgumentException.class, () -> x64.size(x64.incompleteArray(x64.int_())));
+    }
+
+    @Test
+    void qualifyingAnArrayQualifiesItsElements() {
+        CType a = x64.qualified(x64.array(x64.int_(), 2), Quals.CONST);
+        assertSame(x64.array(x64.qualified(x64.int_(), Quals.CONST), 2), a);
+        assertTrue(a.quals().isConst());
+        assertThrows(IllegalArgumentException.class,
+                () -> x64.qualified(x64.function(x64.int_(), List.of(), false), Quals.CONST));
+    }
+
+    // ---- compatibility and composite types --------------------------------------------------
+
+    @Test
+    void compatibility() {
+        CType intArr = x64.incompleteArray(x64.int_());
+        assertTrue(x64.compatible(intArr, x64.array(x64.int_(), 3)));
+        assertFalse(x64.compatible(x64.array(x64.int_(), 2), x64.array(x64.int_(), 3)));
+        assertTrue(x64.compatible(x64.pointer(intArr), x64.pointer(x64.array(x64.int_(), 2))));
+        assertFalse(x64.compatible(x64.int_(), x64.qualified(x64.int_(), Quals.CONST)));
+        assertFalse(x64.compatible(x64.pointer(x64.int_()), x64.pointer(x64.qualified(x64.int_(), Quals.CONST))));
+        assertFalse(x64.compatible(x64.int_(), x64.long_()));
+        assertFalse(x64.compatible(x64.char_(), x64.schar()));
+        var f1 = x64.function(x64.int_(), List.of(x64.incompleteArray(x64.char_())), false);
+        var f2 = x64.function(x64.int_(), List.of(x64.pointer(x64.char_())), false);
+        assertSame(f1, f2, "adjusted parameters make these one type");
+        assertFalse(x64.compatible(f1, x64.function(x64.int_(), List.of(x64.pointer(x64.char_())), true)));
+        assertFalse(x64.compatible(f1, x64.function(x64.long_(), List.of(x64.pointer(x64.char_())), false)));
+        var g1 = x64.function(x64.int_(), List.of(x64.pointer(intArr)), false);
+        var g2 = x64.function(x64.int_(), List.of(x64.pointer(x64.array(x64.int_(), 5))), false);
+        assertTrue(x64.compatible(g1, g2));
+    }
+
+    @Test
+    void compositeTypes() {
+        CType intArr = x64.incompleteArray(x64.int_());
+        assertSame(x64.array(x64.int_(), 3), x64.composite(intArr, x64.array(x64.int_(), 3)));
+        assertSame(x64.array(x64.int_(), 3), x64.composite(x64.array(x64.int_(), 3), intArr));
+        assertSame(intArr, x64.composite(intArr, intArr));
+        // 6.2.7p5's example: int (*)(int (*)[], int (*)[3]) composes to int (*)(int (*)[3], int (*)[3]).
+        var f1 = x64.function(x64.int_(), List.of(x64.pointer(intArr), x64.pointer(x64.array(x64.int_(), 3))), false);
+        var f2 = x64.function(x64.int_(), List.of(x64.pointer(x64.array(x64.int_(), 3)), x64.pointer(intArr)), false);
+        var expected = x64.function(x64.int_(),
+                List.of(x64.pointer(x64.array(x64.int_(), 3)), x64.pointer(x64.array(x64.int_(), 3))), false);
+        assertSame(expected, x64.composite(f1, f2));
+        assertSame(x64.pointer(expected), x64.composite(x64.pointer(f1), x64.pointer(f2)));
+        assertThrows(IllegalArgumentException.class, () -> x64.composite(x64.int_(), x64.long_()));
+    }
+
     // ---- spelling ------------------------------------------------------------------------
 
     @Test
@@ -183,5 +252,23 @@ class TypesTest {
         assertEquals("void * *", x64.pointer(x64.pointer(x64.void_())).spelling());
         assertEquals("const volatile int",
                 x64.qualified(x64.int_(), new Quals(true, true, false, false)).spelling());
+    }
+
+    @Test
+    void declaratorSpelling() {
+        CType i = x64.int_();
+        assertEquals("int [3]", x64.array(i, 3).spelling());
+        assertEquals("int []", x64.incompleteArray(i).spelling());
+        assertEquals("int [2][3]", x64.array(x64.array(i, 3), 2).spelling());
+        assertEquals("int *[3]", x64.array(x64.pointer(i), 3).spelling());
+        assertEquals("int (*)[3]", x64.pointer(x64.array(i, 3)).spelling());
+        assertEquals("int (void)", x64.function(i, List.of(), false).spelling());
+        assertEquals("int (char, ...)", x64.function(i, List.of(x64.char_()), true).spelling());
+        assertEquals("int (*)(char)", x64.pointer(x64.function(i, List.of(x64.char_()), false)).spelling());
+        assertEquals("int (*(*)[3])(void)",
+                x64.pointer(x64.array(x64.pointer(x64.function(i, List.of(), false)), 3)).spelling());
+        assertEquals("char *(*)(int)", x64.pointer(x64.function(x64.pointer(x64.char_()), List.of(i), false)).spelling());
+        assertEquals("const char *(void)", x64.function(x64.pointer(x64.qualified(x64.char_(), Quals.CONST)), List.of(), false).spelling());
+        assertEquals("int * const *", x64.pointer(x64.qualified(x64.pointer(i), Quals.CONST)).spelling());
     }
 }
