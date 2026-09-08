@@ -550,6 +550,121 @@ class TyperTest {
         assertTrue(exprFails("int f(int); void g(void);", "f(g())").getMessage().contains("type void"));
     }
 
+    // ---- sizeof, alignof, _Countof and constant expressions ---------------------------------------
+
+    @Test
+    void sizeofAlignofAndCountof() {
+        assertEquals("4:unsigned long", expr("", "sizeof(int)"));
+        assertEquals("1:unsigned long", expr("", "sizeof(char)"));
+        assertEquals("8:unsigned long", expr("", "sizeof(int *)"));
+        assertEquals("16:unsigned long", expr("", "sizeof(long double)"));
+        assertEquals("24:unsigned long", expr("", "sizeof(int[2][3])"));
+        assertEquals("12:unsigned long", expr("int a[3];", "sizeof a"), "no decay under sizeof");
+        assertEquals("12:unsigned long", expr("int a[3];", "sizeof(a)"));
+        assertEquals("8:unsigned long", expr("int a[3];", "sizeof(a + 1)"), "decayed in an expression");
+        assertEquals("8:unsigned long", expr("", "sizeof(1 + 1.5)"));
+        assertEquals("4:unsigned long", expr("", "sizeof \"abc\""));
+        assertEquals("4:unsigned long", expr("", "sizeof 'a'"), "a character constant is an int");
+        assertEquals("3:unsigned long", expr("int a[3];", "_Countof a"));
+        assertEquals("5:unsigned long", expr("", "_Countof(int[5])"));
+        assertEquals("2:unsigned long", expr("int m[2][3];", "_Countof(m)"));
+        assertEquals("8:unsigned long", expr("", "alignof(double)"));
+        assertEquals("1:unsigned long", expr("", "alignof(char)"));
+        assertEquals("4:unsigned long", expr("", "alignof(int[7])"));
+        assertEquals("4:unsigned int", exprOn(new Types(Ilp32.INSTANCE), "", "sizeof(long)"));
+        assertEquals("4:unsigned long", expr("int i;", "sizeof(i++)"), "the operand is not evaluated");
+        assertEquals("4:unsigned long", expr("int f(void);", "sizeof f()"));
+        assertTrue(exprFails("", "sizeof(void)").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int f(void);", "sizeof f").getMessage().contains("function type"));
+        assertTrue(exprFails("", "sizeof(int (void))").getMessage().contains("function type"));
+        assertTrue(exprFails("int *p;", "_Countof p").getMessage().contains("requires an array"));
+        assertTrue(exprFails("", "_Countof(int[])").getMessage().contains("incomplete"));
+        assertTrue(exprFails("", "sizeof(int[])").getMessage().contains("incomplete"));
+        assertTrue(exprFails("", "alignof(void)").getMessage().contains("incomplete"));
+    }
+
+    @Test
+    void sizeofDoesNotCreateStringObjects() {
+        var unit = parse("void f(void) { sizeof \"abc\"; \"kept\"; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        assertEquals(1, typer.strings().size());
+        assertEquals("\"kept\"", typer.strings().get(0).symbol().name);
+    }
+
+    private static void holds(String assertion) {
+        type("static_assert(" + assertion + ");");
+    }
+
+    private static String staticAssertFails(String assertion) {
+        return fails("static_assert(" + assertion + ");").getMessage();
+    }
+
+    @Test
+    void integerConstantExpressions() {
+        holds("1");
+        holds("true");
+        holds("7 / 2 == 3 && -7 / 2 == -3 && -7 % 2 == -1 && 7 % -2 == 1");
+        holds("10u / 3 == 3 && 10u % 3 == 1");
+        holds("5 % 3 == 2 && (5 & 3) == 1 && (5 | 3) == 7 && (5 ^ 3) == 6");
+        holds("~0 == -1 && !0 == 1 && !5 == 0 && -(-3) == 3");
+        holds("1 && 2 && !(0 || 0) && (0 || 3)");
+        holds("(1 ? 2 : 3) == 2 && (0 ? 2 : 3) == 3");
+        holds("2 < 3 && 3 <= 3 && 4 > 3 && 3 >= 3 && 1 != 2 && 2 == 2");
+        holds("-8 >> 1 == -4 && 1 << 4 == 16 && 0x80000000u >> 31 == 1");
+        holds("1 << 31 == -2147483647 - 1");
+        holds("-1 > 0u");
+        holds("0xFFFFFFFFu + 1 == 0");
+        holds("18446744073709551615ul + 1 == 0");
+        holds("'\\xff' == -1 && 'a' == 97");
+        holds("2147483647 + 1u == 2147483648u");
+        holds("-2147483647 - 1 < 0");
+        holds("1000000 * 1000000L == 1000000000000");
+        holds("(0 ? 1 / 0 : 1) == 1");
+    }
+
+    @Test
+    void floatingConstantExpressions() {
+        holds("1.5 + 1 == 2.5");
+        holds("1.0f / 2 == 0.5");
+        holds("0.1f != 0.1");
+        holds("1e10 > 1e9 && -1.5 < 0 && !0.0 && 2.5 && (1.5 ? 1 : 0)");
+        assertTrue(staticAssertFails("1.5").contains("integer constant expression"));
+    }
+
+    @Test
+    void constantExpressionErrors() {
+        assertTrue(staticAssertFails("2147483647 + 1").contains("overflow"));
+        assertTrue(staticAssertFails("-2147483647 - 2").contains("overflow"));
+        assertTrue(staticAssertFails("65536 * 65536").contains("overflow"));
+        assertTrue(staticAssertFails("1 / 0").contains("division by zero"));
+        assertTrue(staticAssertFails("1 % 0").contains("division by zero"));
+        assertTrue(staticAssertFails("1 << 40").contains("shift amount"));
+        assertTrue(staticAssertFails("1 << -1").contains("shift amount"));
+        assertTrue(fails("int x; static_assert(x);").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int f(void); static_assert(f());").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((x, 1));").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((x = 1));").getMessage().contains("not a constant expression"));
+        holds("sizeof(int) == 4 && _Countof(int[3]) == 3");
+    }
+
+    @Test
+    void staticAssertionsReportTheirMessage() {
+        var e = fails("static_assert(0, \"boom\");");
+        assertTrue(e.getMessage().contains("static assertion failed: boom"), e.getMessage());
+        assertTrue(fails("static_assert(1 == 2);").getMessage().contains("static assertion failed"));
+        assertTrue(fails("static_assert(0, u\"wide\");").getMessage().contains("wide"));
+        type("void f(void) { static_assert(sizeof(int) == 4, \"in a block\"); }");
+        assertTrue(fails("void f(void) { static_assert(0); }").getMessage().contains("static assertion failed"));
+    }
+
+    @Test
+    void nullPointerConstantsAreFolded() {
+        assertEquals("(assign:int * p:int * (null:int * (sub:int 1:int 1:int)))", expr("int *p;", "p = 1 - 1"));
+        assertEquals("(eq:int (rv:int * p:int *) (null:int * (int-to-int:long 0:int)))", expr("int *p;", "p == 0L")
+                .replace("(null:int * 0:long)", "(null:int * (int-to-int:long 0:int))"));
+        assertTrue(exprFails("int *p;", "p = 1 - 2").getMessage().contains("incompatible types"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));

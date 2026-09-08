@@ -31,6 +31,22 @@ final class Literals {
     record StringValue(CType elementType, int[] units) {
     }
 
+    /** The text of a string value, for diagnostics; the terminating null is dropped. */
+    static String text(StringValue v) {
+        int n = v.units().length - 1;
+        if (v.elementType() instanceof CType.Int i && i.rank() == CType.Int.Rank.CHAR) {
+            byte[] bytes = new byte[n];
+            for (int k = 0; k < n; k++) bytes[k] = (byte) v.units()[k];
+            return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        }
+        if (v.elementType() instanceof CType.Int i && i.rank() == CType.Int.Rank.SHORT) {
+            char[] chars = new char[n];
+            for (int k = 0; k < n; k++) chars[k] = (char) v.units()[k];
+            return new String(chars);
+        }
+        return new String(v.units(), 0, n);
+    }
+
     // ---- dispatch --------------------------------------------------------------------
 
     TExpr.Constant constant(@NonNull Token t) {
