@@ -545,6 +545,14 @@ assertEquals("(member:int (materialize:struct S (call:struct S (fdecay:struct S(
              expr("struct S { int i; } f(void);", "f().i"));
 ```
 
+Plus a golden-file corpus under `src/test/resources/typed/`: one C program
+per family of typed constructs (with macros in play), run end to end by
+`TypedCorpusTest` and compared to the `.typed` file beside it, and walked by
+`TypedTreeInvariants`, a `TVisitor` that asserts the structural rule of every
+node kind (operand types, conversions that change the type, jump targets,
+listed locals, constant static initializers, `TargetValue` identity). A test
+also checks that every node kind prints somewhere in the corpus.
+
 Plus: `TypesTest` (interning identity, compatibility, composite types),
 `LayoutTest` (offsets and sizes against known GCC output), `ConstEvalTest`
 (wraparound, unsigned, float to int, address constants), `InitializersTest`

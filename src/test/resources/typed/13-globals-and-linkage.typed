@@ -1,0 +1,8 @@
+(extern e:int)
+(global t:int)
+(global s:int 1:int)
+(global a:int [2])
+(global count:int 0:int)
+(global later:double 2.5:double)
+(extern never_defined:int [])
+(function f:void (void) (params) (locals) (block (expr (compound-assign:int count:int (add:int (target:int) (rv:int e:int)))) (expr (assign:double later:double (int-to-float:double (rv:int count:int))))))

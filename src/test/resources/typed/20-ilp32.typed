@@ -1,0 +1,4 @@
+(global l:long 2147483647:long)
+(global ul:unsigned long 4294967295:unsigned long)
+(global sizes:int 44:int)
+(function f:void (unsigned int, long, int *, int *) (params u:unsigned int l:long p:int * q:int *) (locals z:unsigned long diff:long c:char ci:int) (block (expr (assign:long l:long (int-to-int:long (add:unsigned long (int-to-int:unsigned long (rv:unsigned int u:unsigned int)) (int-to-int:unsigned long (rv:long l:long)))))) (local z:unsigned long (int-to-int:unsigned long 4:unsigned int)) (local diff:long (int-to-int:long (ptrdiff:int (rv:int * p:int *) (rv:int * q:int *)))) (local c:char (int-to-int:char 255:int)) (local ci:int (int-to-int:int (rv:char c:char)))))
