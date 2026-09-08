@@ -261,6 +261,24 @@ public final class Resolver extends AstWalker {
         bindings.tags.put(node, symbol);
     }
 
+    // A typedef-name in a type refers to the visible typedef (6.7.9). The
+    // parser already checked the name was a typedef when it parsed it, but
+    // the syntactic scope table and this one can disagree, so the lookup is
+    // repeated here and the typing pass reads the binding rather than the
+    // node's aliased type: a typedef's semantic type is computed once, at
+    // its declaration.
+    @Override
+    public Void visit(Type.TypedefName t) {
+        if (bindings.typedefs.containsKey(t)) return null;
+        Symbol symbol = table.lookup(t.name().text).orElseThrow(
+                () -> new SemaException("unknown type name '" + t.name().text + "'", t.name()));
+        if (!(symbol instanceof Symbol.Typedef typedef)) {
+            throw new SemaException("'" + t.name().text + "' does not name a type", t.name());
+        }
+        bindings.typedefs.put(t, typedef);
+        return null;
+    }
+
     @Override
     public Void visit(Type.Function t) {
         // Function prototype scope (6.2.1p4): parameter names are visible

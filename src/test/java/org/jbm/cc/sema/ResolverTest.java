@@ -192,6 +192,38 @@ class ResolverTest {
     }
 
     @Test
+    void typedefNamesAreBoundToTheirTypedef() {
+        var b = resolve("typedef int T; T a, *b; const T c; void f(T p) { T q; }");
+        var typedefs = b.typedefs.values().stream().distinct().toList();
+        assertEquals(1, typedefs.size());
+        assertEquals("T", typedefs.get(0).name);
+        assertEquals(0, typedefs.get(0).scopeDepth);
+        // One binding per typedef-name node: `T a, *b` shares one node, `const T`
+        // is another, and each parameter/local spelling is its own.
+        assertEquals(4, b.typedefs.size());
+        for (var use : b.typedefs.keySet()) assertSame(typedefs.get(0), b.typedefOf(use));
+    }
+
+    @Test
+    void typedefNamesFollowBlockScope() {
+        var b = resolve("""
+                typedef int T;
+                void f(void) {
+                    T x;
+                    { typedef char T; T y; }
+                    T z;
+                    { T T; T = 1; }
+                }
+                """);
+        var byLine = b.typedefs.entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> e.getKey().name().line))
+                .map(e -> e.getKey().name().line + " -> " + e.getValue().declaredAt.line)
+                .toList();
+        assertEquals(List.of("3 -> 1", "4 -> 4", "5 -> 1", "6 -> 1"), byLine);
+        assertEquals(List.of("T@6:12 -> VARIABLE T@6:9"), uses(b));
+    }
+
+    @Test
     void sharedSpecifiersAreResolvedOnce() {
         // The enum body is one node shared by every declarator (and by every
         // use of the typedef); its enumerators must not be redeclared.
