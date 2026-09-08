@@ -187,6 +187,10 @@ public final class Typer {
                 init = Optional.of(r.init());
             }
             if (v.storage == Symbol.Variable.Storage.STATIC) {
+                // The initializer of an object with static storage duration
+                // is made of constant expressions (6.7.11p4); each item is
+                // folded to its constant here.
+                init = init.map(i -> constantInit(i, id.name()));
                 if (init.isPresent() || !globals.containsKey(v)) globals.put(v, init);
             } else {
                 if (!v.type().isComplete()) {
@@ -197,6 +201,15 @@ public final class Typer {
                 out.add(new TStmt.LocalDecl(v, init, id.name()));
             }
         }
+    }
+
+    private TInit constantInit(TInit init, Token at) {
+        var items = new ArrayList<TInit.Item>(init.items().size());
+        for (var item : init.items()) {
+            TExpr.Constant c = constEval.require(item.value(), item.value().token(), "initializer element");
+            items.add(new TInit.Item(item.offset(), c));
+        }
+        return new TInit(items);
     }
 
     private void functionDefinition(Decl.FunctionDefinition d) {

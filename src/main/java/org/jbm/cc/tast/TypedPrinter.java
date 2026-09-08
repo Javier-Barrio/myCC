@@ -352,6 +352,13 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
     }
 
     @Override
+    public String visit(TExpr.AddrConst e) {
+        String value = e.base().map(s -> "&" + s.name + (e.offset() != 0 ? "+" + e.offset() : ""))
+                .orElse(e.isNull() ? "null" : Long.toString(e.offset()));
+        return value + ":" + e.type().spelling();
+    }
+
+    @Override
     public String visit(TExpr.NullptrConst e) {
         return "nullptr:" + e.type().spelling();
     }

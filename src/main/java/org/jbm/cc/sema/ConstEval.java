@@ -22,7 +22,10 @@ import java.util.Optional;
  * the node is not a constant expression; nothing is memoized, since each
  * constant-required site folds its own expression once.
  * <p>
- * Address constants (6.6p9) are not folded yet.
+ * Address constants (6.6p9): the address of a static-storage object or a
+ * function, a member or element of one, and pointer arithmetic on such
+ * an address fold to {@link TExpr.AddrConst}; a null pointer constant is
+ * the address constant with no base.
  */
 final class ConstEval implements TVisitor<@Nullable Constant> {
 
@@ -94,7 +97,27 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     private static boolean isZero(Constant c) {
         if (c instanceof TExpr.IntConst i) return i.value() == 0;
         if (c instanceof TExpr.FloatConst f) return f.value() == 0.0;
+        if (c instanceof TExpr.AddrConst a) return a.isNull();
         return true; // nullptr
+    }
+
+    // The address an lvalue designates, when it is a constant: an object
+    // with static storage duration (6.6p9), a member or element of one.
+    private TExpr.@Nullable AddrConst address(TExpr.Lvalue lv, CType pointerType, Token at) {
+        if (lv instanceof TExpr.VarRef v) {
+            if (!(v.symbol() instanceof Symbol.Variable var) || var.storage != Symbol.Variable.Storage.STATIC) return null;
+            return new TExpr.AddrConst(Optional.of(v.symbol()), 0, pointerType, at);
+        }
+        if (lv instanceof TExpr.Member m) {
+            if (m.member().bits().isPresent()) return null;
+            TExpr.AddrConst base = address(m.base(), pointerType, at);
+            return base == null ? null : new TExpr.AddrConst(base.base(), base.offset() + m.member().offset(), pointerType, at);
+        }
+        if (lv instanceof TExpr.Deref d) {
+            Constant p = d.pointer().accept(this);
+            return p instanceof TExpr.AddrConst a ? new TExpr.AddrConst(a.base(), a.offset(), pointerType, at) : null;
+        }
+        return null;
     }
 
     // ---- leaves ------------------------------------------------------------------------------
@@ -144,6 +167,11 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
         return e;
     }
 
+    @Override
+    public Constant visit(TExpr.AddrConst e) {
+        return e;
+    }
+
     // ---- conversions ---------------------------------------------------------------------------
 
     @Override
@@ -153,12 +181,14 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     @Override
     public Constant visit(TExpr.ArrayDecay e) {
-        return null;
+        return address(e.operand(), e.type(), e.token());
     }
 
     @Override
     public Constant visit(TExpr.FunctionDecay e) {
-        return null;
+        if (e.operand() instanceof TExpr.FuncRef f) return new TExpr.AddrConst(Optional.of(f.symbol()), 0, e.type(), e.token());
+        Constant p = ((TExpr.FuncDeref) e.operand()).pointer().accept(this);
+        return p instanceof TExpr.AddrConst a ? new TExpr.AddrConst(a.base(), a.offset(), e.type(), e.token()) : null;
     }
 
     @Override
@@ -219,14 +249,20 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     @Override
     public Constant visit(TExpr.PtrToPtr e) {
-        return null;
+        Constant c = e.operand().accept(this);
+        return c instanceof TExpr.AddrConst a ? new TExpr.AddrConst(a.base(), a.offset(), e.type(), e.token()) : null;
     }
 
+    // An integer cast to a pointer is an address constant in the
+    // implementation-defined sense of 6.6p10: the absolute address.
     @Override
     public Constant visit(TExpr.IntToPtr e) {
-        return null;
+        Constant c = e.operand().accept(this);
+        return c instanceof TExpr.IntConst i ? new TExpr.AddrConst(Optional.empty(), i.value(), e.type(), e.token()) : null;
     }
 
+    // A pointer's integer value is not a constant expression (6.6p10 lets
+    // an implementation accept it; this one does not).
     @Override
     public Constant visit(TExpr.PtrToInt e) {
         return null;
@@ -234,19 +270,24 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     @Override
     public Constant visit(TExpr.NullToPtr e) {
-        return null;
+        Constant c = e.operand().accept(this);
+        return c == null ? null : new TExpr.AddrConst(Optional.empty(), 0, e.type(), e.token());
     }
 
     // ---- pointer operators ---------------------------------------------------------------------
 
     @Override
     public Constant visit(TExpr.AddrOf e) {
-        return null;
+        return address(e.operand(), e.type(), e.token());
     }
 
     @Override
     public Constant visit(TExpr.PtrAdd e) {
-        return null;
+        Constant p = e.pointer().accept(this);
+        Constant i = e.index().accept(this);
+        if (!(p instanceof TExpr.AddrConst a) || !(i instanceof TExpr.IntConst n)) return null;
+        long element = types.size(((CType.Pointer) e.type()).target());
+        return new TExpr.AddrConst(a.base(), a.offset() + n.value() * element, e.type(), e.token());
     }
 
     @Override
@@ -365,7 +406,15 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
         if (l instanceof TExpr.IntConst a && r instanceof TExpr.IntConst b) cmp = big(a).compareTo(big(b));
         else if (l instanceof TExpr.FloatConst a && r instanceof TExpr.FloatConst b) cmp = Double.compare(a.value(), b.value());
         else if (l instanceof TExpr.NullptrConst && r instanceof TExpr.NullptrConst) cmp = 0;
-        else return null;
+        else if (l instanceof TExpr.AddrConst a && r instanceof TExpr.AddrConst b) {
+            // Addresses compare when they share a base; distinct objects
+            // only for equality, where they are never equal (6.5.10p6).
+            boolean sameBase = a.base().isEmpty() && b.base().isEmpty()
+                    || a.base().isPresent() && b.base().isPresent() && a.base().get() == b.base().get();
+            if (sameBase) cmp = Long.compare(a.offset(), b.offset());
+            else if (e instanceof TExpr.Eq || e instanceof TExpr.Ne) cmp = 1;
+            else return null;
+        } else return null;
         return intResult(test.test(cmp) ? 1 : 0, e.token());
     }
 
