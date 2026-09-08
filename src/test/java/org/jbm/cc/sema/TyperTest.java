@@ -37,6 +37,26 @@ class TyperTest {
         return bindings;
     }
 
+    /** The typed unit, printed one item per line. */
+    private static String unit(String source) {
+        var unit = parse(source);
+        return TypedPrinter.print(Typer.type(unit, Resolver.resolve(unit)));
+    }
+
+    /** The printed definition of the last function in {@code source}. */
+    private static String function(String source) {
+        var unit = parse(source);
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        return TypedPrinter.print(typed.functions().get(typed.functions().size() - 1));
+    }
+
+    /** The printed body of {@code void f(void) { body }} after {@code decls}. */
+    private static String body(String decls, String body) {
+        var unit = parse(decls + "\nvoid f(void) { " + body + " }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        return TypedPrinter.print(typed.functions().get(typed.functions().size() - 1).body());
+    }
+
     private static Bindings type(String source) {
         return type(source, new Types(X86_64SysV.INSTANCE));
     }
@@ -663,6 +683,121 @@ class TyperTest {
         assertEquals("(eq:int (rv:int * p:int *) (null:int * (int-to-int:long 0:int)))", expr("int *p;", "p == 0L")
                 .replace("(null:int * 0:long)", "(null:int * (int-to-int:long 0:int))"));
         assertTrue(exprFails("int *p;", "p = 1 - 2").getMessage().contains("incompatible types"));
+    }
+
+    // ---- statements and functions ------------------------------------------------------------
+
+    @Test
+    void functionsListParametersAndLocals() {
+        assertEquals("(function f:int (int, char) (params a:int b:char) (locals c:int d:double) "
+                        + "(block (local c:int (add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))) "
+                        + "(block (local d:double (int-to-float:double (rv:int c:int)))) (return (rv:int c:int))))",
+                function("int f(int a, char b) { int c = a + b; { double d = c; } return c; }"));
+        assertEquals("(function g:void (void) (params) (locals) (block))", function("void g(void) {}"));
+        assertEquals("(function h:int (int) (params) (locals) (block (return 1:int)))", function("int h(int) { return 1; }"));
+    }
+
+    @Test
+    void expressionStatementsAndNullStatements() {
+        assertEquals("(block (expr (assign:int a:int 1:int)) (block) (expr (rv:int a:int)) (expr (call:void (fdecay:void (*)(void) g:void (void)))))",
+                body("int a; void g(void);", "a = 1; ; a; g();"));
+    }
+
+    @Test
+    void ifWhileDoFor() {
+        assertEquals("(block (if (to-bool:bool (rv:int a:int)) (expr (assign:int a:int 0:int)) (expr (assign:int a:int 1:int))))",
+                body("int a;", "if (a) a = 0; else a = 1;"));
+        assertEquals("(block (if (to-bool:bool (rv:int * p:int *)) (block)))", body("int *p;", "if (p) {}"));
+        assertEquals("(block (if (rv:bool b:bool) (block)))", body("bool b;", "if (b) {}"));
+        assertEquals("(block (while (lt:int (rv:int i:int) 10:int) (expr (compound-assign:int i:int (add:int (target:int) 1:int)))))",
+                body("int i;", "while (i < 10) i++;").replace("(to-bool:bool (lt:int (rv:int i:int) 10:int))", "(lt:int (rv:int i:int) 10:int)"));
+        assertEquals("(block (do (block) (to-bool:bool (rv:int i:int))))", body("int i;", "do {} while (i);"));
+        assertEquals("(block (for (init (local k:int 0:int)) (to-bool:bool (lt:int (rv:int k:int) 3:int)) (compound-assign:int k:int (add:int (target:int) 1:int)) (block)))",
+                body("", "for (int k = 0; k < 3; k++) {}"));
+        assertEquals("(block (for (init (expr (assign:int i:int 0:int))) _ _ (break for)))", body("int i;", "for (i = 0;;) break;"));
+        assertEquals("(block (for (init) _ _ (block)))", body("", "for (;;) {}"));
+        assertTrue(fails("void f(void) { void g(void); if (g()) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("void f(void) { void g(void); while (g()) {} }").getMessage().contains("must be scalar"));
+    }
+
+    @Test
+    void selectionHeadersDeclareIntoTheirOwnScope() {
+        assertEquals("(block (block (local x:int 3:int) (if (to-bool:bool (rv:int x:int)) (block))))", body("", "if (int x = 3) {}"));
+        assertEquals("(block (block (local x:int 3:int) (if (gt:int (rv:int x:int) 2:int) (block))))",
+                body("", "if (int x = 3; x > 2) {}").replace("(to-bool:bool (gt:int (rv:int x:int) 2:int))", "(gt:int (rv:int x:int) 2:int)"));
+        assertEquals("(block (block (local c:char (int-to-int:char 65:int)) (switch (int-to-int:int (rv:char c:char)) (cases 65) (block (label case 65) (break switch)))))",
+                body("", "switch (char c = 65) { case 'A': break; }"));
+    }
+
+    @Test
+    void switchCasesAreConvertedToThePromotedType() {
+        assertEquals("(block (switch (int-to-int:int (rv:char c:char)) (cases 1 2...5 default) (block (label case 1) (label case 2...5) (break switch) (label default) (block))))",
+                body("char c;", "switch (c) { case 1: case 2 ... 5: break; default: {} }"));
+        assertEquals("(block (switch (rv:long l:long) (cases -1) (block (label case -1) (block))))", body("long l;", "switch (l) { case -1: {} }"));
+        assertEquals("(block (switch (rv:unsigned int u:unsigned int) (cases 4294967295) (block (label case 4294967295) (block))))",
+                body("unsigned u;", "switch (u) { case -1: {} }"));
+        assertEquals("(block (switch (rv:int i:int) (cases 0) (block (label case 0))))", body("int i;", "switch (i) { case 0: }"));
+        assertTrue(fails("void f(double d) { switch (d) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1: case 1: {} } }").getMessage().contains("duplicate case"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1 ... 3: case 2: {} } }").getMessage().contains("duplicate case"));
+        assertTrue(fails("void f(int i) { switch (i) { case 2: case 1 ... 3: {} } }").getMessage().contains("overlaps"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1 ... 3: case 3 ... 4: {} } }").getMessage().contains("overlapping"));
+        assertTrue(fails("void f(int i) { switch (i) { case 3 ... 1: {} } }").getMessage().contains("empty case range"));
+        assertTrue(fails("void f(int i) { switch (i) { default: default: {} } }").getMessage().contains("multiple default"));
+        assertTrue(fails("void f(int i) { switch (i) { case i: {} } }").getMessage().contains("not a constant"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1.5: {} } }").getMessage().contains("not an integer"));
+    }
+
+    @Test
+    void jumpsShareTheirTargetsWithTheStatementsTheyReach() {
+        assertEquals("(block (label top) (expr (compound-assign:int i:int (add:int (target:int) 1:int))) (if (lt:int (rv:int i:int) 3:int) (goto top)))",
+                body("int i;", "top: i++; if (i < 3) goto top;").replace("(to-bool:bool (lt:int (rv:int i:int) 3:int))", "(lt:int (rv:int i:int) 3:int)"));
+        assertEquals("(block (goto end) (label end))", body("", "goto end; end:"));
+        assertEquals("(block (label outer) (while (rv:bool b:bool) (while (rv:bool b:bool) (block (break while) (continue while) (break while) (continue while)))))",
+                body("bool b;", "outer: while (b) while (b) { break outer; continue outer; break; continue; }"));
+        var unit = parse("void f(int i) { top: if (i) goto top; while (i) { if (i) break; else continue; } }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var items = typed.functions().get(0).body().items();
+        var labeled = (org.jbm.cc.tast.TStmt.Labeled) items.get(0);
+        var ifStmt = (org.jbm.cc.tast.TStmt.If) items.get(1);
+        assertSame(labeled.target(), ((org.jbm.cc.tast.TStmt.Goto) ifStmt.thenBranch()).target());
+        var loop = (org.jbm.cc.tast.TStmt.While) items.get(2);
+        var inner = (org.jbm.cc.tast.TStmt.If) ((org.jbm.cc.tast.TStmt.Block) loop.body()).items().get(0);
+        assertSame(loop.target(), ((org.jbm.cc.tast.TStmt.Break) inner.thenBranch()).target());
+        assertSame(loop.target(), ((org.jbm.cc.tast.TStmt.Continue) inner.elseBranch().orElseThrow()).target());
+    }
+
+    @Test
+    void returnConvertsToTheReturnType() {
+        assertEquals("(function f:double (int) (params a:int) (locals) (block (return (int-to-float:double (rv:int a:int)))))",
+                function("double f(int a) { return a; }"));
+        assertEquals("(function p:const char *(void) (params) (locals) (block (return (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))))",
+                function("const char *p(void) { return \"x\"; }"));
+        assertEquals("(function v:void (void) (params) (locals) (block (return)))", function("void v(void) { return; }"));
+        assertEquals("(function w:void (void) (params) (locals) (block (return (call:void (fdecay:void (*)(void) g:void (void))))))",
+                function("void g(void); void w(void) { return g(); }"));
+        assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
+        assertTrue(fails("void f(void) { return 1; }").getMessage().contains("should not return a value"));
+        assertTrue(fails("int *f(void) { return 1; }").getMessage().contains("incompatible types when returning"));
+    }
+
+    @Test
+    void localsStaticsAndExternsInBlocks() {
+        assertEquals("(global s:int 1:int)\n(global e:int)\n(function f:void (void) (params) (locals a:int) "
+                        + "(block (local a:int) (expr (assign:int a:int (add:int (rv:int s:int) (rv:int e:int))))))",
+                unit("void f(void) { static int s = 1; extern int e; int a; a = s + e; }"));
+        assertTrue(fails("void f(void) { void v; }").getMessage().contains("incomplete type"));
+        assertTrue(fails("void f(void) { typedef int T = 1; }").getMessage().contains("cannot have an initializer"));
+        assertTrue(fails("void f(void) { int a[3] = {1, 2, 3}; }").getMessage().contains("not supported yet"));
+    }
+
+    @Test
+    void globalsKeepTheirDefinitionsInitializer() {
+        assertEquals("(global x:int 3:int)\n(global y:int)\n(global p:const char * (ptr-to-ptr:const char * (decay:char * \"hi\":char [3])))\n(string \"hi\":char [3])",
+                unit("int x; int x = 3; int y; extern int y; const char *p = \"hi\";"));
+        assertEquals("(global d:double (int-to-float:double 1:int))", unit("double d = 1;"));
+        assertTrue(fails("int f(void) = 1;").getMessage().contains("cannot have an initializer"));
+        assertTrue(fails("int *p = 1;").getMessage().contains("incompatible types when initializing"));
     }
 
     @Test

@@ -11,7 +11,10 @@ import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
+import org.jbm.cc.sema.Desugar;
 import org.jbm.cc.sema.Resolver;
+import org.jbm.cc.sema.Typer;
+import org.jbm.cc.tast.TypedPrinter;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -178,6 +181,24 @@ class PipelineTest {
         assertSame(bindings.symbolOf(ps.get(0)), bindings.symbolOf(ps.get(1)));
         assertSame(bindings.symbolOf(ps.get(2)), bindings.symbolOf(ps.get(3)));
         assertTrue(bindings.symbolOf(ps.get(0)) != bindings.symbolOf(ps.get(2)));
+    }
+
+    @Test
+    void theMainProgramTypesEndToEnd() {
+        var unit = Desugar.desugar(parse(Main.SOURCE));
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var lines = TypedPrinter.print(typed).lines().toList();
+        assertEquals("(global values:int [8])", lines.get(0));
+        assertEquals("(global size_str:const char * (ptr-to-ptr:const char * (decay:char * \"8\":char [2])))", lines.get(1));
+        assertEquals("(string \"8\":char [2])", lines.get(2));
+        assertEquals("(function get_count:int (void) (params) (locals) (block (return 8:int)))", lines.get(3));
+        String main = lines.get(4);
+        assertTrue(main.startsWith("(function main:int (void) (params) (locals total:int i:int) (block (local total:int 0:int) (local i:int 0:int) "
+                + "(while (to-bool:bool (lt:int (rv:int i:int) (call:int (fdecay:int (*)(void) get_count:int (void))))) (block "
+                + "(expr (assign:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int)))) (mul:int (rv:int i:int) (rv:int i:int)))) "), main);
+        assertTrue(main.contains("(expr (assign:int total:int (cond:int (to-bool:bool (gt:int (rv:int total:int) (rv:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int))))))) (rv:int total:int) (rv:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int))))))))"), main);
+        assertTrue(main.endsWith("(if (to-bool:bool (gt:int (rv:int total:int) 8:int)) (block (return (rv:int total:int)))) (return 0:int)))"), main);
+        assertEquals(5, lines.size());
     }
 
     @Test

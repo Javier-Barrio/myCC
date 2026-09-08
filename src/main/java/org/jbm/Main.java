@@ -5,6 +5,10 @@ import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
+import org.jbm.cc.sema.Desugar;
+import org.jbm.cc.sema.Resolver;
+import org.jbm.cc.sema.Typer;
+import org.jbm.cc.tast.TypedPrinter;
 
 public class Main {
 
@@ -53,5 +57,12 @@ public class Main {
         // Phase 8 begins: parse the token sequence into a translation unit.
         var translationUnit = Parser.parse(converted);
         System.out.println(AstPrinter.print(translationUnit));
+
+        // Semantic analysis: syntactic rewrites, name resolution, typing.
+        var desugared = Desugar.desugar(translationUnit);
+        var bindings = Resolver.resolve(desugared);
+        var typed = Typer.type(desugared, bindings);
+        System.out.println();
+        System.out.println(TypedPrinter.print(typed));
     }
 }
