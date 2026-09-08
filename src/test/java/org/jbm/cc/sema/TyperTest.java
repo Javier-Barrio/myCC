@@ -952,6 +952,61 @@ class TyperTest {
                 "a typeof operand is not evaluated, so its string literal creates no object");
     }
 
+    // ---- structures and unions -------------------------------------------------------------------
+
+    @Test
+    void recordTypesAndTheirLayout() {
+        assertEquals(List.of("s: struct S", "p: struct S *", "u: union U", "a: struct <anonymous>"),
+                declaredTypes("struct S { char c; int i; } s; struct S *p; union U { char c; double d; } u; struct { int x; } a;"));
+        assertEquals("8:unsigned long", expr("struct S { char c; int i; };", "sizeof(struct S)"));
+        assertEquals("4:unsigned long", expr("struct S { char c; int i; };", "alignof(struct S)"));
+        assertEquals("16:unsigned long", expr("union U { char c[9]; double d; };", "sizeof(union U)"));
+        assertEquals("24:unsigned long", expr("struct S { char c; int i; } a[3];", "sizeof a"));
+        assertEquals("12:unsigned long", expr("struct In { char c; int i; }; struct Out { struct In in; char d; };", "sizeof(struct Out)"));
+        assertEquals("8:unsigned long", expr("struct A { char tag; union { int x; float y; }; };", "sizeof(struct A)"));
+        assertEquals("4:unsigned long", expr("struct F { int n; char data[]; };", "sizeof(struct F)"));
+        assertEquals("16:unsigned long", expr("struct N { int v; struct N *next; };", "sizeof(struct N)"), "self-reference through a pointer");
+        assertEquals("(add:int (rv:int i:int) 1:int)", expr("struct S { int a; static_assert(sizeof(int) == 4); }; int i;", "i + 1"));
+        assertEquals("2:unsigned long", expr("typedef struct { char a, b; } P; P p;", "sizeof p"));
+        assertEquals("8:unsigned long", expr("struct S { int a; }; struct S; struct S *p;", "sizeof p"));
+    }
+
+    @Test
+    void recordConstraints() {
+        assertTrue(fails("struct S { struct S s; };").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct S { void v; };").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct S { int a; int a; };").getMessage().contains("duplicate member"));
+        assertTrue(fails("struct S { char data[]; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("struct S { char data[]; int n; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("union U { int n; char data[]; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("struct S { int f(void); };").getMessage().contains("function type"));
+        assertTrue(fails("struct S { struct T { int x; }; };").getMessage().contains("does not declare a member"));
+        assertTrue(fails("struct S { static_assert(0, \"in struct\"); int a; };").getMessage().contains("in struct"));
+        assertTrue(fails("struct S { int a; struct { int a; }; };").getMessage().contains("duplicate member"));
+        assertTrue(fails("struct S { int b : 3; };").getMessage().contains("not supported"));
+        assertTrue(fails("struct Inc; void f(void) { struct Inc x; }").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct Inc; int s = sizeof(struct Inc);").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("struct S { int a; } s;", "s = 1").getMessage().contains("incompatible types"));
+    }
+
+    @Test
+    void recordValuesAssignAndPass() {
+        assertEquals("(assign:struct S s:struct S (rv:struct S t:struct S))", expr("struct S { int a; } s, t;", "s = t"));
+        assertEquals("(call:struct S (fdecay:struct S (*)(struct S) f:struct S (struct S)) (rv:struct S s:struct S))",
+                expr("struct S { int a; } s; struct S f(struct S);", "f(s)"));
+        assertEquals("(function g:struct S (struct S) (params x:struct S) (locals) (block (return (rv:struct S x:struct S))))",
+                function("struct S { int a; }; struct S g(struct S x) { return x; }"));
+        assertEquals("(assign:struct S s:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void))))",
+                expr("struct S { int a; } s; struct S f(void);", "s = f()"));
+        assertEquals("(cond:struct S (to-bool:bool (rv:int c:int)) (rv:struct S s:struct S) (rv:struct S t:struct S))",
+                expr("struct S { int a; } s, t; int c;", "c ? s : t"));
+        assertTrue(exprFails("struct S { int a; } s; struct T { int a; } t; int c;", "c ? s : t").getMessage().contains("not supported"));
+        assertTrue(exprFails("struct S { int a; } s; struct T { int a; } t;", "s = t").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("struct S { int a; } s;", "s + 1").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("struct S { int a; } s;", "!s").getMessage().contains("invalid operand"));
+        assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
@@ -1034,7 +1089,6 @@ class TyperTest {
         assertTrue(fails("int m[][3]; int n[3][];").getMessage().contains("incomplete element type"));
         assertTrue(fails("int a[const 2];").getMessage().contains("only allowed in a parameter"));
         assertTrue(fails("_Complex float c;").getMessage().contains("not supported"));
-        assertTrue(fails("struct S { int a; } s;").getMessage().contains("not supported"));
         assertTrue(fails("int n = 3; int a[n];").getMessage().contains("variable length arrays"));
         assertTrue(fails("void f(void x);").getMessage().contains("'void'"));
     }

@@ -568,6 +568,9 @@ final class ExprTyper {
             result = types.usualArithmetic(t.type(), f.type());
         } else if (t.type().isVoid() && f.type().isVoid()) {
             result = types.void_();
+        } else if (t.type().isRecord() && t.type() == f.type()) {
+            // Both arms have the same structure or union type (6.5.16p3).
+            result = t.type();
         } else if (commonPointerType(t, f, true) != null) {
             result = commonPointerType(t, f, true);
         } else {

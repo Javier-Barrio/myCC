@@ -6,6 +6,7 @@ import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Quals;
 import org.jbm.cc.types.Types;
 import org.jetbrains.annotations.Nullable;
@@ -45,6 +46,9 @@ final class TypeBuilder {
 
         /** The type of an unevaluated expression, without lvalue conversion (6.7.3.6p3). */
         CType typeOf(Expr e);
+
+        /** Checks a static assertion among a struct's members. */
+        void staticAssertion(Expr.StaticAssertion s);
     }
 
     TypeBuilder(@NonNull Types types, @NonNull Bindings bindings) {
@@ -69,7 +73,7 @@ final class TypeBuilder {
         if (t instanceof Type.TypedefName n) return types.plusQuals(bindings.typedefOf(n).type(), quals(n.quals()));
         if (t instanceof Type.Typeof to) return typeof(to);
         if (t instanceof Type.BitInt bi) return types.qualified(bitInt(bi), quals(bi.quals()));
-        if (t instanceof Type.Struct s) throw unsupported(s.keyword().text + " types", s.keyword());
+        if (t instanceof Type.Struct s) return types.plusQuals(recordType(s), quals(s.quals()));
         if (t instanceof Type.Enum e) return types.plusQuals(enumType(e), quals(e.quals()));
         throw new IllegalStateException(t.toString());
     }
@@ -169,6 +173,62 @@ final class TypeBuilder {
             params.add(pt);
         }
         return types.function(returnType, params, f.isVariadic());
+    }
+
+    // ---- structures and unions (6.7.3.2) ------------------------------------------------------
+
+    /**
+     * A struct/union specifier's type is the record type of its tag. A
+     * specifier with a body lays the tag out, once: each member's type is
+     * built, checked to be a complete object type (a flexible array
+     * member may end a struct), anonymous struct/union members are
+     * flattened, names must be unique. A reference yields the (possibly
+     * still incomplete) record type.
+     */
+    private CType recordType(Type.Struct s) {
+        TagSymbol tag = bindings.tagOf(s);
+        CType.Record record = types.record(tag);
+        if (!tag.hasType()) tag.setType(record);
+        if (s.members().isEmpty() || tag.layout().isPresent()) return record;
+        if (evaluator == null) throw new IllegalStateException("no expression hooks");
+
+        var fields = new ArrayList<Layout.Field>();
+        var names = new java.util.HashSet<String>();
+        List<Type.MemberDecl> decls = s.members().get();
+        for (int i = 0; i < decls.size(); i++) {
+            if (decls.get(i) instanceof Expr.StaticAssertion sa) {
+                evaluator.staticAssertion(sa);
+                continue;
+            }
+            var m = (Type.Member) decls.get(i);
+            Token at = m.name().orElse(s.keyword());
+            CType type = build(m.type());
+            if (m.bitWidth().isPresent()) throw unsupported("bit-fields", at);
+            if (type.isFunction()) throw new SemaException("member has function type", at);
+            boolean flexible = type instanceof CType.Array a && !a.isComplete();
+            if (flexible) {
+                boolean last = i == decls.size() - 1;
+                if (tag.isUnion() || !last || fields.isEmpty()) {
+                    throw new SemaException("flexible array member must be the last of at least two members of a struct", at);
+                }
+            } else if (!type.isComplete()) {
+                throw new SemaException("member has incomplete type '" + type.spelling() + "'", at);
+            }
+            if (m.name().isPresent()) {
+                if (!names.add(m.name().get().text)) throw new SemaException("duplicate member '" + m.name().get().text + "'", at);
+                fields.add(new Layout.Field(Optional.of(m.name().get().text), type, java.util.OptionalInt.empty()));
+            } else if (type instanceof CType.Record r && r.tag().name().isEmpty()) {
+                for (String inner : r.tag().layout().orElseThrow().members().keySet()) {
+                    if (!names.add(inner)) throw new SemaException("duplicate member '" + inner + "'", at);
+                }
+                fields.add(new Layout.Field(Optional.empty(), type, java.util.OptionalInt.empty()));
+            } else {
+                throw new SemaException("declaration does not declare a member", at);
+            }
+        }
+        if (fields.isEmpty()) throw new SemaException(s.keyword().text + " has no members", s.keyword());
+        tag.setLayout(Layout.of(types, tag.isUnion(), fields));
+        return record;
     }
 
     // ---- enumerations (6.7.3.3) --------------------------------------------------------------

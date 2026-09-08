@@ -116,6 +116,11 @@ public final class Typer {
             public CType typeOf(Expr e) {
                 return exprs.typeUnevaluated(e).type();
             }
+
+            @Override
+            public void staticAssertion(Expr.StaticAssertion s) {
+                Typer.this.staticAssertion(s);
+            }
         });
     }
 
