@@ -226,6 +226,80 @@ class TyperTest {
     }
 
     @Test
+    void integerOnlyOperators() {
+        assertEquals("(rem:int (rv:int a:int) 2:int)", expr("int a;", "a % 2"));
+        assertEquals("(bitand:unsigned int (rv:unsigned int u:unsigned int) (int-to-int:unsigned int 1:int))",
+                expr("unsigned u;", "u & 1"));
+        assertEquals("(bitor:int (int-to-int:int (rv:char c:char)) (int-to-int:int (rv:short s:short)))",
+                expr("char c; short s;", "c | s"));
+        assertEquals("(bitxor:long (rv:long l:long) (int-to-int:long 1:int))", expr("long l;", "l ^ 1"));
+        assertTrue(exprFails("", "1.5 % 2").getMessage().contains("invalid operands to binary %"));
+        assertTrue(exprFails("double d;", "d & 1").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void shiftsPromoteEachOperandAlone() {
+        assertEquals("(shl:int (int-to-int:int (rv:char c:char)) (rv:long l:long))", expr("char c; long l;", "c << l"));
+        assertEquals("(shr:unsigned long (rv:unsigned long u:unsigned long) 1:int)", expr("unsigned long u;", "u >> 1"));
+        assertEquals("(shl:int (int-to-int:int (rv:short s:short)) (int-to-int:int (rv:short s:short)))",
+                expr("short s;", "s << s"));
+        assertTrue(exprFails("int *p;", "p << 1").getMessage().contains("invalid operands to binary <<"));
+        assertTrue(exprFails("", "1 << 1.0").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void comparisonsYieldInt() {
+        assertEquals("(lt:int (rv:int a:int) (int-to-int:int (rv:char b:char)))", expr("int a; char b;", "a < b"));
+        assertEquals("(eq:int (int-to-float:double (rv:int a:int)) (rv:double d:double))", expr("int a; double d;", "a == d"));
+        assertEquals("(ge:int (int-to-int:unsigned int (rv:int a:int)) (rv:unsigned int u:unsigned int))",
+                expr("int a; unsigned u;", "a >= u"));
+        assertEquals("(ne:int 1:int 2:int)", expr("", "1 != 2"));
+        assertEquals("(le:int (rv:int a:int) (rv:int b:int))", expr("int a, b;", "a <= b"));
+        assertEquals("(gt:int (rv:int a:int) (rv:int b:int))", expr("int a, b;", "a > b"));
+        assertEquals("(eq:int (lt:int (rv:int a:int) (rv:int b:int)) (rv:int c:int))", expr("int a, b, c;", "a < b == c"));
+    }
+
+    @Test
+    void logicalOperatorsTestAgainstZero() {
+        assertEquals("(and:int (to-bool:bool (rv:int a:int)) (to-bool:bool (rv:double d:double)))",
+                expr("int a; double d;", "a && d"));
+        assertEquals("(or:int (to-bool:bool (rv:int * p:int *)) (rv:bool b:bool))", expr("int *p; bool b;", "p || b"));
+        assertEquals("(and:int (to-bool:bool (rv:int a:int)) (to-bool:bool (or:int (to-bool:bool (rv:int b:int)) (to-bool:bool (rv:int c:int)))))",
+                expr("int a, b, c;", "a && (b || c)"));
+        assertTrue(exprFails("void f(void);", "f() && 1").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void unaryOperators() {
+        assertEquals("(int-to-int:int (rv:char c:char))", expr("char c;", "+c"), "unary + is just the promotion");
+        assertEquals("(rv:int a:int)", expr("int a;", "+a"));
+        assertEquals("(neg:int (int-to-int:int (rv:short s:short)))", expr("short s;", "-s"));
+        assertEquals("(neg:double (rv:double d:double))", expr("double d;", "-d"));
+        assertEquals("(neg:unsigned int (rv:unsigned int u:unsigned int))", expr("unsigned u;", "-u"));
+        assertEquals("(bitnot:int (int-to-int:int (rv:unsigned char c:unsigned char)))", expr("unsigned char c;", "~c"));
+        assertEquals("(not:int (to-bool:bool (rv:int a:int)))", expr("int a;", "!a"));
+        assertEquals("(not:int (rv:bool b:bool))", expr("bool b;", "!b"));
+        assertEquals("(not:int (to-bool:bool (rv:int * p:int *)))", expr("int *p;", "!p"));
+        assertEquals("(neg:int 1:int)", expr("", "-1"));
+        assertTrue(exprFails("double d;", "~d").getMessage().contains("invalid operand to unary ~"));
+        assertTrue(exprFails("int *p;", "-p").getMessage().contains("invalid operand to unary -"));
+    }
+
+    @Test
+    void conditionalAndComma() {
+        assertEquals("(cond:double (to-bool:bool (rv:int c:int)) (int-to-float:double (rv:int a:int)) (rv:double d:double))",
+                expr("int c, a; double d;", "c ? a : d"));
+        assertEquals("(cond:int (rv:bool b:bool) 1:int (int-to-int:int (rv:char ch:char)))",
+                expr("bool b; char ch;", "b ? 1 : ch"));
+        assertEquals("(comma:int (to-void:void (rv:int a:int)) (rv:int b:int))", expr("int a, b;", "a, b"));
+        assertEquals("(comma:double (to-void:void (add:int (rv:int a:int) 1:int)) (rv:double d:double))",
+                expr("int a; double d;", "a + 1, d"));
+        assertEquals("(cond:int (to-bool:bool (rv:int * p:int *)) 1:int 2:int)", expr("int *p;", "p ? 1 : 2"));
+        assertTrue(exprFails("int *p;", "1 ? p : 2").getMessage().contains("not supported"));
+        assertTrue(exprFails("void f(void);", "f() ? 1 : 2").getMessage().contains("not supported"));
+    }
+
+    @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
         assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("invalid operands"));

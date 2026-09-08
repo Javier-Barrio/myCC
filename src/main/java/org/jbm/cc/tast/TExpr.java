@@ -36,7 +36,8 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     }
 
     /** A value. */
-    sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic {
+    sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
+            Cond, Comma {
     }
 
     // ---- families -------------------------------------------------------------------------
@@ -46,15 +47,45 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** One of the conversions of 6.3, implicit or written as a cast. */
     sealed interface Conversion extends Rvalue
-            permits LvalueToRvalue, ArrayDecay, FunctionDecay, IntToInt, IntToFloat, FloatToInt, FloatToFloat {
+            permits LvalueToRvalue, ArrayDecay, FunctionDecay, IntToInt, IntToFloat, FloatToInt, FloatToFloat, ToBool,
+            ToVoid {
         TExpr operand();
     }
 
     /** A binary arithmetic operator whose operands both have the node's own type. */
-    sealed interface Arithmetic extends Rvalue permits Add, Sub, Mul, Div {
+    sealed interface Arithmetic extends Rvalue permits Add, Sub, Mul, Div, Rem, BitAnd, BitOr, BitXor {
         Rvalue left();
 
         Rvalue right();
+    }
+
+    /**
+     * A shift (6.5.7): each operand is promoted on its own, so the amount
+     * keeps its own type; the result has the promoted left operand's.
+     */
+    sealed interface Shift extends Rvalue permits Shl, Shr {
+        Rvalue left();
+
+        Rvalue right();
+    }
+
+    /** A relational or equality operator (6.5.9, 6.5.10): operands of one common type, result {@code int}. */
+    sealed interface Comparison extends Rvalue permits Eq, Ne, Lt, Le, Gt, Ge {
+        Rvalue left();
+
+        Rvalue right();
+    }
+
+    /** {@code &&} / {@code ||} (6.5.14, 6.5.15): operands converted to {@code bool}, result {@code int}. */
+    sealed interface Logical extends Rvalue permits And, Or {
+        Rvalue left();
+
+        Rvalue right();
+    }
+
+    /** A unary arithmetic operator on a promoted operand (6.5.4.3); {@code Not} takes a {@code bool}. */
+    sealed interface Unary extends Rvalue permits Neg, BitNot, Not {
+        Rvalue operand();
     }
 
     // ---- lvalues and function designators -------------------------------------------------
@@ -156,6 +187,22 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
         }
     }
 
+    /** Scalar to {@code bool} (6.3.2.2p1): false iff the value compares equal to zero. */
+    record ToBool(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Value discarded (6.3.3.2p2): the operand is evaluated for its side effects. */
+    record ToVoid(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     // ---- arithmetic -------------------------------------------------------------------------------
 
     record Add(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token)
@@ -184,6 +231,147 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     record Div(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token)
             implements Arithmetic {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Rem(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Arithmetic {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record BitAnd(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Arithmetic {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record BitOr(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Arithmetic {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record BitXor(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Arithmetic {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    // ---- shifts, comparisons, logical, unary ----------------------------------------------------
+
+    record Shl(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Shift {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Shr(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Shift {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Eq(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Ne(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Lt(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Le(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Gt(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Ge(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Comparison {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record And(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Logical {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Or(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token) implements Logical {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Neg(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Unary {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record BitNot(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Unary {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    record Not(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Unary {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    // ---- conditional and comma --------------------------------------------------------------------
+
+    /** {@code c ? t : e} (6.5.16): the condition is a {@code bool}, the arms share the result type. */
+    record Cond(@NonNull Rvalue condition, @NonNull Rvalue thenValue, @NonNull Rvalue elseValue, @NonNull CType type,
+                @NonNull Token token) implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code l, r} (6.5.18): the left operand is a void expression, the value is the right's. */
+    record Comma(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);
