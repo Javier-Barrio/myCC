@@ -2,6 +2,7 @@ package org.jbm.cc.sema;
 
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
+import org.jbm.cc.types.CType;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
@@ -22,6 +23,10 @@ public final class TagSymbol {
     // The Struct/Enum node carrying the body, once one has been seen.
     private @Nullable Type definition;
 
+    // The semantic type, set by the typing pass: a record type for a
+    // struct or union, the underlying integer type for an enum.
+    private @Nullable CType type;
+
     TagSymbol(Optional<String> name, String keyword, Token declaredAt, int scopeDepth) {
         this.name = name;
         this.keyword = keyword;
@@ -40,6 +45,19 @@ public final class TagSymbol {
 
     void define(Type body) {
         definition = body;
+    }
+
+    public CType type() {
+        if (type == null) throw new IllegalStateException("type of '" + this + "' has not been computed");
+        return type;
+    }
+
+    public boolean hasType() {
+        return type != null;
+    }
+
+    void setType(CType type) {
+        this.type = type;
     }
 
     @Override

@@ -800,6 +800,39 @@ class TyperTest {
         assertTrue(fails("int *p = 1;").getMessage().contains("incompatible types when initializing"));
     }
 
+    // ---- enumerations ------------------------------------------------------------------------
+
+    @Test
+    void enumeratorsAreIntConstantsOfTheEnumsType() {
+        assertEquals(List.of("A: int", "B: int", "C: int", "e: int"), declaredTypes("enum E { A, B = A + 5, C }; enum E e;"));
+        assertEquals("5:int", expr("enum E { A, B = A + 5, C };", "B"));
+        assertEquals("6:int", expr("enum E { A, B = A + 5, C };", "C"));
+        assertEquals("(add:int 6:int (rv:int e:int))", expr("enum E { A, B = A + 5, C } e;", "C + e"));
+        type("enum { X = 3, Y, Z = Y * 2 }; static_assert(Z == 8 && Y == 4);");
+        type("enum E { A, B = A + 5, C }; static_assert(C == 6 && B == 5 && A == 0);");
+        type("enum E { M = -1, N }; static_assert(N == 0);");
+        assertEquals("4:unsigned long", expr("enum E { A };", "sizeof(enum E)"));
+        assertEquals(List.of("Q: int", "T: int", "t: int"), declaredTypes("typedef enum { Q } T; T t;"));
+        assertEquals("(block (switch (rv:int e:int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
+                body("enum E { A, B } e;", "switch (e) { case A: case B: {} }"));
+    }
+
+    @Test
+    void enumUnderlyingTypes() {
+        assertEquals(List.of("X: unsigned char", "v: unsigned char"), declaredTypes("enum F : unsigned char { X = 255 }; enum F v;"));
+        assertEquals("1:unsigned long", expr("enum F : unsigned char { X };", "sizeof(enum F)"));
+        assertEquals(List.of("BIG: long"), declaredTypes("enum G { BIG = 4294967296 };"));
+        assertEquals(List.of("U: unsigned int"), declaredTypes("enum H { U = 4294967295u };"));
+        assertEquals(List.of("M: long", "P: long"), declaredTypes("enum N { M = -1, P = 4294967295u };"));
+        assertEquals(List.of("p: enum_ptr"), declaredTypes("enum Fwd : short; enum Fwd *p;").stream()
+                .map(l -> l.replace("short *", "enum_ptr")).toList());
+        assertTrue(fails("enum F : unsigned char { Y = 256 };").getMessage().contains("not representable"));
+        assertTrue(fails("enum Z *p;").getMessage().contains("incomplete"));
+        assertTrue(fails("enum E { A = 1.5 };").getMessage().contains("integer constant"));
+        assertTrue(fails("int x; enum E { A = x };").getMessage().contains("not a constant"));
+        assertTrue(fails("enum E : double { A };").getMessage().contains("must be an integer type"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
