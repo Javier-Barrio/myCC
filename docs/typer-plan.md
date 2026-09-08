@@ -12,19 +12,19 @@ lowering; (b) keep the AST and record types in an identity-keyed side table
 like `Bindings`; (c) build a new tree whose nodes carry their type. We chose
 (c) because:
 
-1. **Lowering cannot start without types.** `a + b` is an integer add, a float
+1. [x] **Lowering cannot start without types.** `a + b` is an integer add, a float
    add or a pointer add scaled by the element size; `a < b` is a signed or
    unsigned compare; `s.m` needs an offset; `f(c)` with `char c` needs a
    widening. Typing on the TAC is circular.
-2. **C's typing rules are defined on syntactic context** (6.3.3.1: array decay
+2. [x] **C's typing rules are defined on syntactic context** (6.3.3.1: array decay
    is suppressed under `&`, `sizeof`, `_Countof`; `sizeof` operands are
    unevaluated; `_Generic` selects on the unconverted type; assignment needs a
    *modifiable lvalue*). The TAC has flattened exactly the structure those
    rules inspect.
-3. **Constant expressions precede code**: array sizes, enumerators, case
+3. [x] **Constant expressions precede code**: array sizes, enumerators, case
    labels, bit-field widths and static initializers need typed evaluation
    before any function is lowered.
-4. **Side tables (b) leave the implicit conversions implicit.** Lowering would
+4. [x] **Side tables (b) leave the implicit conversions implicit.** Lowering would
    have to re-derive decay, promotions and usual arithmetic conversions, which
    is a second, hidden typer. A new tree makes every conversion an explicit
    node once, and the tree can later be rewritten freely because it has no
@@ -42,18 +42,18 @@ operator enum, an evaluation-context enum) the typed tree uses a sealed type
 instead: one record per conversion, one record per operator, value category
 as a sub-interface. The reasons:
 
-1. **The compiler enforces the invariants.** `AddrOf(Lvalue)`,
+1. [x] **The compiler enforces the invariants.** `AddrOf(Lvalue)`,
    `Assign(Lvalue target, Rvalue value)`, `Deref(Rvalue pointer)`,
    `Add(Rvalue, Rvalue)` cannot be built wrong. With a kind enum the same
    rules are runtime checks that every consumer repeats.
-2. **The constraints of 6.5 become failed narrowings.** "not an lvalue",
+2. [x] **The constraints of 6.5 become failed narrowings.** "not an lvalue",
    "operands of `%` must be integers" are the typer failing to obtain the
    parameter type a node's constructor demands, with the token for the
    diagnostic.
-3. **Adding a node kind is a compile error until every visitor handles it**,
+3. [x] **Adding a node kind is a compile error until every visitor handles it**,
    the same property `ast.Visitor` already gives the AST. An enum case can be
    forgotten silently.
-4. **No extra memory.** A record's class pointer is the discriminator; an
+4. [x] **No extra memory.** A record's class pointer is the discriminator; an
    enum field would be one more reference per node.
 
 Java 17 has no pattern-matching `switch`, so consumers dispatch through a
@@ -551,6 +551,34 @@ Plus: `TypesTest` (interning identity, compatibility, composite types),
 (designators, elision, size completion), and failure tests
 (`SemaException` with the right token) for each constraint.
 
+## Status
+
+Steps 1-25 are implemented (September 2026): `Typer.type(unit, bindings)`
+produces the `TUnit` that `Main` prints, and the full suite is green. What
+the implementation settled differently from the text above:
+
+- The pass is split: `Typer` handles declarations, statements and the unit,
+  `ExprTyper` the expressions, sharing `Bindings`, `Types`, `ConstEval` and
+  the current function's locals. `TypeBuilder` reaches back into
+  expressions (array sizes, `_BitInt` widths, `typeof(expr)`, member
+  static assertions) through a small `Hooks` interface.
+- `CType.Record` refers to a `Tag` interface that `TagSymbol` implements,
+  so `org.jbm.cc.types` does not depend on `sema`.
+- `TInit` items are in source order, not ascending offset order: a later
+  item overrides an earlier one at the same bytes (6.7.11p20) and lowering
+  applies them in sequence. A string literal that initializes an array
+  becomes per-element items and is not emitted as a separate object.
+- `TUnit.Global` carries `isDefinition`: an object declared `extern` only
+  is a reference, one declared at least once without `extern` is a
+  tentative definition and gets storage.
+- The typed tree prints `(lit ...)` for compound literals, `(materialize
+  ...)` for struct temporaries, and `member:bit/width` for bit-fields.
+- The resolver gained two rules the typer needed: every declaration of a
+  name with linkage denotes one symbol (6.2.2), and a typedef name that
+  stands for a function type declares a function.
+- `_BitInt` above 64 bits, VLAs, `_Complex`, decimal floating types and
+  `constexpr` remain unsupported, as listed under Deferred.
+
 ## Steps
 
 Each step is one commit: the test suite is green, `Main` still runs, and the
@@ -561,29 +589,29 @@ typed and printed.
 
 ### A - semantic types (no typer yet)
 
-1. **Resolver binds typedef names.** `visit(Type.TypedefName)` looks the
+1. [x] **Resolver binds typedef names.** `visit(Type.TypedefName)` looks the
    name up and records it in a new `bindings.typedefs` map. Test in
    `ResolverTest`: a typedef use resolves to its `Symbol.Typedef`, an inner
    variable that hides a typedef still parses as before.
-2. **Scalar `CType`s and the interner.** `Target` with `X86_64SysV`,
+2. [x] **Scalar `CType`s and the interner.** `Target` with `X86_64SysV`,
    `Quals`, `Void`, `Int` by rank, `Float` by rank, `Pointer`, and `Types`
    with `HashMap`-backed hash-consing. `TypesTest`:
    `types.pointer(types.int()) == types.pointer(types.int())`, qualifiers
    produce distinct objects, `unqualified()` returns the shared one,
    `types.width(long)` differs between `X86_64SysV` and a test-only ILP32
    target.
-3. **Promotions and usual arithmetic conversions** as methods on `Types`:
+3. [x] **Promotions and usual arithmetic conversions** as methods on `Types`:
    `promote(CType)`, `usualArithmetic(CType, CType)`, and the predicates
    (`isArithmetic`, `isInteger`, `isScalar`) as per-variant overrides. Tests
    are tables: `char + short` is `int`, `int + unsigned long` is `unsigned
    long`, `float + int` is `float`; and `unsigned int + long` is `long` under
    `X86_64SysV` but `unsigned long` under the ILP32 test target, which is
    the check that no width leaked into the rule.
-4. **Array and function types.** `Array` with `OptionalLong` size, `Function`
+4. [x] **Array and function types.** `Array` with `OptionalLong` size, `Function`
    with adjusted parameters (6.7.7.4p7-8) and the variadic flag; compatibility
    (6.2.7) and composite type for these variants. Tests: `int[]` composes with
    `int[3]` to `int[3]`, `int (*)[]` is compatible with `int (*)[2]`.
-5. **`TypeBuilder` for everything but records and enums**, plus
+5. [x] **`TypeBuilder` for everything but records and enums**, plus
    `Symbol.type` with its throwing accessor. Sizes stay unresolved (an
    `Array` with a non-literal size fails) until step 15. Test harness
    `declaredTypes(src)` prints every file-scope symbol as `name: type`, so
@@ -591,44 +619,44 @@ typed and printed.
 
 ### B - the typed tree, expressions
 
-6. **`tast` skeleton and the printer.** `TExpr` with the three categories,
+6. [x] **`tast` skeleton and the printer.** `TExpr` with the three categories,
    `TVisitor`, `TypedPrinter`, and only these nodes: `VarRef`, `FuncRef`,
    `IntConst`, `LvalueToRvalue`, `ArrayDecay`, `FunctionDecay`, `IntToInt`,
    `Add`, `Sub`, `Mul`, `Div`. `Typer` handles identifiers, integer literals
    without suffixes, and `+ - * /` over integers. First test:
    `(add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))`.
-7. **`Literals`.** Integer constants with bases and suffixes (6.4.5.2),
+7. [x] **`Literals`.** Integer constants with bases and suffixes (6.4.5.2),
    character constants, floating constants; `FloatConst` and the four
    int/float conversions. String literals become anonymous static
    `Symbol.Variable`s holding their bytes, referenced by `VarRef`; the unit
    keeps them in declaration order.
-8. **The rest of the arithmetic families.** `Rem`, `Shl`/`Shr` (right operand
+8. [x] **The rest of the arithmetic families.** `Rem`, `Shl`/`Shr` (right operand
    promoted alone), `BitAnd`/`BitOr`/`BitXor`, `Neg`/`BitNot`/`Not`, the six
    `Comparison`s, `Logical` with `ToBool`, `Cond`, `Comma`, `ToVoid`. Failure
    tests: `1.5 % 2`, `p << 1`.
-9. **Pointers.** `Deref`, `AddrOf`, `PtrAdd`, `PtrDiff`, `Index` rewritten to
+9. [x] **Pointers.** `Deref`, `AddrOf`, `PtrAdd`, `PtrDiff`, `Index` rewritten to
    `Deref(PtrAdd)`, `PtrToPtr`/`IntToPtr`/`PtrToInt`/`NullToPtr`, null pointer
    constants and `nullptr`, pointer comparisons, `void *` rules. Tests cover
    `&a[i]`, `p - q`, `p == 0`, `*fp` yielding a function designator.
-10. **Assignment.** `Assign` through `assignConvert`, the `lvalue` and
+10. [x] **Assignment.** `Assign` through `assignConvert`, the `lvalue` and
     `modifiable` narrowings with their diagnostics, `CompoundAssign` and
     `PostfixAssign` over `TargetValue`. Tests: the `c += 1.5` tree from the
     node list, `p++`, `a[k++] += 1` with the identity of `TargetValue.target`
     asserted, `const int` rejected, an array rejected.
-11. **Calls.** `Call` with `FunctionDecay`, arity and prototype checks,
+11. [x] **Calls.** `Call` with `FunctionDecay`, arity and prototype checks,
     arguments through `assignConvert`, default argument promotions for
     variadic arguments, calls through function pointers. Failure tests for
     too few arguments and an incompatible pointer argument.
 
 ### C - constants, statements, the first milestone
 
-12. **`ConstEval` for integers.** A `TVisitor` over `Constant`, `Conversion`,
+12. [x] **`ConstEval` for integers.** A `TVisitor` over `Constant`, `Conversion`,
     `Arithmetic`, `Comparison`, `Logical` and the unary nodes, masking and
     sign-extending by width; `fold` and `require`. Then `sizeof`, `alignof`
     and `_Countof` on complete types, `static_assert` checked and dropped.
     Tests: `sizeof(int *)`, `(char) 300`, `-1u`, `1 << 31` wrapping,
     `static_assert(0)` failing at the right token.
-13. **Statements and functions.** `TStmt` kinds, `JumpTarget` with the
+13. [x] **Statements and functions.** `TStmt` kinds, `JumpTarget` with the
     per-function map, `LocalDecl` with scalar initializers, conditions
     through `ToBool`, `return` through `assignConvert`, `switch` with
     `Case`/`CaseRange` folded through `ConstEval` and a duplicate check,
@@ -636,53 +664,53 @@ typed and printed.
     initializers, `Typer.type(unit, bindings)`. `Main` prints the typed tree.
     **Milestone: `Main.SOURCE` types end to end** and `PipelineTest` asserts
     a few of its nodes.
-14. **Enums.** `TypeBuilder` for enum specifiers (tag lookup through
+14. [x] **Enums.** `TypeBuilder` for enum specifiers (tag lookup through
     `bindings.tags`, fixed underlying type), enumerators folded in order and
     memoized on `Symbol.Enumerator`, references becoming `IntConst`. Tests:
     `enum { A, B = A + 5, C }` gives `C` the value 6; an enum object has an
     integer `CType`.
-15. **Sizes through `ConstEval`.** Array sizes and `_BitInt` widths in
+15. [x] **Sizes through `ConstEval`.** Array sizes and `_BitInt` widths in
     `TypeBuilder`, the `BitInt` variant, `sizeof` of arrays with computed
     sizes. Non-constant sizes fail with "variable length arrays are not
     supported".
-16. **Explicit casts, `_Generic`, `typeof`.** Explicit casts reuse `convert`
+16. [x] **Explicit casts, `_Generic`, `typeof`.** Explicit casts reuse `convert`
     with the wider cast rules (6.5.5), `_Generic` selects its arm on the
     unconverted type and returns that arm's tree, `typeof(expr)` types the
     operand under the unevaluated counter and takes its type.
 
 ### D - records
 
-17. **Record types and layout.** `CType.Record` over `TagSymbol`,
+17. [x] **Record types and layout.** `CType.Record` over `TagSymbol`,
     `TagSymbol.type`/`layout`, `Layout` for structs and unions without
     bit-fields, the in-progress marker for self-containing structs, `sizeof`
     of records. `LayoutTest` compares offsets and sizes against GCC output
     for a dozen structs under `X86_64SysV`, and runs the same structs under
     the ILP32 test target to check `Layout` only asks the `Target`.
-18. **Member access.** `Member` with the per-tag `LinkedHashMap`, `->` as
+18. [x] **Member access.** `Member` with the per-tag `LinkedHashMap`, `->` as
     `Member(Deref)`, anonymous members flattened, `Materialize` for struct
     rvalues, struct assignment, passing and returning by value through
     `assignConvert` on the same tag. Tests: `s.a.b`, `p->m = 1`, `f().i`.
-19. **Bit-fields.** Layout packing rules, bit-field data on `Member`,
+19. [x] **Bit-fields.** Layout packing rules, bit-field data on `Member`,
     promotion of bit-field values, assignment to bit-fields. Tests against
     GCC layouts under `X86_64SysV`; the packing policy is a `Target` method,
     not a constant in `Layout`.
 
 ### E - initializers and declarations
 
-20. **`Initializers.normalize`.** Braced initializers for arrays and records
+20. [x] **`Initializers.normalize`.** Braced initializers for arrays and records
     with the layout cursor, designators, brace elision, string literal into a
     char array, array size completion from the initializer count. Tests
     print the `TInit` as `(offset value)` lists; `int big[1 << 20] = {0}`
     yields one item.
-21. **Address constants and static initializers.** `AddrConst` in
+21. [x] **Address constants and static initializers.** `AddrConst` in
     `ConstEval` (`&x`, `arr + 1`, `&s.m`, string literals, function
     designators); every item of a static-storage initializer must fold.
     Failure test: `int *p = &local;` at file scope is fine, `int x = y;` is
     not.
-22. **Compound literals.** `CompoundLit` with an anonymous automatic symbol
+22. [x] **Compound literals.** `CompoundLit` with an anonymous automatic symbol
     in the function's locals (static at file scope), its `TInit` from step
     20, suppressed under `sizeof` by the unevaluated counter.
-23. **Redeclarations and completeness.** Composite types across
+23. [x] **Redeclarations and completeness.** Composite types across
     declarations (6.2.7p3), tentative definitions completed to size 1 at end
     of unit, incomplete-type checks for object definitions and `sizeof`,
     block-scope `extern`, `auto` inference from the initializer. Tests:
@@ -691,10 +719,10 @@ typed and printed.
 
 ### F - closing
 
-24. **Floating and remaining constant rules in `ConstEval`**:
+24. [x] **Floating and remaining constant rules in `ConstEval`**:
     `FloatToInt` truncation, `bool` results, character constants in case
     labels, `_BitInt` up to 64 bits.
-25. **Statement checks that were deferred**: a `return` without a value in a
+25. [x] **Statement checks that were deferred**: a `return` without a value in a
     non-void function, a value in a void one, `switch` on a non-integer,
     `goto` into the scope of a compound literal. `Bindings.fileScope` is no
     longer read anywhere; `Symbol.declaredType` is documented as diagnostics

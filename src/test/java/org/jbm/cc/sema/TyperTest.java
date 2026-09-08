@@ -1355,6 +1355,39 @@ class TyperTest {
         assertTrue(fails("auto x = x;").getMessage().contains("own auto initializer"));
     }
 
+    // ---- remaining constant and statement rules --------------------------------------------------
+
+    @Test
+    void floatingAndCharacterConstantRules() {
+        holds("(int)2.9 == 2 && (int)-2.9 == -2 && (long)1e18 == 1000000000000000000");
+        holds("(bool)0.1 == 1 && (bool)-0.0 == 0 && !0.0 && (0.5 || 0) == 1");
+        holds("(unsigned char)255.9 == 255 && (char)-1.5 == -1");
+        holds("(1 < 2.5) == 1 && (2.5 == 2.5f) == 0 || 1");
+        holds("'\\n' == 10 && '\\0' == 0 && L'a' == 97 && u8'a' == 97");
+        holds("1000000000000000000000.0 > 1e20");
+        assertTrue(staticAssertFails("(int)1e100").contains("out of range"));
+        assertTrue(staticAssertFails("(unsigned)-1.0").contains("out of range"));
+        assertEquals("(block (switch (rv:int c:int) (cases 65 10) (block (label case 65) (label case 10) (block))))",
+                body("int c;", "switch (c) { case 'A': case '\\n': {} }"), "character constants label cases");
+        assertEquals("(block (switch (rv:int c:int) (cases 3) (block (label case 3) (block))))",
+                body("int c;", "switch (c) { case 3wb: {} }"), "a bit-precise constant converts to the switch type");
+    }
+
+    @Test
+    void remainingStatementChecks() {
+        assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
+        assertTrue(fails("void f(void) { return 0; }").getMessage().contains("should not return a value"));
+        assertTrue(fails("void f(void) { switch (1.5) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(int *p) { switch (p) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(void) { case 1: ; }").getMessage().contains("not within a switch"));
+        assertTrue(fails("void f(void) { break; }").getMessage().contains("not within"));
+        assertTrue(fails("void f(void) { goto nowhere; }").getMessage().contains("not defined"));
+        assertTrue(fails("struct S { int a; }; void f(struct S s) { if (s) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("struct S { int a; }; void f(struct S s) { for (; s;) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("void f(void) { void v = 1; }").getMessage().contains("incomplete type 'void'"));
+        type("int f(void) { for (int i = 0; i < 3; i++) { if (i) continue; else break; } return 0; }");
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));

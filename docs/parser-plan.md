@@ -208,18 +208,19 @@ symbols and explicit casts on the nodes.
       enumerator and tag specifier bound to its `Symbol`/`TagSymbol`; labels per
       function with `goto` resolution; `break`/`continue` (labeled too) bound to
       their loop or switch; `case`/`default` checked to be inside a switch.
-- [ ] constant expression evaluator (6.6): integer and address constants
-- [ ] typing pass over a new tree: literal decoding, lvalue/rvalue, decay,
+- [x] constant expression evaluator (6.6): integer and address constants
+- [x] typing pass over a new tree: literal decoding, lvalue/rvalue, decay,
       promotions and usual arithmetic conversions made explicit as casts,
       member resolution to offsets, `sizeof`/`_Generic` folded, calls checked
-      - architecture and phases in `typer-plan.md`
-- [ ] layout: `sizeof`/`alignof`, struct offsets and padding (x86-64 SysV)
-- [ ] initializers (6.7.11): designators, brace elision, array size completion
-- [ ] statement checks: switch case sets, return types
-- [ ] secondary blocks as blocks (compound literal / VLA lifetimes)
+      - architecture and steps in `typer-plan.md`
+- [x] layout: `sizeof`/`alignof`, struct offsets and padding, behind a `Target` (x86-64 SysV first)
+- [x] initializers (6.7.11): designators, brace elision, array size completion
+- [x] statement checks: switch case sets, return types
+- [ ] secondary blocks as blocks (compound literal / VLA lifetimes) - not needed without VLAs
 
 ## Status
 
-Phases 0-4 are implemented: `Parser` covers all of A.3 and the full test suite
-(`./gradlew test`) is green. `Main` runs the pipeline end to end and prints the
-translation unit as S-expressions.
+Phases 0-4 and the sema passes (`Desugar`, `Resolver`, `Typer`) are
+implemented: `Parser` covers all of A.3, the typer produces a typed unit, and
+the full test suite (`./gradlew test`) is green. `Main` runs the pipeline end
+to end and prints the translation unit and its typed form as S-expressions.
