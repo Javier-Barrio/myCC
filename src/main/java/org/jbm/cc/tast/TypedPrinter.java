@@ -2,6 +2,8 @@ package org.jbm.cc.tast;
 
 import lombok.NonNull;
 
+import java.util.List;
+
 /**
  * S-expression dump of a typed tree, the test oracle: every node prints
  * as {@code (name:type children...)}, references as {@code name:type},
@@ -9,7 +11,7 @@ import lombok.NonNull;
  * conversion the typer inserted is visible in the expectation:
  * {@code (add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))}.
  */
-public final class TypedPrinter implements TVisitor<String> {
+public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String> {
 
     private TypedPrinter() {
     }
@@ -17,6 +19,129 @@ public final class TypedPrinter implements TVisitor<String> {
     public static String print(@NonNull TExpr e) {
         return e.accept(new TypedPrinter());
     }
+
+    public static String print(@NonNull TStmt s) {
+        return s.accept(new TypedPrinter());
+    }
+
+    public static String print(@NonNull TFunction f) {
+        return new TypedPrinter().function(f);
+    }
+
+    /** One line per global, string literal and function, in that order. */
+    public static String print(@NonNull TUnit unit) {
+        var p = new TypedPrinter();
+        var lines = new java.util.ArrayList<String>();
+        for (var g : unit.globals()) {
+            lines.add("(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i)).orElse("") + ")");
+        }
+        for (var str : unit.strings()) lines.add("(string " + p.symbol(str.symbol()) + ")");
+        for (var f : unit.functions()) lines.add(p.function(f));
+        return String.join("\n", lines);
+    }
+
+    private String symbol(org.jbm.cc.sema.Symbol s) {
+        return s.name + ":" + s.type().spelling();
+    }
+
+    private String init(TInit i) {
+        if (i.items().size() == 1 && i.items().get(0).offset() == 0) return i.items().get(0).value().accept(this);
+        var sb = new StringBuilder("(init");
+        for (var item : i.items()) sb.append(" (").append(item.offset()).append(' ').append(item.value().accept(this)).append(')');
+        return sb.append(')').toString();
+    }
+
+    private String function(TFunction f) {
+        var sb = new StringBuilder("(function ").append(symbol(f.symbol()));
+        sb.append(" (params");
+        for (var p : f.parameters()) sb.append(' ').append(symbol(p));
+        sb.append(") (locals");
+        for (var l : f.locals()) sb.append(' ').append(symbol(l));
+        return sb.append(") ").append(f.body().accept(this)).append(')').toString();
+    }
+
+    private String stmts(String name, List<TStmt> items) {
+        var sb = new StringBuilder("(").append(name);
+        for (TStmt s : items) sb.append(' ').append(s.accept(this));
+        return sb.append(')').toString();
+    }
+
+    // ---- statements ----------------------------------------------------------------------
+
+    @Override
+    public String visit(TStmt.Block s) {
+        return stmts("block", s.items());
+    }
+
+    @Override
+    public String visit(TStmt.ExprStmt s) {
+        return "(expr " + s.expr().accept(this) + ")";
+    }
+
+    @Override
+    public String visit(TStmt.LocalDecl s) {
+        return "(local " + symbol(s.symbol()) + s.init().map(i -> " " + init(i)).orElse("") + ")";
+    }
+
+    @Override
+    public String visit(TStmt.If s) {
+        return "(if " + s.condition().accept(this) + " " + s.thenBranch().accept(this)
+                + s.elseBranch().map(e -> " " + e.accept(this)).orElse("") + ")";
+    }
+
+    @Override
+    public String visit(TStmt.While s) {
+        return "(while " + s.condition().accept(this) + " " + s.body().accept(this) + ")";
+    }
+
+    @Override
+    public String visit(TStmt.DoWhile s) {
+        return "(do " + s.body().accept(this) + " " + s.condition().accept(this) + ")";
+    }
+
+    @Override
+    public String visit(TStmt.For s) {
+        return "(for " + stmts("init", s.init()) + " " + s.condition().map(c -> c.accept(this)).orElse("_") + " "
+                + s.step().map(c -> c.accept(this)).orElse("_") + " " + s.body().accept(this) + ")";
+    }
+
+    @Override
+    public String visit(TStmt.Switch s) {
+        var sb = new StringBuilder("(switch ").append(s.value().accept(this)).append(" (cases");
+        for (var c : s.cases()) {
+            if (c instanceof TStmt.Case single) sb.append(' ').append(single.value());
+            else if (c instanceof TStmt.CaseRange range) sb.append(' ').append(range.low()).append("...").append(range.high());
+        }
+        s.defaultTarget().ifPresent(d -> sb.append(" default"));
+        return sb.append(") ").append(s.body().accept(this)).append(')').toString();
+    }
+
+    @Override
+    public String visit(TStmt.Labeled s) {
+        return "(label " + s.target().name + s.body().map(b -> " " + b.accept(this)).orElse("") + ")";
+    }
+
+    @Override
+    public String visit(TStmt.Goto s) {
+        return "(goto " + s.target().name + ")";
+    }
+
+    @Override
+    public String visit(TStmt.Break s) {
+        return "(break " + s.target().name + ")";
+    }
+
+    @Override
+    public String visit(TStmt.Continue s) {
+        return "(continue " + s.target().name + ")";
+    }
+
+    @Override
+    public String visit(TStmt.Return s) {
+        return "(return" + s.value().map(v -> " " + v.accept(this)).orElse("") + ")";
+    }
+
+    // ---- expressions ----------------------------------------------------------------------
 
     private String node(String name, TExpr e, TExpr... children) {
         var sb = new StringBuilder("(").append(name).append(':').append(e.type().spelling());

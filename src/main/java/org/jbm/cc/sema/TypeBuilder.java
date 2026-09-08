@@ -123,6 +123,9 @@ final class TypeBuilder {
         for (var p : f.parameters()) {
             CType pt = parameter(p);
             if (pt.isVoid()) throw new SemaException("parameter has incomplete type 'void'", f.paren());
+            // A named parameter, in a definition or a prototype, is a symbol
+            // and gets its (unadjusted-qualifier) type here.
+            if (p.name().isPresent()) bindings.symbolOf(p).setType(pt);
             params.add(pt);
         }
         return types.function(returnType, params, f.isVariadic());
