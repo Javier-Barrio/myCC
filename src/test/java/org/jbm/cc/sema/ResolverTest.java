@@ -115,6 +115,24 @@ class ResolverTest {
     }
 
     @Test
+    void declarationsWithLinkageDenoteOneEntity() {
+        // 6.2.2p2: every declaration of a name with external linkage in
+        // the unit is the same object, whatever its scope.
+        var b = resolve("void f(void) { extern int e; e = 1; } int e; void g(void) { e = 2; }");
+        assertEquals(1, b.fileScope.stream().filter(s -> s.name.equals("e")).count());
+        assertEquals(List.of("e@1:30 -> VARIABLE e@1:27", "e@1:61 -> VARIABLE e@1:27"), uses(b));
+        // 6.2.2p4: a block-scope extern denotes a visible prior declaration with linkage, internal too.
+        var s = resolve("static int s; void f(void) { extern int s; s = 1; }");
+        assertEquals(List.of("s@1:44 -> VARIABLE s@1:12"), uses(s));
+        assertEquals(Symbol.Linkage.INTERNAL, s.fileScope.get(0).linkage());
+        // A block-scope function declaration has external linkage as well.
+        var h = resolve("void f(void) { int h(void); h(); } int h(void) { return 0; }");
+        assertEquals(List.of("h@1:29 -> FUNCTION h@1:20"), uses(h));
+        assertTrue(h.fileScope.get(1).isDefined());
+        fails("void f(void) { extern int e; } long e;".replace("long e", "int e(void)"));
+    }
+
+    @Test
     void storageDurationAndLinkage() {
         var b = resolve("""
                 int g; static int s; extern int e;

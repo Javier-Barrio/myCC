@@ -9,10 +9,12 @@ import java.util.Optional;
 /**
  * A typed translation unit, lowering's whole input: every object with
  * static storage duration (file-scope objects, block-scope statics,
- * block-scope externs) in declaration order with its initializer if it
- * has one, every function definition, and every string literal's
- * contents. Symbols carry their types and linkage; nothing here refers
- * to the AST.
+ * anonymous literals) in declaration order, every function definition,
+ * and every string literal's contents. A global that is a definition
+ * gets storage here, zero unless it has an initializer (6.9.2p5); one
+ * that is not (declared {@code extern} only) is a reference to another
+ * unit's object. Symbols carry their types and linkage; nothing here
+ * refers to the AST.
  */
 public record TUnit(@NonNull List<Global> globals, @NonNull List<TFunction> functions,
                     @NonNull List<StringData> strings) {
@@ -23,6 +25,6 @@ public record TUnit(@NonNull List<Global> globals, @NonNull List<TFunction> func
         strings = List.copyOf(strings);
     }
 
-    public record Global(@NonNull Symbol symbol, @NonNull Optional<TInit> init) {
+    public record Global(@NonNull Symbol symbol, boolean isDefinition, @NonNull Optional<TInit> init) {
     }
 }

@@ -33,7 +33,9 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
         var p = new TypedPrinter();
         var lines = new java.util.ArrayList<String>();
         for (var g : unit.globals()) {
-            lines.add("(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i, g.symbol().type())).orElse("") + ")");
+            lines.add(g.isDefinition()
+                    ? "(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i, g.symbol().type())).orElse("") + ")"
+                    : "(extern " + p.symbol(g.symbol()) + ")");
         }
         for (var str : unit.strings()) lines.add("(string " + p.symbol(str.symbol()) + ")");
         for (var f : unit.functions()) lines.add(p.function(f));

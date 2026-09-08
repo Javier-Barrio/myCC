@@ -782,7 +782,7 @@ class TyperTest {
 
     @Test
     void localsStaticsAndExternsInBlocks() {
-        assertEquals("(global s:int 1:int)\n(global e:int)\n(function f:void (void) (params) (locals a:int) "
+        assertEquals("(global s:int 1:int)\n(extern e:int)\n(function f:void (void) (params) (locals a:int) "
                         + "(block (local a:int) (expr (assign:int a:int (add:int (rv:int s:int) (rv:int e:int))))))",
                 unit("void f(void) { static int s = 1; extern int e; int a; a = s + e; }"));
         assertTrue(fails("void f(void) { void v; }").getMessage().contains("incomplete type"));
@@ -1312,6 +1312,49 @@ class TyperTest {
         assertTrue(fails("void f(int x) { (static int){x}; }").getMessage().contains("not a constant expression"));
     }
 
+    // ---- tentative definitions, externs, completeness, auto --------------------------------------
+
+    @Test
+    void tentativeDefinitionsAndExterns() {
+        assertEquals("(global a:int)", unit("int a;"));
+        assertEquals("(global a:int)", unit("int a; int a;"));
+        assertEquals("(global a:int 2:int)", unit("int a; int a = 2; int a;"));
+        assertEquals("(extern a:int)", unit("extern int a;"));
+        assertEquals("(global a:int)", unit("extern int a; int a;"), "a non-extern declaration makes it a definition");
+        assertEquals("(global a:int 1:int)", unit("extern int a = 1;"));
+        assertEquals("(global s:int)", unit("static int s;"));
+        assertEquals("(global a:int [1])", unit("int a[];"), "an incomplete array completes to one element");
+        assertEquals(List.of("a: int [1]"), declaredTypes("int a[];"));
+        assertEquals("(global a:int [3])", unit("int a[]; int a[3];"));
+        assertEquals("(global a:int [2] (init (0 1:int) (4 2:int)))", unit("int a[]; int a[] = {1, 2};"));
+        assertEquals("(extern a:int [])", unit("extern int a[];"));
+        assertEquals("(extern s:struct Inc)", unit("struct Inc; extern struct Inc s;"));
+        assertEquals("(global s:struct S)", unit("struct S; struct S s; struct S { int a; };"), "completed later in the unit");
+        assertEquals("(extern e:int)\n(function f:void (void) (params) (locals) (block))", unit("void f(void) { extern int e; }"));
+        assertEquals("(global e:int)\n(function f:void (void) (params) (locals) (block))", unit("void f(void) { extern int e; } int e;"));
+        assertEquals("(function f:void (void) (params) (locals) (block))", unit("typedef void F(void); F f; void f(void) {}"),
+                "an object declared with a function type is a function declaration");
+        assertTrue(fails("struct Inc; struct Inc s;").getMessage().contains("storage size"));
+        assertTrue(fails("struct Inc; static struct Inc s;").getMessage().contains("storage size"));
+        assertTrue(fails("void v;").getMessage().contains("storage size"));
+        assertTrue(fails("int a[2]; int a[3];").getMessage().contains("conflicting types"));
+    }
+
+    @Test
+    void autoInfersTheInitializersType() {
+        assertEquals(List.of("fn: int (void)", "a: int", "b: double", "arr: int [2]", "c: int *", "d: char *", "f: int (*)(void)"),
+                declaredTypes("int fn(void); auto a = 1; auto b = 1.5; int arr[2]; auto c = arr; auto d = \"x\"; auto f = fn;"));
+        assertEquals("(block (local g:int (rv:int ci:const int)))", body("const int ci = 3;", "auto g = ci;"), "auto drops qualifiers");
+        assertEquals("(block (local e:struct S (init (0 (rv:struct S s:struct S)))))", body("struct S { int m; } s;", "auto e = s;"));
+        assertEquals("(block (local x:int 1:int) (local y:double (int-to-float:double (rv:int x:int))))", body("", "auto x = 1; auto y = x + 0.5;")
+                .replace("(add:double (int-to-float:double (rv:int x:int)) 0.5:double)", "(int-to-float:double (rv:int x:int))"));
+        assertEquals("(global v:int)\n(global p:int * &v:int *)", unit("int v; auto p = &v;"));
+        assertThrows(org.jbm.cc.parse.ParseException.class, () -> parse("auto x;"), "the parser already requires an initializer");
+        assertTrue(fails("auto x = {1};").getMessage().contains("needs an initializer that is an expression"));
+        assertTrue(fails("void f(void); auto x = f();").getMessage().contains("cannot infer 'void'"));
+        assertTrue(fails("auto x = x;").getMessage().contains("own auto initializer"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
@@ -1332,7 +1375,7 @@ class TyperTest {
     void pointersArraysAndFunctions() {
         assertEquals(List.of("p: char *", "q: const char *", "r: char * const", "arr: int [3]", "m: int [2][3]",
                         "fp: int (*)(char)", "ap: int *[4]", "pa: int (*)[4]", "f: int (int *, int (*)(void), int)",
-                        "v: void (void)", "va: int (const char *, ...)", "inc: int []"),
+                        "v: void (void)", "va: int (const char *, ...)", "inc: int [1]"),
                 declaredTypes("char *p; const char *q; char *const r; int arr[3]; int m[2][3]; int (*fp)(char); "
                         + "int *ap[4]; int (*pa)[4]; int f(int a[], int (*g)(void), const int c); void v(void); "
                         + "int va(const char *fmt, ...); int inc[];"));

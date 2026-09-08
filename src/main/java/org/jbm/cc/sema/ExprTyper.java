@@ -108,6 +108,7 @@ final class ExprTyper {
 
     private TExpr identifier(Expr.Identifier e) {
         Symbol s = bindings.symbolOf(e);
+        if (!s.hasType()) throw new SemaException("'" + s.name + "' is used in its own auto initializer", e.name());
         if (s instanceof Symbol.Function) return new TExpr.FuncRef(s, s.type(), e.name());
         if (s instanceof Symbol.Enumerator en) return new TExpr.IntConst(en.value(), en.type(), e.name());
         return new TExpr.VarRef(s, s.type(), e.name());
