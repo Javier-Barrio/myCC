@@ -33,7 +33,7 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
         var p = new TypedPrinter();
         var lines = new java.util.ArrayList<String>();
         for (var g : unit.globals()) {
-            lines.add("(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i)).orElse("") + ")");
+            lines.add("(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i, g.symbol().type())).orElse("") + ")");
         }
         for (var str : unit.strings()) lines.add("(string " + p.symbol(str.symbol()) + ")");
         for (var f : unit.functions()) lines.add(p.function(f));
@@ -44,8 +44,9 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
         return s.name + ":" + s.type().spelling();
     }
 
-    private String init(TInit i) {
-        if (i.items().size() == 1 && i.items().get(0).offset() == 0) return i.items().get(0).value().accept(this);
+    // A scalar's initializer prints as its value; an aggregate's as the item list.
+    private String init(TInit i, org.jbm.cc.types.CType type) {
+        if (type.isScalar() && i.items().size() == 1) return i.items().get(0).value().accept(this);
         var sb = new StringBuilder("(init");
         for (var item : i.items()) sb.append(" (").append(item.offset()).append(' ').append(item.value().accept(this)).append(')');
         return sb.append(')').toString();
@@ -80,7 +81,7 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
 
     @Override
     public String visit(TStmt.LocalDecl s) {
-        return "(local " + symbol(s.symbol()) + s.init().map(i -> " " + init(i)).orElse("") + ")";
+        return "(local " + symbol(s.symbol()) + s.init().map(i -> " " + init(i, s.symbol().type())).orElse("") + ")";
     }
 
     @Override

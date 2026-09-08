@@ -4,7 +4,6 @@ import lombok.NonNull;
 import org.jbm.cc.ast.BlockItem;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
-import org.jbm.cc.ast.Initializer;
 import org.jbm.cc.ast.Stmt;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
@@ -48,6 +47,7 @@ public final class Typer {
     private final ConstEval constEval;
     private final ExprTyper exprs;
     private final Literals literals;
+    private final Initializers initializers;
 
     // Static-storage objects in declaration order; a definition's
     // initializer replaces the absent one of an earlier declaration.
@@ -94,6 +94,7 @@ public final class Typer {
         this.constEval = new ConstEval(types);
         this.exprs = new ExprTyper(types, bindings, builder, constEval);
         this.literals = new Literals(types);
+        this.initializers = new Initializers(types, exprs, constEval);
         builder.setEvaluator(new TypeBuilder.Hooks() {
             @Override
             public TExpr.IntConst evaluate(Expr e, Token at, String what) {
@@ -178,7 +179,13 @@ public final class Typer {
                 }
                 continue;
             }
-            Optional<TInit> init = id.initializer().map(i -> initializer(i, v, id.name()));
+            Optional<TInit> init = Optional.empty();
+            if (id.initializer().isPresent()) {
+                if (v.type().isVoid()) throw new SemaException("variable '" + v.name + "' has incomplete type 'void'", id.name());
+                var r = initializers.normalize(id.initializer().get(), v.type(), id.name());
+                if (r.type() != v.type()) declare(v, r.type(), id.name());
+                init = Optional.of(r.init());
+            }
             if (v.storage == Symbol.Variable.Storage.STATIC) {
                 if (init.isPresent() || !globals.containsKey(v)) globals.put(v, init);
             } else {
@@ -190,17 +197,6 @@ public final class Typer {
                 out.add(new TStmt.LocalDecl(v, init, id.name()));
             }
         }
-    }
-
-    // Only scalar initializers so far (braced ones come with step 20).
-    private TInit initializer(Initializer init, Symbol.Variable v, Token at) {
-        if (!(init instanceof Initializer.Expression e)) {
-            throw new SemaException("braced initializers are not supported yet", at);
-        }
-        CType t = v.type();
-        if (!t.isScalar()) throw new SemaException("initializing '" + t.spelling() + "' is not supported yet", at);
-        Rvalue value = exprs.rvalue(exprs.type(e.expr()));
-        return TInit.scalar(exprs.assignConvert(value, types.unqualified(t), at, "initializing"));
     }
 
     private void functionDefinition(Decl.FunctionDefinition d) {

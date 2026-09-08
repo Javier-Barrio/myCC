@@ -21,14 +21,24 @@ import java.util.OptionalInt;
  * puts every member at zero and is as large as its largest member. The
  * numbers come from {@link Types}, which asks the {@link Target}.
  */
-public record Layout(long size, int align, @NonNull Map<String, Member> members) {
+public record Layout(long size, int align, @NonNull Map<String, Member> members, @NonNull List<Member> slots) {
 
     public Layout {
         members = Collections.unmodifiableMap(new LinkedHashMap<>(members));
+        slots = List.copyOf(slots);
     }
 
-    /** A member's name, type, byte offset and, for a bit-field, its bit offset within the byte and width. */
+    /**
+     * A member's name, type, byte offset and, for a bit-field, its bit
+     * offset within the storage unit and width. {@code members} holds the
+     * named ones, anonymous struct/union members flattened in; {@code slots}
+     * holds the initializable members in declaration order, an anonymous
+     * member as one slot with an empty name (6.7.11 walks these).
+     */
     public record Member(@NonNull String name, @NonNull CType type, long offset, @NonNull Optional<BitField> bits) {
+        public boolean isAnonymous() {
+            return name.isEmpty();
+        }
     }
 
     /** A bit-field's position: {@code width} bits starting {@code bitOffset} bits past the member's byte offset. */
@@ -56,6 +66,7 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
     public static Layout of(@NonNull Types types, boolean isUnion, @NonNull List<Field> fields) {
         Target target = types.target();
         var members = new LinkedHashMap<String, Member>();
+        var slots = new java.util.ArrayList<Member>();
         long bit = 0;      // the next free bit in a struct
         long size = 0;     // bytes, for a union the widest member so far
         int align = 1;
@@ -78,8 +89,9 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
                 }
                 long unitStart = at / unitBits * unitBytes;
                 if (f.name().isPresent()) {
-                    members.put(f.name().get(), new Member(f.name().get(), t, unitStart,
-                            Optional.of(new BitField((int) (at % unitBits), width))));
+                    var member = new Member(f.name().get(), t, unitStart, Optional.of(new BitField((int) (at % unitBits), width)));
+                    members.put(f.name().get(), member);
+                    slots.add(member);
                 }
                 if (isUnion) size = Math.max(size, unitBytes);
                 else {
@@ -92,13 +104,16 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
             int fieldAlign = types.align(t);
             long at = isUnion ? 0 : roundUp((bit + 7) / 8, fieldAlign);
             if (f.name().isPresent()) {
-                members.put(f.name().get(), new Member(f.name().get(), t, at, Optional.empty()));
+                var member = new Member(f.name().get(), t, at, Optional.empty());
+                members.put(f.name().get(), member);
+                slots.add(member);
             } else {
                 // An anonymous struct/union member: its members become ours.
                 Layout inner = ((CType.Record) t).tag().layout().orElseThrow();
                 for (Member m : inner.members().values()) {
                     members.put(m.name(), new Member(m.name(), m.type(), at + m.offset(), m.bits()));
                 }
+                slots.add(new Member("", t, at, Optional.empty()));
             }
             align = Math.max(align, fieldAlign);
             if (isUnion) {
@@ -108,7 +123,7 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
                 size = at + fieldSize;
             }
         }
-        return new Layout(roundUp(size, align), align, members);
+        return new Layout(roundUp(size, align), align, members, slots);
     }
 
     static long roundUp(long value, int align) {
