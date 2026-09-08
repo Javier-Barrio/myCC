@@ -65,6 +65,7 @@ public final class Resolver extends AstWalker {
     public static Bindings resolve(@NonNull List<? extends Decl> translationUnit) {
         var resolver = new Resolver();
         resolver.walkUnit(translationUnit);
+        resolver.bindings.symbolCount = resolver.nextId;
         return resolver.bindings;
     }
 

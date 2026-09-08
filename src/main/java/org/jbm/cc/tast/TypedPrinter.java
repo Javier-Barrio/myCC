@@ -40,6 +40,26 @@ public final class TypedPrinter implements TVisitor<String> {
     }
 
     @Override
+    public String visit(TExpr.FloatConst e) {
+        return e.value() + ":" + e.type().spelling();
+    }
+
+    @Override
+    public String visit(TExpr.IntToFloat e) {
+        return node("int-to-float", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.FloatToInt e) {
+        return node("float-to-int", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.FloatToFloat e) {
+        return node("float-to-float", e, e.operand());
+    }
+
+    @Override
     public String visit(TExpr.LvalueToRvalue e) {
         return node("rv", e, e.operand());
     }

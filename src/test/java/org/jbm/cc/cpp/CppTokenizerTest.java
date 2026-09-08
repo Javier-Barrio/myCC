@@ -133,6 +133,7 @@ class CppTokenizerTest {
 
     @Test
     void charLiterals() {
+        assertTokens("u8'x'", TokenType.CHARACTER_LITERAL, "u8'x'");
         assertTokens("'a' '\\n' L'x'",
                 TokenType.CHARACTER_LITERAL, "'a'",
                 TokenType.CHARACTER_LITERAL, "'\\n'",

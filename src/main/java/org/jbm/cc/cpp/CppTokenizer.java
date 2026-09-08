@@ -327,7 +327,8 @@ public class CppTokenizer {
                 }
                 advance(); // consume opening quote
                 return scanString(tokenStart, startLine, startCol);
-            } else if (quote == '\'' && !prefix.contains("R") && !prefix.equals("u8")) {
+            } else if (quote == '\'' && !prefix.contains("R")) {
+                // u8, u, U and L all prefix character constants (6.4.5.4).
                 int tokenStart = pos;
                 for (int i = 0; i < prefix.length(); i++) advance();
                 advance(); // consume opening quote

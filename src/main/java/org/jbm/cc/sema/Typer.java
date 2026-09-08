@@ -6,6 +6,7 @@ import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Stmt;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
+import org.jbm.cc.tast.StringData;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
@@ -32,6 +33,10 @@ public final class Typer extends AstWalker {
     // Expression statements typed so far, in order. Temporary: until the
     // statement tree exists this is how tests reach a typed expression.
     final List<TExpr> expressionStatements = new ArrayList<>();
+
+    List<StringData> strings() {
+        return exprs.strings;
+    }
 
     private Typer(Types types, Bindings bindings) {
         this.types = types;

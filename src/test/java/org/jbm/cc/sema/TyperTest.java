@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,8 +63,12 @@ class TyperTest {
 
     /** Types {@code src} as an expression statement in a function after {@code decls}; prints the tree. */
     private static String expr(String decls, String src) {
+        return exprOn(new Types(X86_64SysV.INSTANCE), decls, src);
+    }
+
+    private static String exprOn(Types types, String decls, String src) {
         var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
-        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        var typer = Typer.run(unit, Resolver.resolve(unit), types);
         return TypedPrinter.print(typer.expressionStatements.get(typer.expressionStatements.size() - 1));
     }
 
@@ -81,6 +86,108 @@ class TyperTest {
         assertEquals("2147483648:long", expr("", "2147483648"));
         assertEquals("9223372036854775807:long", expr("", "9223372036854775807"));
         assertTrue(exprFails("", "9223372036854775808").getMessage().contains("too large"));
+    }
+
+    @Test
+    void integerConstantsTakeTheFirstTypeThatHoldsThem() {
+        // 6.4.5.2p6: decimal constants never become unsigned by size; others do.
+        assertEquals("4294967295:long", expr("", "4294967295"));
+        assertEquals("4294967295:unsigned int", expr("", "0xFFFFFFFF"));
+        assertEquals("-9223372036854775808:unsigned long", expr("", "0x8000000000000000"));
+        assertEquals("-1:unsigned long", expr("", "18446744073709551615u"));
+        assertEquals("1:unsigned int", expr("", "1u"));
+        assertEquals("1:long", expr("", "1l"));
+        assertEquals("1:unsigned long", expr("", "1UL"));
+        assertEquals("1:unsigned long", expr("", "1lu"));
+        assertEquals("1:long long", expr("", "1ll"));
+        assertEquals("1:unsigned long long", expr("", "1ull"));
+        assertEquals("7:int", expr("", "07"));
+        assertEquals("16:int", expr("", "0x10"));
+        assertEquals("5:int", expr("", "0b101"));
+        assertEquals("8:int", expr("", "0o10"));
+        assertEquals("1000000:int", expr("", "1'000'000"));
+        assertEquals("0:int", expr("", "0"));
+        assertEquals("2147483648:unsigned int", expr("", "0x80000000"));
+        assertTrue(exprFails("", "0x10000000000000000").getMessage().contains("too large"));
+        assertTrue(exprFails("", "18446744073709551615").getMessage().contains("too large for its type"));
+        assertTrue(exprFails("", "1wb").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void floatingConstants() {
+        assertEquals("1.5:double", expr("", "1.5"));
+        assertEquals("1.5:float", expr("", "1.5f"));
+        assertEquals("1.5:long double", expr("", "1.5L"));
+        assertEquals("1000.0:double", expr("", "1e3"));
+        assertEquals("16.0:double", expr("", "0x1p4"));
+        assertEquals("1.5:double", expr("", "0x1.8p0"));
+        assertEquals("0.1:double", expr("", ".1"));
+        assertEquals("0.10000000149011612:float", expr("", "0.1f"), "rounded to float precision");
+        assertTrue(exprFails("", "1.0i").getMessage().contains("not supported"));
+        assertTrue(exprFails("", "1.0df").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void characterConstants() {
+        assertEquals("97:int", expr("", "'a'"));
+        assertEquals("10:int", expr("", "'\\n'"));
+        assertEquals("39:int", expr("", "'\\''"));
+        assertEquals("0:int", expr("", "'\\0'"));
+        assertEquals("-1:int", expr("", "'\\xff'"), "char is signed on x86-64");
+        assertEquals("255:int", exprOn(new Types(Ilp32.INSTANCE), "", "'\\xff'"), "unsigned on the ILP32 target");
+        assertEquals("120:int", expr("", "L'x'"), "wchar_t is int");
+        assertEquals("120:unsigned short", expr("", "u'x'"));
+        assertEquals("120:unsigned int", expr("", "U'x'"));
+        assertEquals("120:unsigned char", expr("", "u8'x'"));
+        assertEquals("233:unsigned int", expr("", "U'\\u00e9'"));
+        assertEquals("1:bool", expr("", "true"));
+        assertEquals("0:bool", expr("", "false"));
+        assertTrue(exprFails("", "'ab'").getMessage().contains("multi-character"));
+        assertTrue(exprFails("", "'\\q'").getMessage().contains("unknown escape"));
+    }
+
+    @Test
+    void stringLiteralsAreAnonymousStaticArrays() {
+        assertEquals("\"ab\":char [3]", expr("", "\"ab\""));
+        assertEquals("\"a\" \"b\":char [3]", expr("", "\"a\" \"b\""));
+        assertEquals("\"a\\n\":char [3]", expr("", "\"a\\n\""));
+        assertEquals("u8\"a\":unsigned char [2]", expr("", "u8\"a\""));
+        assertEquals("u\"a\":unsigned short [2]", expr("", "u\"a\""));
+        assertEquals("U\"a\":unsigned int [2]", expr("", "U\"a\""));
+        assertEquals("L\"ab\":int [3]", expr("", "L\"ab\""));
+        assertEquals("\"\":char [1]", expr("", "\"\""));
+        assertTrue(exprFails("", "u\"a\" U\"b\"").getMessage().contains("cannot concatenate"));
+
+        var unit = parse("void f(void) { \"h\\xffi\"; \"\\u00e9\"; L\"\\xffff\"; R\"x(a\\n)x\"; \"\" \"\"; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        var strings = typer.strings();
+        assertEquals(5, strings.size());
+        assertEquals(List.of(104, 255, 105, 0), units(strings.get(0)));
+        assertEquals(List.of(0xC3, 0xA9, 0), units(strings.get(1)), "UTF-8 encoded");
+        assertEquals(List.of(0xFFFF, 0), units(strings.get(2)), "one wchar_t unit");
+        assertEquals(List.of(97, 92, 110, 0), units(strings.get(3)), "raw: backslash and n stay");
+        assertEquals(List.of(0), units(strings.get(4)));
+        assertEquals("char [4]", strings.get(0).symbol().type().spelling());
+        assertTrue(strings.get(0).symbol() instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.STATIC);
+        assertNotSame(strings.get(4).symbol(), strings.get(3).symbol(), "each literal is its own object");
+    }
+
+    private static List<Integer> units(org.jbm.cc.tast.StringData s) {
+        return java.util.Arrays.stream(s.units()).boxed().toList();
+    }
+
+    @Test
+    void floatingConversions() {
+        assertEquals("(add:double (int-to-float:double 1:int) 1.5:double)", expr("", "1 + 1.5"));
+        assertEquals("(add:float (rv:float f:float) (int-to-float:float 1:int))", expr("float f;", "f + 1"));
+        assertEquals("(mul:double (float-to-float:double (rv:float f:float)) (rv:double d:double))",
+                expr("float f; double d;", "f * d"));
+        assertEquals("(div:long double (rv:long double l:long double) (float-to-float:long double 2.0:double))",
+                expr("long double l;", "l / 2.0"));
+        // 6.3.2.2: with a floating operand the integer one converts directly,
+        // without an intermediate integer promotion.
+        assertEquals("(sub:float (rv:float f:float) (int-to-float:float (rv:char c:char)))",
+                expr("float f; char c;", "f - c"));
     }
 
     @Test

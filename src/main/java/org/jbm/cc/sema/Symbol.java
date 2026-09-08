@@ -80,6 +80,15 @@ public sealed abstract class Symbol
         return getClass().getSimpleName().toUpperCase() + " " + name + "@" + declaredAt.line + ":" + declaredAt.column;
     }
 
+    /**
+     * An anonymous object with static storage duration and no linkage: the
+     * array a string literal denotes (6.4.5p7). Its name is the literal's
+     * spelling, for the printer and diagnostics.
+     */
+    static Variable anonymousStatic(int id, Token at) {
+        return new Variable(id, at, Optional.empty(), 0, Variable.Storage.STATIC, Linkage.NONE, true);
+    }
+
     /** An object (6.2.4): a variable at file or block scope. */
     public static final class Variable extends Symbol {
 

@@ -15,12 +15,16 @@ public interface TVisitor<R> {
 
     // ---- constants ----
     R visit(TExpr.IntConst e);
+    R visit(TExpr.FloatConst e);
 
     // ---- conversions ----
     R visit(TExpr.LvalueToRvalue e);
     R visit(TExpr.ArrayDecay e);
     R visit(TExpr.FunctionDecay e);
     R visit(TExpr.IntToInt e);
+    R visit(TExpr.IntToFloat e);
+    R visit(TExpr.FloatToInt e);
+    R visit(TExpr.FloatToFloat e);
 
     // ---- arithmetic ----
     R visit(TExpr.Add e);

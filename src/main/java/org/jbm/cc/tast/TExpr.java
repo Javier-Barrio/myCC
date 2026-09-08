@@ -41,11 +41,12 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     // ---- families -------------------------------------------------------------------------
 
-    sealed interface Constant extends Rvalue permits IntConst {
+    sealed interface Constant extends Rvalue permits IntConst, FloatConst {
     }
 
     /** One of the conversions of 6.3, implicit or written as a cast. */
-    sealed interface Conversion extends Rvalue permits LvalueToRvalue, ArrayDecay, FunctionDecay, IntToInt {
+    sealed interface Conversion extends Rvalue
+            permits LvalueToRvalue, ArrayDecay, FunctionDecay, IntToInt, IntToFloat, FloatToInt, FloatToFloat {
         TExpr operand();
     }
 
@@ -84,6 +85,18 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
         }
     }
 
+    /**
+     * A floating constant. The value is held as a double: exact for
+     * {@code float} and {@code double}, and the nearest double for a
+     * {@code long double} spelling, whose extra precision is not modeled.
+     */
+    record FloatConst(double value, @NonNull CType type, @NonNull Token token) implements Constant {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     // ---- conversions --------------------------------------------------------------------------
 
     /** Lvalue conversion (6.3.3.1p2): the value stored in the object, qualifiers dropped. */
@@ -113,6 +126,30 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** Integer to integer of another type (6.3.2.3). */
     record IntToInt(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Integer to floating (6.3.2.4). */
+    record IntToFloat(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Floating to integer, truncating toward zero (6.3.2.4p1). */
+    record FloatToInt(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Floating to floating of another rank (6.3.2.5). */
+    record FloatToFloat(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);
