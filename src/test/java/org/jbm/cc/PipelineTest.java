@@ -189,7 +189,7 @@ class PipelineTest {
         var typed = Typer.type(unit, Resolver.resolve(unit));
         var lines = TypedPrinter.print(typed).lines().toList();
         assertEquals("(global values:int [8])", lines.get(0));
-        assertEquals("(global size_str:const char * (ptr-to-ptr:const char * (decay:char * \"8\":char [2])))", lines.get(1));
+        assertEquals("(global size_str:const char * &\"8\":const char *)", lines.get(1));
         assertEquals("(string \"8\":char [2])", lines.get(2));
         assertEquals("(function get_count:int (void) (params) (locals) (block (return 8:int)))", lines.get(3));
         String main = lines.get(4);

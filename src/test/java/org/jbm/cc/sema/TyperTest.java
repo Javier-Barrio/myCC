@@ -791,9 +791,9 @@ class TyperTest {
 
     @Test
     void globalsKeepTheirDefinitionsInitializer() {
-        assertEquals("(global x:int 3:int)\n(global y:int)\n(global p:const char * (ptr-to-ptr:const char * (decay:char * \"hi\":char [3])))\n(string \"hi\":char [3])",
+        assertEquals("(global x:int 3:int)\n(global y:int)\n(global p:const char * &\"hi\":const char *)\n(string \"hi\":char [3])",
                 unit("int x; int x = 3; int y; extern int y; const char *p = \"hi\";"));
-        assertEquals("(global d:double (int-to-float:double 1:int))", unit("double d = 1;"));
+        assertEquals("(global d:double 1.0:double)", unit("double d = 1;"));
         assertTrue(fails("int f(void) = 1;").getMessage().contains("cannot have an initializer"));
         assertTrue(fails("int *p = 1;").getMessage().contains("incompatible types when initializing"));
     }
@@ -1095,7 +1095,7 @@ class TyperTest {
         assertEquals("x:int 3:int", init("int x = {3};"));
         assertEquals("x:int 3:int", init("int x = {{3}};"));
         assertEquals("x:int (init)", init("int x = {};"));
-        assertEquals("p:int * (null:int * 0:int)", init("int *p = {0};"));
+        assertEquals("p:int * null:int *", init("int *p = {0};"));
         assertTrue(fails("int x = {1, 2};").getMessage().contains("excess elements"));
         assertTrue(fails("int x = {.a = 1};").getMessage().contains("designator"));
         assertTrue(fails("int x = {[0] = 1};").getMessage().contains("designator"));
@@ -1110,7 +1110,7 @@ class TyperTest {
         assertEquals("a:int [4] (init (0 1:int) (12 2:int))", init("int a[] = {1, [3] = 2};"), "completed from the highest index");
         assertEquals("a:int [4] (init (12 9:int) (0 1:int))", init("int a[4] = {[3] = 9, [0] = 1};"), "items in source order");
         assertEquals("a:int [4] (init (4 5:int) (8 6:int))", init("int a[4] = {[1] = 5, 6};"), "continues after a designator");
-        assertEquals("d:double [2] (init (0 (int-to-float:double 1:int)) (8 2.5:double))", init("double d[2] = {1, 2.5};"));
+        assertEquals("d:double [2] (init (0 1.0:double) (8 2.5:double))", init("double d[2] = {1, 2.5};"));
         assertEquals("a:int [4] (init (4 1:int) (4 2:int))", init("int a[4] = {[1] = 1, [1] = 2};"), "later overrides");
         assertEquals("m:int [2][2] (init (0 1:int) (4 2:int) (8 3:int) (12 4:int))", init("int m[2][2] = {{1, 2}, {3, 4}};"));
         assertEquals("m:int [2][2] (init (0 1:int) (4 2:int) (8 3:int) (12 4:int))", init("int m[2][2] = {1, 2, 3, 4};"), "brace elision");
@@ -1155,29 +1155,33 @@ class TyperTest {
     @Test
     void recordInitializers() {
         String s = "struct S { char c; int i; double d; };";
-        assertEquals("v:struct S (init (0 (int-to-int:char 1:int)) (4 2:int) (8 (int-to-float:double 3:int)))", init(s + " struct S v = {1, 2, 3};"));
-        assertEquals("v:struct S (init (0 (int-to-int:char 1:int)))", init(s + " struct S v = {1};"));
-        assertEquals("v:struct S (init (8 2.5:double) (0 (int-to-int:char 1:int)))", init(s + " struct S v = {.d = 2.5, .c = 1};"));
-        assertEquals("v:struct S (init (4 7:int) (8 (int-to-float:double 8:int)))", init(s + " struct S v = {.i = 7, 8};"));
+        assertEquals("v:struct S (init (0 1:char) (4 2:int) (8 3.0:double))", init(s + " struct S v = {1, 2, 3};"));
+        assertEquals("v:struct S (init (0 1:char))", init(s + " struct S v = {1};"));
+        assertEquals("v:struct S (init (8 2.5:double) (0 1:char))", init(s + " struct S v = {.d = 2.5, .c = 1};"));
+        assertEquals("v:struct S (init (4 7:int) (8 8.0:double))", init(s + " struct S v = {.i = 7, 8};"));
         assertEquals("v:struct S (init)", init(s + " struct S v = {};"));
-        assertEquals("v:struct S (init (0 (rv:struct S w:struct S)))", init(s + " struct S w; struct S v = w;"));
-        assertEquals("arr:struct S [2] (init (0 (rv:struct S w:struct S)) (16 (rv:struct S w:struct S)))", init(s + " struct S w; struct S arr[2] = {w, w};"),
-                "a subobject of record type takes a value of that type");
-        assertEquals("arr:struct S [2] (init (0 (rv:struct S w:struct S)) (20 5:int))", init(s + " struct S w; struct S arr[2] = {w, [1].i = 5};"));
-        assertTrue(fails(s + " struct S w; struct S v = {w};").getMessage().contains("incompatible types"), "the first item targets the first member");
+        assertEquals("(block (local v:struct S (init (0 (rv:struct S w:struct S)))))", body(s + " struct S w;", "struct S v = w;"));
+        assertEquals("(block (local arr:struct S [2] (init (0 (rv:struct S w:struct S)) (16 (rv:struct S w:struct S)))))",
+                body(s + " struct S w;", "struct S arr[2] = {w, w};"), "a subobject of record type takes a value of that type");
+        assertEquals("(block (local arr:struct S [2] (init (0 (rv:struct S w:struct S)) (20 5:int))))",
+                body(s + " struct S w;", "struct S arr[2] = {w, [1].i = 5};"));
+        assertTrue(fails(s + " struct S w; void f(void) { struct S v = {w}; }").getMessage().contains("incompatible types"),
+                "the first item targets the first member");
         assertEquals("o:struct Out (init (0 1:int) (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {{1, 2}, 3};"));
         assertEquals("o:struct Out (init (0 1:int) (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {1, 2, 3};"), "brace elision");
         assertEquals("o:struct Out (init (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {.in.y = 2, 3};"));
-        assertEquals("o:struct Out (init (0 (rv:struct In i:struct In)) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct In i; struct Out o = {i, 3};"));
-        assertEquals("a:struct A (init (0 (int-to-int:char 1:int)) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, 2, 3};"), "into an anonymous member");
-        assertEquals("a:struct A (init (0 (int-to-int:char 1:int)) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, {2, 3}};"));
+        assertEquals("(block (local o:struct Out (init (0 (rv:struct In i:struct In)) (8 3:int))))",
+                body("struct In { int x, y; }; struct Out { struct In in; int b; }; struct In i;", "struct Out o = {i, 3};"));
+        assertEquals("a:struct A (init (0 1:char) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, 2, 3};"), "into an anonymous member");
+        assertEquals("a:struct A (init (0 1:char) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, {2, 3}};"));
         assertEquals("a:struct A (init (8 3:int) (4 2:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {.y = 3, .x = 2};"), "anonymous members are designatable");
         assertEquals("a:struct A (init (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, 3};"));
         assertEquals("a:struct A (init (4 2:int) (12 9:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, .z = 9};"));
-        assertEquals("b:struct B (init (0 5:int) (4 (int-to-int:unsigned int 2:int)))", init("struct B { int f : 3; unsigned g : 4; }; struct B b = {5, 2};").replace("(0 (int-to-int:unsigned int 2:int))", "(4 (int-to-int:unsigned int 2:int))"));
-        assertEquals("arr:struct S [2] (init (0 (int-to-int:char 1:int)) (4 2:int) (16 (int-to-int:char 3:int)))", init(s + " struct S arr[2] = {{1, 2}, {3}};"));
-        assertEquals("arr:struct S [2] (init (0 (int-to-int:char 1:int)) (4 2:int) (8 (int-to-float:double 3:int)) (16 (int-to-int:char 4:int)))", init(s + " struct S arr[] = {1, 2, 3, 4};"));
-        assertEquals("arr:struct S [2] (init (20 7:int) (24 (int-to-float:double 8:int)))", init(s + " struct S arr[2] = {[1].i = 7, 8};"),
+        assertEquals("b:struct B (init (0 5:int) (0 2:unsigned int))", init("struct B { int f : 3; unsigned g : 4; }; struct B b = {5, 2};"),
+                "two bit-fields in one storage unit");
+        assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (16 3:char))", init(s + " struct S arr[2] = {{1, 2}, {3}};"));
+        assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (8 3.0:double) (16 4:char))", init(s + " struct S arr[] = {1, 2, 3, 4};"));
+        assertEquals("arr:struct S [2] (init (20 7:int) (24 8.0:double))", init(s + " struct S arr[2] = {[1].i = 7, 8};"),
                 "continues forward from the designated subobject");
         assertTrue(fails(s + " struct S arr[2] = {[1].d = 7, 8};").getMessage().contains("excess elements"));
         assertTrue(fails(s + " struct S v = {.i.x = 1};").getMessage().contains("non-aggregate"));
@@ -1196,7 +1200,7 @@ class TyperTest {
         String u = "union U { int i; double d; char c; };";
         assertEquals("v:union U (init (0 1:int))", init(u + " union U v = {1};"));
         assertEquals("v:union U (init (0 2.5:double))", init(u + " union U v = {.d = 2.5};"));
-        assertEquals("v:union U (init (0 (int-to-int:char 3:int)))", init(u + " union U v = {.c = 3};"));
+        assertEquals("v:union U (init (0 3:char))", init(u + " union U v = {.c = 3};"));
         assertEquals("v:union U (init (0 1:int) (0 2.5:double))", init(u + " union U v = {.i = 1, .d = 2.5};"), "the last one wins");
         assertEquals("v:union U (init)", init(u + " union U v = {};"));
         assertTrue(fails(u + " union U v = {1, 2};").getMessage().contains("excess elements"));
@@ -1209,6 +1213,61 @@ class TyperTest {
                 body("struct S { int a, b; }; int x; int g(void);", "int a[] = {1, x}; char s[] = \"hi\"; struct S v = {x, g()};"));
         assertEquals("8:unsigned long", expr("int a[] = {1, 2};", "sizeof a"));
         assertEquals(List.of("a: int [2]"), declaredTypes("int a[] = {1, 2};"));
+    }
+
+    // ---- address constants and static initializers -------------------------------------------
+
+    @Test
+    void addressConstants() {
+        assertEquals("p:int * &x:int *", init("int x; int *p = &x;"));
+        assertEquals("p:int * &a:int *", init("int a[3]; int *p = a;"));
+        assertEquals("p:int * &a+8:int *", init("int a[3]; int *p = &a[2];"));
+        assertEquals("p:int * &a+8:int *", init("int a[3]; int *p = a + 2;"));
+        assertEquals("p:int * &a+4:int *", init("int a[3]; int *p = a + 3 - 2;"));
+        assertEquals("p:int * &s+4:int *", init("struct S { char c; int i; } s; int *p = &s.i;"));
+        assertEquals("p:int * &arr+12:int *", init("struct S { char c; int i; } arr[2]; int *p = &arr[1].i;"));
+        assertEquals("p:int * &m+12:int *", init("int m[2][2]; int *p = &m[1][1];"));
+        assertEquals("p:int * &m+8:int *", init("int m[2][2]; int *p = m[1];"));
+        assertEquals("p:char * &\"abc\"+1:char *", init("char *p = \"abc\" + 1;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = f;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = &f;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = *f;"));
+        assertEquals("v:void * &x:void *", init("int x; void *v = &x;"));
+        assertEquals("v:const int * &x:const int *", init("int x; const int *v = &x;"));
+        assertEquals("p:int * null:int *", init("int *p = 0;"));
+        assertEquals("p:int * null:int *", init("int *p = nullptr;"));
+        assertEquals("p:int * null:int *", init("int *p = (void *)0;"));
+        assertEquals("p:int * 8:int *", init("int *p = (int *)8;"));
+        assertEquals("p:int * &x:int *", init("int x; int *p = &*&x;"));
+        assertEquals("p:int * &x:int *", init("int x; int *p = 1 ? &x : 0;"));
+        assertEquals("pp:int * * &p:int * *", init("int *p; int **pp = &p;"));
+        assertEquals("q:int * &s:int *", init("static int s; int *q = &s;"));
+        assertEquals("(block (local l:int) (local p:int * (addr:int * l:int)))", body("", "int l; int *p = &l;"), "a local's address is not constant, and need not be");
+        assertEquals("(global g:int)\n(global p:int * &g:int *)\n(function f:void (void) (params) (locals) (block))",
+                unit("int g; void f(void) { static int *p = &g; }"), "a block-scope static is a global with a constant initializer");
+    }
+
+    @Test
+    void staticInitializersMustBeConstant() {
+        assertTrue(fails("int y; int x = y;").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int f(void); int x = f();").getMessage().contains("not a constant expression"));
+        assertTrue(fails("void g(void) { int l; static int *p = &l; }").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; long l = (long)&x;").getMessage().contains("not a constant expression"));
+        assertTrue(fails("struct S { int b : 3; } s; int *p = &s.b;").getMessage().contains("address of a bit-field"));
+        assertTrue(fails("int a[2] = {1, a[0]};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("struct S { int i; } s = {s.i};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; int *p = &x + x;").getMessage().contains("not a constant expression"));
+    }
+
+    @Test
+    void addressConstantsInConstantExpressions() {
+        type("int x; static_assert(&x == &x); static_assert(&x != 0); static_assert(!!&x);");
+        assertTrue(fails("int x; static_assert(&x);").getMessage().contains("integer constant expression"));
+        type("int a[3]; static_assert(a + 1 == &a[1]); static_assert(&a[2] > a); static_assert(a != a + 1);");
+        type("int x, y; static_assert(&x != &y);");
+        type("int x; static_assert((void *)0 == 0); static_assert(nullptr == nullptr);");
+        assertTrue(fails("int x, y; static_assert(&x < &y);").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((long)&x);").getMessage().contains("not a constant expression"));
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Layout;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A typed expression (C2y 6.5). The three value categories of 6.3.3.1 are
@@ -45,7 +46,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     // ---- families -------------------------------------------------------------------------
 
-    sealed interface Constant extends Rvalue permits IntConst, FloatConst, NullptrConst {
+    sealed interface Constant extends Rvalue permits IntConst, FloatConst, NullptrConst, AddrConst {
     }
 
     /** One of the conversions of 6.3, implicit or written as a cast. */
@@ -167,6 +168,24 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
      * {@code long double} spelling, whose extra precision is not modeled.
      */
     record FloatConst(double value, @NonNull CType type, @NonNull Token token) implements Constant {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * An address constant (6.6p9): the address of an object with static
+     * storage duration or of a function, plus a byte offset, or, with no
+     * base, an absolute address (a null pointer is offset 0). Produced by
+     * constant evaluation only; the typer emits {@code AddrOf} and decays.
+     */
+    record AddrConst(@NonNull Optional<Symbol> base, long offset, @NonNull CType type, @NonNull Token token)
+            implements Constant {
+        public boolean isNull() {
+            return base.isEmpty() && offset == 0;
+        }
+
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);

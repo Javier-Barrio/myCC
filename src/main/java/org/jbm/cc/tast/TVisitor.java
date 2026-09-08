@@ -21,6 +21,7 @@ public interface TVisitor<R> {
     R visit(TExpr.IntConst e);
     R visit(TExpr.FloatConst e);
     R visit(TExpr.NullptrConst e);
+    R visit(TExpr.AddrConst e);
 
     // ---- conversions ----
     R visit(TExpr.LvalueToRvalue e);
