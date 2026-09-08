@@ -43,6 +43,21 @@ public final class X86_64SysV implements Target {
         return size(rank);
     }
 
+    // The psABI: the smallest of 1, 2, 4, 8 bytes that holds the width,
+    // then multiples of 8, aligned as its size up to 8.
+    @Override
+    public int bitIntSize(int width) {
+        if (width <= 8) return 1;
+        if (width <= 16) return 2;
+        if (width <= 32) return 4;
+        return (width + 63) / 64 * 8;
+    }
+
+    @Override
+    public int bitIntAlign(int width) {
+        return Math.min(bitIntSize(width), 8);
+    }
+
     @Override
     public int pointerWidth() {
         return 64;

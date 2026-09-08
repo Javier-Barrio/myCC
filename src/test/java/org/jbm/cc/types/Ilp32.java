@@ -42,6 +42,18 @@ public final class Ilp32 implements Target {
     }
 
     @Override
+    public int bitIntSize(int width) {
+        if (width <= 8) return 1;
+        if (width <= 16) return 2;
+        return (width + 31) / 32 * 4;
+    }
+
+    @Override
+    public int bitIntAlign(int width) {
+        return Math.min(bitIntSize(width), 4);
+    }
+
+    @Override
     public int pointerWidth() {
         return 32;
     }

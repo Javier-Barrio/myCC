@@ -94,11 +94,23 @@ public final class Typer {
         this.constEval = new ConstEval(types);
         this.exprs = new ExprTyper(types, bindings, builder, constEval);
         this.literals = new Literals(types);
-        builder.setEvaluator((e, at, what) -> {
-            Rvalue v = exprs.rvalue(exprs.type(e));
-            TExpr.Constant c = constEval.require(v, at, what);
-            if (!(c instanceof TExpr.IntConst i)) throw new SemaException(what + " must be an integer constant expression", at);
-            return i;
+        builder.setEvaluator(new TypeBuilder.IntegerEvaluator() {
+            @Override
+            public TExpr.IntConst evaluate(Expr e, Token at, String what) {
+                Rvalue v = exprs.rvalue(exprs.type(e));
+                TExpr.Constant c = constEval.require(v, at, what);
+                if (!(c instanceof TExpr.IntConst i)) {
+                    throw new SemaException(what + " must be an integer constant expression", at);
+                }
+                return i;
+            }
+
+            @Override
+            public Optional<TExpr.IntConst> tryEvaluate(Expr e) {
+                Rvalue v = exprs.rvalue(exprs.type(e));
+                if (!v.type().isInteger()) throw new SemaException("size is not an integer", v.token());
+                return constEval.fold(v).map(c -> (TExpr.IntConst) c);
+            }
         });
     }
 

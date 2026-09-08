@@ -4,7 +4,6 @@ import lombok.NonNull;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Quals;
@@ -35,7 +34,11 @@ final class TypeBuilder {
 
     /** Evaluates an integer constant expression of the AST; supplied by the typer once expressions can be typed. */
     interface IntegerEvaluator {
+        /** Throws when the expression does not fold or is not an integer. */
         TExpr.IntConst evaluate(Expr e, Token at, String what);
+
+        /** Empty when the expression does not fold; throws only on a typing error in it. */
+        Optional<TExpr.IntConst> tryEvaluate(Expr e);
     }
 
     TypeBuilder(@NonNull Types types, @NonNull Bindings bindings) {
@@ -59,7 +62,7 @@ final class TypeBuilder {
         if (t instanceof Type.Function f) return function(f);
         if (t instanceof Type.TypedefName n) return types.plusQuals(bindings.typedefOf(n).type(), quals(n.quals()));
         if (t instanceof Type.Typeof to) return typeof(to);
-        if (t instanceof Type.BitInt bi) throw unsupported("_BitInt", bi.token());
+        if (t instanceof Type.BitInt bi) return types.qualified(bitInt(bi), quals(bi.quals()));
         if (t instanceof Type.Struct s) throw unsupported(s.keyword().text + " types", s.keyword());
         if (t instanceof Type.Enum e) return types.plusQuals(enumType(e), quals(e.quals()));
         throw new IllegalStateException(t.toString());
@@ -120,16 +123,28 @@ final class TypeBuilder {
         return types.array(element, arraySize(a.size().get(), a.bracket()));
     }
 
-    // Until the constant evaluator exists (step 15) only a plain decimal
-    // literal is accepted as an array size.
+    // An array size is an integer constant expression greater than zero
+    // (6.7.7.3p1, p4); any other integer expression would make a variable
+    // length array.
     private long arraySize(Expr size, Token at) {
-        if (size instanceof Expr.Literal l && l.token().type == TokenType.INTEGER_CONSTANT
-                && l.token().text.matches("[0-9]+")) {
-            long n = Long.parseLong(l.token().text);
-            if (n <= 0) throw new SemaException("array size must be positive", l.token());
-            return n;
-        }
-        throw unsupported("array sizes other than an integer literal", at);
+        if (evaluator == null) throw new IllegalStateException("no constant evaluator");
+        Optional<TExpr.IntConst> c = evaluator.tryEvaluate(size);
+        if (c.isEmpty()) throw unsupported("variable length arrays", at);
+        long n = c.get().value();
+        boolean negative = types.isSigned(c.get().type()) && n < 0;
+        if (negative || n == 0) throw new SemaException("array size must be positive", at);
+        if (n < 0) throw new SemaException("array size is too large", at);
+        return n;
+    }
+
+    // _BitInt(N) (6.7.3.1p5-6): N is an integer constant expression, at
+    // least 1 for unsigned and 2 for signed; wider than 64 is not modeled.
+    private CType bitInt(Type.BitInt t) {
+        long width = evaluate(t.width(), t.token(), "_BitInt width").value();
+        int min = t.isUnsigned() ? 1 : 2;
+        if (width < min) throw new SemaException("_BitInt width must be at least " + min, t.token());
+        if (width > 64) throw unsupported("_BitInt wider than 64 bits", t.token());
+        return types.bitInt((int) width, t.isUnsigned());
     }
 
     private CType function(Type.Function f) {
