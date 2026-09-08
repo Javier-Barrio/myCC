@@ -17,7 +17,8 @@ import java.util.OptionalLong;
  * {@link Types}, which is what keeps the interning airtight.
  */
 public sealed interface CType
-        permits CType.Void, CType.Int, CType.Float, CType.Pointer, CType.Nullptr, CType.Array, CType.Function {
+        permits CType.Void, CType.Int, CType.BitInt, CType.Float, CType.Pointer, CType.Nullptr, CType.Array,
+        CType.Function {
 
     Quals quals();
 
@@ -140,6 +141,32 @@ public sealed interface CType
                 case UNSIGNED -> rank == Rank.BOOL ? "bool" : "unsigned " + rank.spelling;
             };
             return quals.prefix() + base;
+        }
+
+        @Override
+        public String toString() {
+            return spelling();
+        }
+    }
+
+    /**
+     * A bit-precise integer type {@code _BitInt(N)} (6.2.5p6): its width is
+     * part of the type, it is never promoted, and its rank is below any
+     * standard integer type of the same width (6.3.1.1p1).
+     */
+    record BitInt(int width, boolean isUnsigned, Quals quals) implements CType {
+        public BitInt {
+            if (width < (isUnsigned ? 1 : 2)) throw new IllegalArgumentException("_BitInt width " + width);
+        }
+
+        @Override
+        public boolean isInteger() {
+            return true;
+        }
+
+        @Override
+        public String spelling() {
+            return quals.prefix() + (isUnsigned ? "unsigned " : "") + "_BitInt(" + width + ")";
         }
 
         @Override

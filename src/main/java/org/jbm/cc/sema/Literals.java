@@ -90,13 +90,20 @@ final class Literals {
         digits = digits.substring(0, end);
         if (digits.isEmpty()) digits = "0";
 
-        if (suffix.contains("wb")) throw new SemaException("bit-precise integer constants are not supported yet", t);
         boolean unsigned = suffix.contains("u");
         boolean isLL = suffix.contains("ll");
         boolean isL = !isLL && suffix.contains("l");
 
         BigInteger value = new BigInteger(digits, base);
         if (value.bitLength() > 64) throw new SemaException("integer constant is too large", t);
+
+        // wb: a _BitInt just wide enough for the value (6.4.5.2p6), with a
+        // sign bit unless unsigned.
+        if (suffix.contains("wb")) {
+            int width = unsigned ? Math.max(1, value.bitLength()) : Math.max(2, value.bitLength() + 1);
+            if (width > 64) throw new SemaException("bit-precise constants wider than 64 bits are not supported", t);
+            return new TExpr.IntConst(value.longValue(), types.bitInt(width, unsigned), t);
+        }
 
         // 6.4.5.2p6: the list of candidate types by suffix, with the
         // unsigned alternatives only for non-decimal constants.

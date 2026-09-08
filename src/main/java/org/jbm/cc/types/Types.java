@@ -104,6 +104,10 @@ public final class Types {
         return integer(Rank.LLONG, Sign.UNSIGNED);
     }
 
+    public CType.BitInt bitInt(int width, boolean isUnsigned) {
+        return (CType.BitInt) intern(new CType.BitInt(width, isUnsigned, Quals.NONE));
+    }
+
     public CType.Float floating(@NonNull CType.Float.Rank rank) {
         return (CType.Float) intern(new CType.Float(rank, Quals.NONE));
     }
@@ -162,6 +166,7 @@ public final class Types {
         CType fresh;
         if (t instanceof CType.Void) fresh = new CType.Void(quals);
         else if (t instanceof CType.Int i) fresh = new CType.Int(i.rank(), i.sign(), quals);
+        else if (t instanceof CType.BitInt b) fresh = new CType.BitInt(b.width(), b.isUnsigned(), quals);
         else if (t instanceof CType.Float f) fresh = new CType.Float(f.rank(), quals);
         else if (t instanceof CType.Pointer p) fresh = new CType.Pointer(p.target(), quals);
         else if (t instanceof CType.Nullptr) fresh = new CType.Nullptr(quals);
@@ -195,8 +200,11 @@ public final class Types {
         return integer(target.wcharRank(), target.wcharIsSigned() ? Sign.SIGNED : Sign.UNSIGNED);
     }
 
-    public boolean isSigned(@NonNull CType.Int t) {
-        return switch (t.sign()) {
+    /** Whether an integer type is signed; plain {@code char} asks the target. */
+    public boolean isSigned(@NonNull CType t) {
+        if (t instanceof CType.BitInt b) return !b.isUnsigned();
+        if (!(t instanceof CType.Int i)) throw new IllegalArgumentException("not an integer type: " + t.spelling());
+        return switch (i.sign()) {
             case SIGNED -> true;
             case UNSIGNED -> false;
             case PLAIN -> target.charIsSigned();
@@ -206,13 +214,34 @@ public final class Types {
     /** Width in bits of an integer or pointer type. */
     public int width(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.width(i.rank());
+        if (t instanceof CType.BitInt b) return b.width();
         if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerWidth();
         throw new IllegalArgumentException("no width: " + t.spelling());
+    }
+
+    /** The unsigned counterpart of an integer type (6.3.2.2p1's last step). */
+    public CType unsignedOf(@NonNull CType t) {
+        if (t instanceof CType.BitInt b) return bitInt(b.width(), true);
+        return integer(((CType.Int) t).rank(), Sign.UNSIGNED);
+    }
+
+    /**
+     * Integer conversion rank (6.3.1.1p1): standard types in rank order
+     * whatever their widths; bit-precise types among themselves by width;
+     * a bit-precise type ranks above a standard type of lesser width and
+     * below one of the same or greater width.
+     */
+    public int rankCompare(@NonNull CType a, @NonNull CType b) {
+        if (a instanceof CType.Int ia && b instanceof CType.Int ib) return ia.rank().compareTo(ib.rank());
+        if (a instanceof CType.BitInt ba && b instanceof CType.BitInt bb) return Integer.compare(ba.width(), bb.width());
+        if (a instanceof CType.BitInt ba) return target.width(((CType.Int) b).rank()) < ba.width() ? 1 : -1;
+        return -rankCompare(b, a);
     }
 
     /** Size in bytes of a complete object type. */
     public long size(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.width(i.rank()) / 8;
+        if (t instanceof CType.BitInt b) return target.bitIntSize(b.width());
         if (t instanceof CType.Float f) return target.size(f.rank());
         if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerWidth() / 8;
         if (t instanceof CType.Array a && a.size().isPresent()) return size(a.element()) * a.size().getAsLong();
@@ -222,6 +251,7 @@ public final class Types {
     /** Alignment in bytes of an object type. */
     public int align(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.align(i.rank());
+        if (t instanceof CType.BitInt b) return target.bitIntAlign(b.width());
         if (t instanceof CType.Float f) return target.align(f.rank());
         if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerAlign();
         if (t instanceof CType.Array a) return align(a.element());
@@ -294,6 +324,7 @@ public final class Types {
      * Qualifiers are dropped, since promotions apply to values.
      */
     public CType promote(@NonNull CType t) {
+        // Bit-precise types are never promoted (6.3.2.1p2).
         if (!(t instanceof CType.Int i)) return unqualified(t);
         if (i.rank().compareTo(Rank.INT) >= 0) return unqualified(i);
         boolean fits = isSigned(i) || target.width(i.rank()) < target.width(Rank.INT);
@@ -328,17 +359,16 @@ public final class Types {
             return floating(fa.rank());
         }
         if (b instanceof CType.Float fb) return floating(fb.rank());
-        var pa = (CType.Int) promote(a);
-        var pb = (CType.Int) promote(b);
+        CType pa = promote(a);
+        CType pb = promote(b);
         if (pa == pb) return pa;
-        boolean ua = pa.isUnsigned(), ub = pb.isUnsigned();
-        int cmp = pa.rank().compareTo(pb.rank());
-        if (ua == ub) return cmp >= 0 ? pa : pb;
-        CType.Int unsigned = ua ? pa : pb;
-        CType.Int signed = ua ? pb : pa;
-        if (unsigned.rank().compareTo(signed.rank()) >= 0) return unsigned;
-        if (target.width(signed.rank()) > target.width(unsigned.rank())) return signed;
-        return integer(signed.rank(), Sign.UNSIGNED);
+        boolean ua = !isSigned(pa), ub = !isSigned(pb);
+        if (ua == ub) return rankCompare(pa, pb) >= 0 ? pa : pb;
+        CType unsigned = ua ? pa : pb;
+        CType signed = ua ? pb : pa;
+        if (rankCompare(unsigned, signed) >= 0) return unsigned;
+        if (width(signed) > width(unsigned)) return signed;
+        return unsignedOf(signed);
     }
 
     /** How many distinct types have been created; for tests of interning. */

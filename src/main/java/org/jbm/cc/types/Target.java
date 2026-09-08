@@ -20,6 +20,11 @@ public interface Target {
 
     int align(CType.Float.Rank rank);
 
+    /** Storage size in bytes of a {@code _BitInt} of this width. */
+    int bitIntSize(int width);
+
+    int bitIntAlign(int width);
+
     int pointerWidth();
 
     int pointerAlign();

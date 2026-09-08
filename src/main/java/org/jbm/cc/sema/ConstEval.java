@@ -54,22 +54,18 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     // ---- integer representation ----------------------------------------------------------
 
-    private CType.Int intType(Constant c) {
-        return (CType.Int) c.type();
-    }
-
     // The mathematical value of an integer constant: its bits read as
     // signed or unsigned per its type.
     private BigInteger big(TExpr.IntConst c) {
         long v = c.value();
-        if (types.isSigned(intType(c)) || v >= 0) return BigInteger.valueOf(v);
+        if (types.isSigned(c.type()) || v >= 0) return BigInteger.valueOf(v);
         return BigInteger.valueOf(v).add(BigInteger.ONE.shiftLeft(64));
     }
 
     // A value reduced to a type's width: modulo 2^w for unsigned types
     // (6.3.2.3p2) and for conversions to signed types, which C leaves
     // implementation-defined and every two's-complement target wraps.
-    private long wrap(BigInteger v, CType.Int t) {
+    private long wrap(BigInteger v, CType t) {
         int w = t.isBool() ? 1 : types.width(t);
         BigInteger mask = BigInteger.ONE.shiftLeft(w).subtract(BigInteger.ONE);
         BigInteger bits = v.and(mask);
@@ -79,7 +75,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     // An arithmetic result: wrapped for unsigned types, an error when it
     // does not fit a signed one (6.6p4, 6.5p5).
-    private TExpr.IntConst result(BigInteger v, CType.Int t, Token at) {
+    private TExpr.IntConst result(BigInteger v, CType t, Token at) {
         if (types.isSigned(t)) {
             int w = types.width(t);
             BigInteger min = BigInteger.ONE.shiftLeft(w - 1).negate();
@@ -159,7 +155,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     public Constant visit(TExpr.IntToInt e) {
         Constant c = e.operand().accept(this);
         if (!(c instanceof TExpr.IntConst i)) return null;
-        return new TExpr.IntConst(wrap(big(i), (CType.Int) e.type()), e.type(), e.token());
+        return new TExpr.IntConst(wrap(big(i), e.type()), e.type(), e.token());
     }
 
     @Override
@@ -180,7 +176,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
             throw new SemaException("floating constant cannot be converted to an integer", e.token());
         }
         BigInteger v = new java.math.BigDecimal(truncated).toBigInteger();
-        var t = (CType.Int) e.type();
+        CType t = e.type();
         int w = types.width(t);
         BigInteger min = types.isSigned(t) ? BigInteger.ONE.shiftLeft(w - 1).negate() : BigInteger.ZERO;
         BigInteger max = types.isSigned(t) ? BigInteger.ONE.shiftLeft(w - 1).subtract(BigInteger.ONE)
@@ -264,7 +260,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
         Constant r = e.right().accept(this);
         if (l == null || r == null) return null;
         if (l instanceof TExpr.IntConst a && r instanceof TExpr.IntConst b) {
-            return result(intOp.apply(big(a), big(b)), (CType.Int) e.type(), e.token());
+            return result(intOp.apply(big(a), big(b)), e.type(), e.token());
         }
         if (floatOp != null && l instanceof TExpr.FloatConst a && r instanceof TExpr.FloatConst b) {
             double v = floatOp.apply(a.value(), b.value());
@@ -326,7 +322,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
         Constant l = e.left().accept(this);
         Constant r = e.right().accept(this);
         if (!(l instanceof TExpr.IntConst a) || !(r instanceof TExpr.IntConst b)) return null;
-        var t = (CType.Int) e.type();
+        CType t = e.type();
         BigInteger amount = big(b);
         if (amount.signum() < 0 || amount.compareTo(BigInteger.valueOf(types.width(t))) >= 0) {
             throw new SemaException("shift amount out of range", e.token());
@@ -414,7 +410,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     @Override
     public Constant visit(TExpr.Neg e) {
         Constant c = e.operand().accept(this);
-        if (c instanceof TExpr.IntConst i) return result(big(i).negate(), (CType.Int) e.type(), e.token());
+        if (c instanceof TExpr.IntConst i) return result(big(i).negate(), e.type(), e.token());
         if (c instanceof TExpr.FloatConst f) return new TExpr.FloatConst(-f.value(), e.type(), e.token());
         return null;
     }
@@ -423,7 +419,7 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     public Constant visit(TExpr.BitNot e) {
         Constant c = e.operand().accept(this);
         if (!(c instanceof TExpr.IntConst i)) return null;
-        var t = (CType.Int) e.type();
+        CType t = e.type();
         return new TExpr.IntConst(wrap(big(i).not(), t), t, e.token());
     }
 

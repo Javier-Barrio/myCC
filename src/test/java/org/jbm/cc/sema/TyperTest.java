@@ -137,7 +137,6 @@ class TyperTest {
         assertEquals("2147483648:unsigned int", expr("", "0x80000000"));
         assertTrue(exprFails("", "0x10000000000000000").getMessage().contains("too large"));
         assertTrue(exprFails("", "18446744073709551615").getMessage().contains("too large for its type"));
-        assertTrue(exprFails("", "1wb").getMessage().contains("not supported"));
     }
 
     @Test
@@ -833,6 +832,52 @@ class TyperTest {
         assertTrue(fails("enum E : double { A };").getMessage().contains("must be an integer type"));
     }
 
+    // ---- sizes through the constant evaluator, _BitInt -------------------------------------------
+
+    @Test
+    void arraySizesAreIntegerConstantExpressions() {
+        assertEquals(List.of("a: int [5]", "N: int", "b: int [4]", "c: int [4]", "d: char [97]", "e: int [8]", "f: int [4][6]"),
+                declaredTypes("int a[2 + 3]; enum { N = 4 }; int b[N]; int c[sizeof(int)]; char d['a']; int e[1u << 3]; int f[N][N + 2];"));
+        assertEquals("20:unsigned long", expr("int a[2 + 3];", "sizeof a"));
+        assertEquals("(add:unsigned long 3:unsigned long 5:unsigned long)", expr("int a[2 + 3]; enum { N = 3 }; int b[N];", "_Countof b + _Countof a"));
+        assertTrue(fails("int z[0];").getMessage().contains("positive"));
+        assertTrue(fails("int z[-1];").getMessage().contains("positive"));
+        assertTrue(fails("int z[1.5];").getMessage().contains("not an integer"));
+        assertTrue(fails("int n; int v[n];").getMessage().contains("variable length arrays"));
+        type("int f(int n, int a[n]);"); // a VLA parameter adjusts to a pointer, so its size is not needed
+        assertTrue(fails("int z[1 / 0];").getMessage().contains("division by zero"));
+    }
+
+    @Test
+    void bitPreciseIntegers() {
+        assertEquals(List.of("b: _BitInt(7)", "u: unsigned _BitInt(3)", "w: _BitInt(4)"),
+                declaredTypes("_BitInt(7) b; unsigned _BitInt(3) u; _BitInt(2 + 2) w;"));
+        assertEquals("1:unsigned long", expr("", "sizeof(_BitInt(7))"));
+        assertEquals("2:unsigned long", expr("", "sizeof(_BitInt(9))"));
+        assertEquals("8:unsigned long", expr("", "sizeof(_BitInt(33))"));
+        assertEquals("4:unsigned long", expr("", "alignof(unsigned _BitInt(32))"));
+        assertEquals("1:_BitInt(2)", expr("", "1wb"));
+        assertEquals("3:unsigned _BitInt(2)", expr("", "3uwb"));
+        assertEquals("-128:_BitInt(8)", expr("", "-128wb").replace("(neg:_BitInt(9) 128:_BitInt(9))", "-128:_BitInt(8)"));
+        assertEquals("(add:int (int-to-int:int (rv:_BitInt(7) b:_BitInt(7))) 1:int)", expr("_BitInt(7) b;", "b + 1"), "int outranks a narrower _BitInt");
+        assertEquals("(add:_BitInt(7) (rv:_BitInt(7) b:_BitInt(7)) (rv:_BitInt(7) b:_BitInt(7)))", expr("_BitInt(7) b;", "b + b"), "no promotion");
+        assertEquals("(add:_BitInt(64) (rv:_BitInt(64) w:_BitInt(64)) (int-to-int:_BitInt(64) (rv:unsigned int u:unsigned int)))",
+                expr("_BitInt(64) w; unsigned u;", "w + u"), "a wider signed _BitInt holds every unsigned int");
+        assertEquals("(add:unsigned int (int-to-int:unsigned int (rv:unsigned _BitInt(32) b:unsigned _BitInt(32))) (int-to-int:unsigned int (rv:int i:int)))",
+                expr("unsigned _BitInt(32) b; int i;", "b + i"), "int outranks _BitInt(32); neither holds the other, so unsigned int");
+        assertEquals("(add:_BitInt(40) (rv:_BitInt(40) w:_BitInt(40)) (int-to-int:_BitInt(40) (rv:int i:int)))",
+                expr("_BitInt(40) w; int i;", "w + i"));
+        holds("3wb - 1wb == 2wb");
+        holds("3uwb + 1uwb == 0uwb");
+        holds("-2wb < 1wb && 7wb / 2wb == 3wb");
+        assertTrue(staticAssertFails("3wb + 1wb").contains("overflow"));
+        assertTrue(fails("_BitInt(1) x;").getMessage().contains("at least 2"));
+        assertTrue(fails("unsigned _BitInt(0) x;").getMessage().contains("at least 1"));
+        assertTrue(fails("_BitInt(65) x;").getMessage().contains("not supported"));
+        assertTrue(fails("int n; _BitInt(n) x;").getMessage().contains("not a constant"));
+        type("unsigned _BitInt(1) one;");
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
@@ -916,7 +961,7 @@ class TyperTest {
         assertTrue(fails("int a[const 2];").getMessage().contains("only allowed in a parameter"));
         assertTrue(fails("_Complex float c;").getMessage().contains("not supported"));
         assertTrue(fails("struct S { int a; } s;").getMessage().contains("not supported"));
-        assertTrue(fails("int n = 3; int a[n];").getMessage().contains("not supported"));
+        assertTrue(fails("int n = 3; int a[n];").getMessage().contains("variable length arrays"));
         assertTrue(fails("void f(void x);").getMessage().contains("'void'"));
     }
 
