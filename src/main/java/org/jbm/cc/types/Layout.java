@@ -46,19 +46,51 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
     /**
      * Lays out {@code fields}. Callers have checked the constraints:
      * complete member types (a flexible array member last), unique names,
-     * anonymous members of record type. Bit-fields are not laid out yet.
+     * anonymous members of record type, bit-field widths within their
+     * type. A bit-field occupies {@code width} bits of the storage unit
+     * of its declared type that contains its first bit, moved to the next
+     * unit when the target does not let it straddle; a zero-width one
+     * pads to the next unit boundary and an unnamed one takes space but
+     * is no member.
      */
     public static Layout of(@NonNull Types types, boolean isUnion, @NonNull List<Field> fields) {
+        Target target = types.target();
         var members = new LinkedHashMap<String, Member>();
-        long offset = 0;
-        long size = 0;
+        long bit = 0;      // the next free bit in a struct
+        long size = 0;     // bytes, for a union the widest member so far
         int align = 1;
         for (Field f : fields) {
-            if (f.bitWidth().isPresent()) throw new IllegalArgumentException("bit-fields are not laid out yet");
             CType t = f.type();
+            if (f.bitWidth().isPresent()) {
+                int width = f.bitWidth().getAsInt();
+                int unitBits = types.width(t);
+                long unitBytes = types.size(t);
+                if (f.name().isPresent() || target.unnamedBitFieldsAffectAlignment()) {
+                    if (width > 0) align = Math.max(align, types.align(t));
+                }
+                if (width == 0) {
+                    if (!isUnion) bit = roundUp(bit, unitBits);
+                    continue;
+                }
+                long at = isUnion ? 0 : bit;
+                if (!isUnion && !target.bitFieldsMayStraddle() && at / unitBits != (at + width - 1) / unitBits) {
+                    at = roundUp(at, unitBits);
+                }
+                long unitStart = at / unitBits * unitBytes;
+                if (f.name().isPresent()) {
+                    members.put(f.name().get(), new Member(f.name().get(), t, unitStart,
+                            Optional.of(new BitField((int) (at % unitBits), width))));
+                }
+                if (isUnion) size = Math.max(size, unitBytes);
+                else {
+                    bit = at + width;
+                    size = (bit + 7) / 8;
+                }
+                continue;
+            }
             long fieldSize = t instanceof CType.Array a && !a.isComplete() ? 0 : types.size(t);
             int fieldAlign = types.align(t);
-            long at = isUnion ? 0 : roundUp(offset, fieldAlign);
+            long at = isUnion ? 0 : roundUp((bit + 7) / 8, fieldAlign);
             if (f.name().isPresent()) {
                 members.put(f.name().get(), new Member(f.name().get(), t, at, Optional.empty()));
             } else {
@@ -72,8 +104,8 @@ public record Layout(long size, int align, @NonNull Map<String, Member> members)
             if (isUnion) {
                 size = Math.max(size, fieldSize);
             } else {
-                offset = at + fieldSize;
-                size = offset;
+                bit = (at + fieldSize) * 8;
+                size = at + fieldSize;
             }
         }
         return new Layout(roundUp(size, align), align, members);

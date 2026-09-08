@@ -19,10 +19,37 @@ class LayoutTest {
         return new Layout.Field(Optional.of(name), t, OptionalInt.empty());
     }
 
+    private static Layout.Field bf(String name, CType t, int width) {
+        return new Layout.Field(Optional.ofNullable(name), t, OptionalInt.of(width));
+    }
+
     private static String describe(Layout l) {
         var sb = new StringBuilder("size " + l.size() + " align " + l.align());
-        l.members().values().forEach(m -> sb.append(" ").append(m.name()).append("@").append(m.offset()));
+        l.members().values().forEach(m -> sb.append(" ").append(m.name()).append("@").append(m.offset())
+                .append(m.bits().map(b -> ":" + b.bitOffset() + "/" + b.width()).orElse("")));
         return sb.toString();
+    }
+
+    @Test
+    void bitFieldsOnX86_64() {
+        var t = new Types(X86_64SysV.INSTANCE);
+        assertEquals("size 4 align 4 a@0:0/3 b@0:3/5", describe(Layout.of(t, false, List.of(bf("a", t.int_(), 3), bf("b", t.int_(), 5)))));
+        assertEquals("size 4 align 4 c@0 b@0:8/4", describe(Layout.of(t, false, List.of(f("c", t.char_()), bf("b", t.int_(), 4)))),
+                "packs into the int unit that holds bit 8");
+        assertEquals("size 8 align 4 a@0:0/30 b@4:0/4", describe(Layout.of(t, false, List.of(bf("a", t.int_(), 30), bf("b", t.int_(), 4)))),
+                "no straddling: b moves to the next unit");
+        assertEquals("size 2 align 1 a@0:0/4 b@0:4/4 c@1:0/1", describe(Layout.of(t, false,
+                List.of(bf("a", t.char_(), 4), bf("b", t.char_(), 4), bf("c", t.char_(), 1)))));
+        assertEquals("size 8 align 4 a@0:0/3 b@4:0/3", describe(Layout.of(t, false,
+                List.of(bf("a", t.int_(), 3), bf(null, t.int_(), 0), bf("b", t.int_(), 3)))), "zero width pads to the next int");
+        assertEquals("size 8 align 8 c@0 l@0:8/5", describe(Layout.of(t, false, List.of(f("c", t.char_()), bf("l", t.llong(), 5)))));
+        assertEquals("size 2 align 1 c@1", describe(Layout.of(t, false, List.of(bf(null, t.uint(), 3), f("c", t.char_())))),
+                "an unnamed bit-field takes space but not alignment");
+        assertEquals("size 1 align 1 b@0:0/1", describe(Layout.of(t, false, List.of(bf("b", t.bool_(), 1)))));
+        assertEquals("size 8 align 4 a@0:0/3 i@4", describe(Layout.of(t, false, List.of(bf("a", t.int_(), 3), f("i", t.int_())))));
+        assertEquals("size 4 align 4 a@0:0/3 b@0:0/9", describe(Layout.of(t, true, List.of(bf("a", t.int_(), 3), bf("b", t.int_(), 9)))));
+        assertEquals("size 12 align 4 a@0:0/32 b@4:0/32 c@8:0/1", describe(Layout.of(t, false,
+                List.of(bf("a", t.uint(), 32), bf("b", t.uint(), 32), bf("c", t.uint(), 1)))));
     }
 
     @Test

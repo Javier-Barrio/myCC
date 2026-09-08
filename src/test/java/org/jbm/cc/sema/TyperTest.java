@@ -983,7 +983,6 @@ class TyperTest {
         assertTrue(fails("struct S { struct T { int x; }; };").getMessage().contains("does not declare a member"));
         assertTrue(fails("struct S { static_assert(0, \"in struct\"); int a; };").getMessage().contains("in struct"));
         assertTrue(fails("struct S { int a; struct { int a; }; };").getMessage().contains("duplicate member"));
-        assertTrue(fails("struct S { int b : 3; };").getMessage().contains("not supported"));
         assertTrue(fails("struct Inc; void f(void) { struct Inc x; }").getMessage().contains("incomplete type"));
         assertTrue(fails("struct Inc; int s = sizeof(struct Inc);").getMessage().contains("incomplete type"));
         assertTrue(exprFails("struct S { int a; } s;", "s = 1").getMessage().contains("incompatible types"));
@@ -1048,6 +1047,36 @@ class TyperTest {
         assertEquals("(assign:int (member:int (materialize:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void)))) i) 1:int)",
                 expr(decls, "f().i = 1"), "a temporary is a modifiable lvalue");
         assertTrue(exprFails("struct S { int i; } f(void);", "&f()").getMessage().contains("address of an rvalue"));
+    }
+
+    @Test
+    void bitFields() {
+        String s = "struct B { unsigned u : 3; int i : 5; unsigned w : 32; bool f : 1; char c : 2; long l : 40; } b;";
+        assertEquals("4:unsigned long", expr("struct B { unsigned u : 3; int i : 5; };", "sizeof(struct B)"));
+        assertEquals("16:unsigned long", expr(s, "sizeof b"));
+        assertEquals("(member:unsigned int b:struct B u:0/3)", expr(s, "b.u"));
+        assertEquals("(add:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))) 1:int)",
+                expr(s, "b.u + 1"), "an unsigned bit-field narrower than int promotes to int");
+        assertEquals("(add:unsigned int (rv:unsigned int (member:unsigned int b:struct B w:0/32)) (int-to-int:unsigned int 1:int))",
+                expr(s, "b.w + 1"), "a full-width unsigned one stays unsigned");
+        assertEquals("(add:int (rv:int (member:int b:struct B i:3/5)) 1:int)", expr(s, "b.i + 1"));
+        assertEquals("(add:int (int-to-int:int (rv:bool (member:bool b:struct B f:0/1))) 1:int)", expr(s, "b.f + 1"));
+        assertEquals("(neg:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))))", expr(s, "-b.u"));
+        assertEquals("(lt:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))) -1:int)",
+                expr(s, "b.u < -1").replace("(neg:int 1:int)", "-1:int"));
+        assertEquals("(add:long (rv:long (member:long b:struct B l:3/40)) (int-to-int:long 1:int))", expr(s, "b.l + 1"));
+        assertEquals("(assign:unsigned int (member:unsigned int b:struct B u:0/3) (int-to-int:unsigned int 9:int))", expr(s, "b.u = 9"));
+        assertEquals("(compound-assign:int (member:int b:struct B i:3/5) (add:int (target:int) 1:int))", expr(s, "b.i += 1"));
+        assertTrue(exprFails(s, "&b.u").getMessage().contains("address of a bit-field"));
+        assertTrue(exprFails(s, "sizeof b.u").getMessage().contains("sizeof applied to a bit-field"));
+        assertTrue(fails("struct S { int a : 33; };").getMessage().contains("exceeds its type"));
+        assertTrue(fails("struct S { bool a : 2; };").getMessage().contains("exceeds its type"));
+        assertTrue(fails("struct S { int a : -1; };").getMessage().contains("negative"));
+        assertTrue(fails("struct S { int a : 0; };").getMessage().contains("zero width"));
+        assertTrue(fails("struct S { double d : 3; };").getMessage().contains("non-integer"));
+        assertTrue(fails("int n; struct S { int a : n; };").getMessage().contains("not a constant"));
+        assertTrue(fails("struct S { int a : 1; int a : 1; };").getMessage().contains("duplicate member"));
+        type("struct S { int : 0; int a : 1; unsigned : 3; };");
     }
 
     @Test

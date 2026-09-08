@@ -361,7 +361,7 @@ final class ExprTyper {
         boolean ok = integerOnly ? l.type().isInteger() && r.type().isInteger()
                 : l.type().isArithmetic() && r.type().isArithmetic();
         if (!ok) throw invalidOperands(op, l, r);
-        CType common = types.usualArithmetic(l.type(), r.type());
+        CType common = types.usualArithmetic(promotedType(l), promotedType(r));
         return node.make(convert(l, common), convert(r, common), common, op);
     }
 
@@ -377,7 +377,7 @@ final class ExprTyper {
     // conversions, or pointers brought to one common pointer type.
     private TExpr comparison(Token op, Rvalue l, Rvalue r, BinaryNode node) {
         if (l.type().isArithmetic() && r.type().isArithmetic()) {
-            CType common = types.usualArithmetic(l.type(), r.type());
+            CType common = types.usualArithmetic(promotedType(l), promotedType(r));
             return node.make(convert(l, common), convert(r, common), types.int_(), op);
         }
         boolean equality = op.text.equals("==") || op.text.equals("!=");
@@ -546,6 +546,7 @@ final class ExprTyper {
     // &x: neither & nor * is evaluated in &*p, whose result is p (6.5.4.2p3);
     // &f on a function is its decay.
     private TExpr addressOf(Token op, TExpr x) {
+        if (isBitField(x)) throw new SemaException("cannot take the address of a bit-field", op);
         if (x instanceof TExpr.Deref d) return d.pointer();
         if (x instanceof TExpr.FunctionDesignator fd) return rvalue(fd);
         if (x instanceof TExpr.Lvalue lv) return new TExpr.AddrOf(lv, types.pointer(lv.type()), op);
@@ -566,10 +567,10 @@ final class ExprTyper {
                 Rvalue x = rvalue(type(e.operand()));
                 return switch (op.text) {
                     case "+" -> requireArithmetic(op, x) ? promote(x) : null;
-                    case "-" -> requireArithmetic(op, x) ? new TExpr.Neg(promote(x), types.promote(x.type()), op) : null;
+                    case "-" -> requireArithmetic(op, x) ? new TExpr.Neg(promote(x), promotedType(x), op) : null;
                     case "~" -> {
                         if (!x.type().isInteger()) throw invalidOperand(op, x);
-                        yield new TExpr.BitNot(promote(x), types.promote(x.type()), op);
+                        yield new TExpr.BitNot(promote(x), promotedType(x), op);
                     }
                     default -> {
                         if (!x.type().isScalar()) throw invalidOperand(op, x);
@@ -580,7 +581,9 @@ final class ExprTyper {
             case "sizeof", "_Countof" -> {
                 // The operand is not evaluated and, being under sizeof, an
                 // array does not decay (6.3.3.1p3, 6.5.4.4p2).
-                return sizeOf(op, typeUnevaluated(e.operand()).type());
+                TExpr operand = typeUnevaluated(e.operand());
+                if (isBitField(operand)) throw new SemaException("sizeof applied to a bit-field", op);
+                return sizeOf(op, operand.type());
             }
             case "*" -> {
                 return deref(op, rvalue(type(e.operand())));
@@ -629,7 +632,7 @@ final class ExprTyper {
         Rvalue f = rvalue(type(e.elseExpr()));
         CType result;
         if (t.type().isArithmetic() && f.type().isArithmetic()) {
-            result = types.usualArithmetic(t.type(), f.type());
+            result = types.usualArithmetic(promotedType(t), promotedType(f));
         } else if (t.type().isVoid() && f.type().isVoid()) {
             result = types.void_();
         } else if (t.type().isRecord() && t.type() == f.type()) {
@@ -674,7 +677,32 @@ final class ExprTyper {
 
     /** Integer promotions (6.3.2.1) applied to a value. */
     Rvalue promote(Rvalue x) {
-        return convert(x, types.promote(x.type()));
+        return convert(x, promotedType(x));
+    }
+
+    /**
+     * The type {@code x} promotes to. A value read from a bit-field
+     * promotes by its width, not its declared type (6.3.2.1p2): an
+     * {@code unsigned int : 3} becomes {@code int}.
+     */
+    CType promotedType(Rvalue x) {
+        Layout.BitField bits = bitFieldOf(x);
+        if (bits != null && x.type() instanceof CType.Int i && i.rank().compareTo(CType.Int.Rank.INT) <= 0) {
+            boolean fits = types.isSigned(i) || bits.width() < types.width(types.int_());
+            return fits ? types.int_() : types.uint();
+        }
+        return types.promote(x.type());
+    }
+
+    private static Layout.@Nullable BitField bitFieldOf(Rvalue x) {
+        if (x instanceof TExpr.LvalueToRvalue rv && rv.operand() instanceof TExpr.Member m) {
+            return m.member().bits().orElse(null);
+        }
+        return null;
+    }
+
+    private static boolean isBitField(TExpr x) {
+        return x instanceof TExpr.Member m && m.member().bits().isPresent();
     }
 
     Rvalue toBool(Rvalue x) {
