@@ -4,6 +4,7 @@ import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.sema.Symbol;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Layout;
 
 import java.util.List;
 
@@ -30,7 +31,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     // ---- value categories ----------------------------------------------------------
 
     /** Designates an object (6.3.3.1p1). */
-    sealed interface Lvalue extends TExpr permits VarRef, Deref {
+    sealed interface Lvalue extends TExpr permits VarRef, Deref, Member, Materialize {
     }
 
     /** Designates a function (6.3.3.1p4). */
@@ -118,6 +119,32 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** {@code *p} on a pointer to a function: a function designator. {@code FunctionDecay(FuncDeref(p))} is {@code p}. */
     record FuncDeref(@NonNull Rvalue pointer, @NonNull CType type, @NonNull Token token) implements FunctionDesignator {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * {@code base.m} (6.5.3.4): an lvalue of the member's type with the
+     * base's qualifiers added; {@code p->m} is {@code (*p).m}. The member
+     * carries its offset and, for a bit-field, its bit placement.
+     */
+    record Member(@NonNull Lvalue base, @NonNull Layout.Member member, @NonNull CType type, @NonNull Token token)
+            implements Lvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * A struct or union rvalue (a call result, an assignment's value)
+     * stored in an anonymous temporary so a member can be selected from
+     * it (6.2.4p8). The symbol is one of the function's locals.
+     */
+    record Materialize(@NonNull Rvalue value, @NonNull Symbol symbol, @NonNull CType type, @NonNull Token token)
+            implements Lvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);

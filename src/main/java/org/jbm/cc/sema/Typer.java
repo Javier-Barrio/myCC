@@ -213,8 +213,10 @@ public final class Typer {
         var parameters = new ArrayList<Symbol>();
         for (var p : d.type().parameters()) p.name().ifPresent(n -> parameters.add(bindings.symbolOf(p)));
         function = new FunctionState(type.returnType());
+        exprs.setLocals(function.locals);
         TStmt.Block body = block(d.body());
         functions.add(new TFunction(bindings.symbolOf(d), parameters, function.locals, body));
+        exprs.setLocals(null);
         function = null;
     }
 

@@ -89,6 +89,11 @@ public sealed abstract class Symbol
         return new Variable(id, at, Optional.empty(), 0, Variable.Storage.STATIC, Linkage.NONE, true);
     }
 
+    /** An anonymous automatic object: a temporary holding a struct rvalue, or a compound literal in a block. */
+    static Variable anonymousAutomatic(int id, Token at, int scopeDepth) {
+        return new Variable(id, at, Optional.empty(), scopeDepth, Variable.Storage.AUTOMATIC, Linkage.NONE, true);
+    }
+
     /** An object (6.2.4): a variable at file or block scope. */
     public static final class Variable extends Symbol {
 

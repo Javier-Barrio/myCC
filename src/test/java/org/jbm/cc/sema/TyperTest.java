@@ -1008,6 +1008,49 @@ class TyperTest {
     }
 
     @Test
+    void memberAccess() {
+        String s = "struct S { char c; int i; } s; struct S *p; const struct S cs;";
+        assertEquals("(member:int s:struct S i)", expr(s, "s.i"));
+        assertEquals("(add:int (rv:int (member:int s:struct S i)) 0:int)", expr(s, "s.i + 0"));
+        assertEquals("(member:int (deref:struct S (rv:struct S * p:struct S *)) i)", expr(s, "p->i"));
+        assertEquals("(member:int (deref:struct S (rv:struct S * p:struct S *)) i)", expr(s, "(*p).i"));
+        assertEquals("(member:const int cs:const struct S i)", expr(s, "cs.i"), "the base's qualifiers apply");
+        assertEquals("(assign:int (member:int s:struct S i) 1:int)", expr(s, "s.i = 1"));
+        assertEquals("(addr:int * (member:int s:struct S i))", expr(s, "&s.i"));
+        assertEquals("(addr:char * (member:char (deref:struct S (rv:struct S * p:struct S *)) c))", expr(s, "&p->c"));
+        assertEquals("(compound-assign:int (member:int s:struct S i) (add:int (target:int) 1:int))", expr(s, "s.i++"), "void context: desugared");
+        assertEquals("(member:int (member:struct In out:struct Out in) i)",
+                expr("struct In { int i; }; struct Out { struct In in; } out;", "out.in.i"));
+        assertEquals("(member:int a:struct A x)", expr("struct A { char tag; union { int x; float y; }; } a;", "a.x"), "anonymous member flattened");
+        assertEquals("(deref:int (ptradd:int * (decay:int * (deref:int [3] (ptradd:int (*)[3] (decay:int (*)[3] (member:int [2][3] s:struct M m)) (int-to-int:long 1:int)))) (int-to-int:long 2:int)))",
+                expr("struct M { int m[2][3]; } s;", "s.m[1][2]"));
+        assertTrue(exprFails(s, "s.z").getMessage().contains("no member named 'z'"));
+        assertTrue(exprFails(s, "p.i").getMessage().contains("not a structure or union"));
+        assertTrue(exprFails(s, "s->i").getMessage().contains("not a pointer to a structure"));
+        assertTrue(exprFails("int x;", "x.i").getMessage().contains("not a structure or union"));
+        assertTrue(exprFails("struct Inc *p;", "p->i").getMessage().contains("incomplete type"));
+        assertTrue(exprFails(s, "cs.i = 1").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void structRvaluesAreMaterializedForMemberAccess() {
+        String decls = "struct S { int i; char c; } s; struct S f(void);";
+        assertEquals("(member:int (materialize:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void)))) i)",
+                expr(decls, "f().i"));
+        assertEquals("(member:char (materialize:struct S (assign:struct S s:struct S (rv:struct S s:struct S))) c)",
+                expr(decls, "(s = s).c"));
+        var unit = parse(decls + " void g(void) { f().i; f().c; sizeof f().i; }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var g = typed.functions().get(0);
+        assertEquals(2, g.locals().size(), "one temporary per evaluated materialization");
+        assertEquals("struct S", g.locals().get(0).type().spelling());
+        assertTrue(g.locals().get(0) instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.AUTOMATIC);
+        assertEquals("(assign:int (member:int (materialize:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void)))) i) 1:int)",
+                expr(decls, "f().i = 1"), "a temporary is a modifiable lvalue");
+        assertTrue(exprFails("struct S { int i; } f(void);", "&f()").getMessage().contains("address of an rvalue"));
+    }
+
+    @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
         assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("pointer to a function"));

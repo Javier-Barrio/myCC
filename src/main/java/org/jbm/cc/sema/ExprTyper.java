@@ -9,6 +9,7 @@ import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TExpr.Lvalue;
 import org.jbm.cc.tast.TExpr.Rvalue;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Quals;
 import org.jbm.cc.types.Types;
 import org.jetbrains.annotations.Nullable;
@@ -40,6 +41,10 @@ final class ExprTyper {
     final List<StringData> strings = new ArrayList<>();
     private int nextId;
 
+    // Where anonymous automatic objects (materialized temporaries) are
+    // registered: the current function's locals, set by the typer.
+    private @Nullable List<Symbol> locals;
+
     ExprTyper(@NonNull Types types, @NonNull Bindings bindings, @NonNull TypeBuilder builder,
               @NonNull ConstEval constEval) {
         this.types = types;
@@ -48,6 +53,14 @@ final class ExprTyper {
         this.literals = new Literals(types);
         this.constEval = constEval;
         this.nextId = bindings.symbolCount;
+    }
+
+    void setLocals(@Nullable List<Symbol> locals) {
+        this.locals = locals;
+    }
+
+    int nextSymbolId() {
+        return nextId++;
     }
 
     /** Types an operand that is not evaluated: the type is all that is wanted. */
@@ -66,6 +79,7 @@ final class ExprTyper {
         if (e instanceof Expr.StringLiteral s) return string(s);
         if (e instanceof Expr.Binary b) return binary(b);
         if (e instanceof Expr.Index i) return index(i);
+        if (e instanceof Expr.Member m) return member(m);
         if (e instanceof Expr.Unary u) return unary(u);
         if (e instanceof Expr.Call c) return call(c);
         if (e instanceof Expr.Cast c) return cast(c);
@@ -457,6 +471,56 @@ final class ExprTyper {
         }
         Rvalue sum = (Rvalue) pointerAdd(e.bracket(), a, i, false);
         return deref(e.bracket(), sum);
+    }
+
+    // ---- member access (6.5.3.4) --------------------------------------------------------------
+
+    // s.m needs a struct or union lvalue (an rvalue is materialized first);
+    // p->m is (*p).m. The result has the member's type with the base's
+    // qualifiers added (6.5.3.4p4).
+    private TExpr member(Expr.Member e) {
+        Token at = e.op();
+        TExpr object = type(e.object());
+        Lvalue base;
+        if (e.op().text.equals("->")) {
+            Rvalue p = rvalue(object);
+            if (!(p.type() instanceof CType.Pointer ptr) || !ptr.target().isRecord()) {
+                throw new SemaException("member reference type '" + p.type().spelling()
+                        + "' is not a pointer to a structure or union", at);
+            }
+            base = new TExpr.Deref(p, ptr.target(), at);
+        } else if (object instanceof Lvalue lv) {
+            base = lv;
+        } else if (object instanceof Rvalue rv && rv.type().isRecord()) {
+            base = materialize(rv, at);
+        } else {
+            throw new SemaException("member reference base type '" + object.type().spelling()
+                    + "' is not a structure or union", at);
+        }
+        if (!(base.type() instanceof CType.Record record)) {
+            throw new SemaException("member reference base type '" + base.type().spelling()
+                    + "' is not a structure or union", at);
+        }
+        Layout layout = record.tag().layout().orElseThrow(
+                () -> new SemaException("member access into incomplete type '" + record.spelling() + "'", at));
+        Layout.Member member = layout.member(e.name().text).orElseThrow(
+                () -> new SemaException("no member named '" + e.name().text + "' in '" + record.spelling() + "'", e.name()));
+        CType type = types.plusQuals(member.type(), record.quals());
+        return new TExpr.Member(base, member, type, e.name());
+    }
+
+    // A struct/union rvalue gets an anonymous automatic object to live in
+    // (6.2.4p8), listed among the function's locals so lowering can
+    // allocate it. Not created for unevaluated operands.
+    private Lvalue materialize(Rvalue value, Token at) {
+        var name = new Token(TokenType.IDENTIFIER, "<temp" + nextId + ">", at.line, at.column);
+        Symbol symbol = Symbol.anonymousAutomatic(nextId++, name, 1);
+        symbol.setType(types.unqualified(value.type()));
+        if (unevaluated == 0) {
+            if (locals == null) throw new SemaException("a temporary object is not allowed here", at);
+            locals.add(symbol);
+        }
+        return new TExpr.Materialize(value, symbol, symbol.type(), at);
     }
 
     private void requireCompleteObjectPointer(Token op, Rvalue p) {
