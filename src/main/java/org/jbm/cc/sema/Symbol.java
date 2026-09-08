@@ -25,8 +25,9 @@ public sealed abstract class Symbol
     public final String name;
     /**
      * The syntactic type of the first declaration - absent only for an
-     * {@code auto} object whose type the typing pass infers. Sema's
-     * semantic type, composed across all declarations, comes later.
+     * {@code auto} object whose type the typing pass infers. Kept for
+     * "previously declared as" diagnostics; the semantic type, composed
+     * across all declarations, is {@link #type()}.
      */
     public final Optional<Type> declaredType;
     public final Token declaredAt;

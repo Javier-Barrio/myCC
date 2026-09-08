@@ -48,7 +48,7 @@ public final class Bindings {
     /** break / continue → the loop or switch statement it leaves or restarts. */
     public final Map<Stmt, Stmt> jumps = new IdentityHashMap<>();
 
-    /** File-scope symbols in declaration order. */
+    /** File-scope symbols in declaration order. Read by tests; the typed unit lists the globals lowering needs. */
     public final List<Symbol> fileScope = new ArrayList<>();
 
     /** Symbol ids used so far; later passes that create symbols continue from here. */
