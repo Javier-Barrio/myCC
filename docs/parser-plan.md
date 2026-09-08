@@ -212,6 +212,7 @@ symbols and explicit casts on the nodes.
 - [ ] typing pass over a new tree: literal decoding, lvalue/rvalue, decay,
       promotions and usual arithmetic conversions made explicit as casts,
       member resolution to offsets, `sizeof`/`_Generic` folded, calls checked
+      - architecture and phases in `typer-plan.md`
 - [ ] layout: `sizeof`/`alignof`, struct offsets and padding (x86-64 SysV)
 - [ ] initializers (6.7.11): designators, brace elision, array size completion
 - [ ] statement checks: switch case sets, return types
