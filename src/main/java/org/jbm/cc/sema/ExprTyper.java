@@ -48,6 +48,8 @@ final class ExprTyper {
         if (e instanceof Expr.Binary b) return binary(b);
         if (e instanceof Expr.Index i) return index(i);
         if (e instanceof Expr.Unary u) return unary(u);
+        if (e instanceof Expr.Assign a) return assign(a);
+        if (e instanceof Expr.Postfix p) return postfix(p);
         if (e instanceof Expr.Conditional c) return conditional(c);
         if (e instanceof Expr.Comma c) return comma(c);
         throw unsupported(e.getClass().getSimpleName(), tokenOf(e));
@@ -79,10 +81,13 @@ final class ExprTyper {
     // ---- binary operators ------------------------------------------------------------------
 
     private TExpr binary(Expr.Binary e) {
-        Token op = e.op();
-        Rvalue l = rvalue(type(e.left()));
-        Rvalue r = rvalue(type(e.right()));
-        return switch (op.text) {
+        return binaryOp(e.op(), e.op().text, rvalue(type(e.left())), rvalue(type(e.right())));
+    }
+
+    // The binary operator `opText` over converted operands; `op` is the
+    // token diagnostics point at (the `+=` of a compound assignment too).
+    private Rvalue binaryOp(Token op, String opText, Rvalue l, Rvalue r) {
+        return (Rvalue) switch (opText) {
             case "+" -> l.type().isPointer() || r.type().isPointer() ? pointerAdd(op, l, r, false)
                     : arithmetic(op, l, r, false, TExpr.Add::new);
             case "-" -> l.type().isPointer() || r.type().isPointer() ? pointerSub(op, l, r)
@@ -103,8 +108,97 @@ final class ExprTyper {
             case ">=" -> comparison(op, l, r, TExpr.Ge::new);
             case "&&" -> logical(op, l, r, TExpr.And::new);
             case "||" -> logical(op, l, r, TExpr.Or::new);
-            default -> throw unsupported("operator " + op.text, op);
+            default -> throw unsupported("operator " + opText, op);
         };
+    }
+
+    // ---- assignment (6.5.17) -------------------------------------------------------------------
+
+    private TExpr assign(Expr.Assign e) {
+        Token op = e.op();
+        Lvalue target = modifiable(type(e.target()), op);
+        CType resultType = types.unqualified(target.type());
+        Rvalue value = rvalue(type(e.value()));
+        if (op.text.equals("=")) {
+            return new TExpr.Assign(target, assignConvert(value, resultType, op, "assigning to"), resultType, op);
+        }
+        // a op= b: a = a op b with a evaluated once (6.5.17.3p3). The
+        // TargetValue stands for that one evaluation, and the operator's
+        // own typing supplies the computation type and its conversions.
+        String opText = op.text.substring(0, op.text.length() - 1);
+        if ((opText.equals("+") || opText.equals("-")) && value.type().isPointer()) {
+            throw new SemaException("invalid operands to " + op.text + " ('" + target.type().spelling() + "' and '"
+                    + value.type().spelling() + "')", op);
+        }
+        Rvalue current = new TExpr.TargetValue(target, resultType, op);
+        Rvalue computed = binaryOp(op, opText, current, value);
+        return new TExpr.CompoundAssign(target, assignConvert(computed, resultType, op, "assigning to"), resultType, op);
+    }
+
+    // i++ / i-- with the value used: the old value is yielded, the new one
+    // is i + 1 typed like any addition (6.5.3.4p2).
+    private TExpr postfix(Expr.Postfix e) {
+        Token op = e.op();
+        Lvalue target = modifiable(type(e.operand()), op);
+        CType resultType = types.unqualified(target.type());
+        if (!resultType.isArithmetic() && !resultType.isPointer() || resultType.isBool()) {
+            throw new SemaException("cannot " + (op.text.equals("++") ? "increment" : "decrement") + " a value of type '"
+                    + resultType.spelling() + "'", op);
+        }
+        Rvalue current = new TExpr.TargetValue(target, resultType, op);
+        Rvalue one = new TExpr.IntConst(1, types.int_(), op);
+        Rvalue computed = binaryOp(op, op.text.equals("++") ? "+" : "-", current, one);
+        return new TExpr.PostfixAssign(target, assignConvert(computed, resultType, op, "assigning to"), resultType, op);
+    }
+
+    /** The narrowing that fails with "not an lvalue". */
+    Lvalue lvalue(TExpr x, Token at) {
+        if (x instanceof Lvalue lv) return lv;
+        throw new SemaException("expression is not an lvalue", at);
+    }
+
+    /**
+     * A modifiable lvalue (6.3.3.1p1): not an array, not incomplete, not
+     * const-qualified.
+     */
+    Lvalue modifiable(TExpr x, Token at) {
+        Lvalue lv = lvalue(x, at);
+        CType t = lv.type();
+        if (t.isArray()) throw new SemaException("cannot assign to an array", at);
+        if (!t.isComplete()) throw new SemaException("cannot assign to an incomplete type '" + t.spelling() + "'", at);
+        if (t.quals().isConst()) throw new SemaException("cannot assign to const-qualified type '" + t.spelling() + "'", at);
+        return lv;
+    }
+
+    /**
+     * Conversion "as if by assignment" (6.5.17.2p1), the constraints shared
+     * by {@code =}, argument passing, {@code return} and initialization:
+     * arithmetic to arithmetic, any scalar to {@code bool}, pointers to
+     * compatible types where the target adds qualifiers, object pointers
+     * to and from {@code void *}, and null pointer constants.
+     */
+    Rvalue assignConvert(Rvalue x, CType to, Token at, String context) {
+        CType from = x.type();
+        if (from == to) return x;
+        if (to.isBool() && from.isScalar()) return convert(x, to);
+        if (to.isArithmetic() && from.isArithmetic()) return convert(x, to);
+        if (to instanceof CType.Pointer tp) {
+            if (isNullish(x)) return convert(x, to);
+            if (from instanceof CType.Pointer fp) {
+                CType tt = tp.target(), ft = fp.target();
+                boolean qualsOk = tt.quals().plus(ft.quals()).equals(tt.quals());
+                boolean compatible = types.compatible(types.unqualified(tt), types.unqualified(ft));
+                boolean viaVoid = (tt.isVoid() || ft.isVoid()) && !tt.isFunction() && !ft.isFunction();
+                if (qualsOk && (compatible || viaVoid)) return convert(x, to);
+                if (compatible || viaVoid) {
+                    throw new SemaException(context + " '" + to.spelling() + "' from '" + from.spelling()
+                            + "' discards qualifiers", at);
+                }
+            }
+        }
+        if (to.isNullptr() && isNullish(x)) return x.type().isNullptr() ? x : new TExpr.NullToPtr(x, to, at);
+        throw new SemaException("incompatible types when " + context + " '" + to.spelling() + "' from '"
+                + from.spelling() + "'", at);
     }
 
     private interface BinaryNode {

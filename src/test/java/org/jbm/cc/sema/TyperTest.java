@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -70,6 +71,12 @@ class TyperTest {
         var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
         var typer = Typer.run(unit, Resolver.resolve(unit), types);
         return TypedPrinter.print(typer.expressionStatements.get(typer.expressionStatements.size() - 1));
+    }
+
+    private static org.jbm.cc.tast.TExpr exprTree(String decls, String src) {
+        var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        return typer.expressionStatements.get(typer.expressionStatements.size() - 1);
     }
 
     private static SemaException exprFails(String decls, String src) {
@@ -387,6 +394,116 @@ class TyperTest {
         assertEquals("(cond:nullptr_t (to-bool:bool (rv:int c:int)) nullptr:nullptr_t nullptr:nullptr_t)",
                 expr("int c;", "c ? nullptr : nullptr"));
         assertTrue(exprFails("int c; int *p; long *q;", "c ? p : q").getMessage().contains("not supported"));
+    }
+
+    // ---- assignment ---------------------------------------------------------------------------
+
+    @Test
+    void simpleAssignmentConvertsAsIfByAssignment() {
+        assertEquals("(assign:int a:int (rv:int b:int))", expr("int a, b;", "a = b"));
+        assertEquals("(assign:char c:char (int-to-int:char 300:int))", expr("char c;", "c = 300"));
+        assertEquals("(assign:double d:double (int-to-float:double (rv:int a:int)))", expr("double d; int a;", "d = a"));
+        assertEquals("(assign:int a:int (float-to-int:int (rv:double d:double)))", expr("double d; int a;", "a = d"));
+        assertEquals("(assign:bool b:bool (to-bool:bool (rv:int * p:int *)))", expr("bool b; int *p;", "b = p"));
+        assertEquals("(assign:int * p:int * (null:int * 0:int))", expr("int *p;", "p = 0"));
+        assertEquals("(assign:int * p:int * (null:int * nullptr:nullptr_t))", expr("int *p;", "p = nullptr"));
+        assertEquals("(assign:const int * p:const int * (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("const int *p; int *q;", "p = q"));
+        assertEquals("(assign:void * v:void * (ptr-to-ptr:void * (rv:int * q:int *)))", expr("void *v; int *q;", "v = q"));
+        assertEquals("(assign:int * q:int * (ptr-to-ptr:int * (rv:void * v:void *)))", expr("void *v; int *q;", "q = v"));
+        assertEquals("(assign:int * p:int * (decay:int * a:int [3]))", expr("int *p; int a[3];", "p = a"));
+        assertEquals("(assign:int (deref:int (rv:int * p:int *)) 1:int)", expr("int *p;", "*p = 1"));
+        assertEquals("(assign:int (deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long 1:int))) 2:int)",
+                expr("int a[3];", "a[1] = 2"));
+        assertEquals("(assign:int a:int (assign:int b:int 3:int))", expr("int a, b;", "a = b = 3"), "right associative");
+        assertEquals("(assign:int (*)(void) fp:int (*)(void) (fdecay:int (*)(void) f:int (void)))",
+                expr("int (*fp)(void); int f(void);", "fp = f"));
+    }
+
+    @Test
+    void assignmentConstraints() {
+        assertTrue(exprFails("int a;", "1 = a").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("int a, b;", "a + b = 1").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const int c;", "c = 1").getMessage().contains("const-qualified"));
+        assertTrue(exprFails("int a[3];", "a = 0").getMessage().contains("array"));
+        assertTrue(exprFails("int *p; long *q;", "p = q").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p;", "p = 1").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p; double d;", "p = d").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int a; int *p;", "a = p").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p; const int *q;", "p = q").getMessage().contains("discards qualifiers"));
+        assertTrue(exprFails("int (*fp)(void); void *v;", "fp = v").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int f(void);", "f = 0").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const char *s;", "*s = 'a'").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void compoundAssignmentComputesOverTheTargetValue() {
+        assertEquals("(compound-assign:int i:int (add:int (target:int) 2:int))", expr("int i;", "i += 2"));
+        assertEquals("(compound-assign:char c:char (float-to-int:char (add:double (int-to-float:double (target:char)) 1.5:double)))",
+                expr("char c;", "c += 1.5"));
+        assertEquals("(compound-assign:short s:short (int-to-int:short (sub:int (int-to-int:int (target:short)) 1:int)))",
+                expr("short s;", "s -= 1"));
+        assertEquals("(compound-assign:unsigned int u:unsigned int (shl:unsigned int (target:unsigned int) (rv:int n:int)))",
+                expr("unsigned u; int n;", "u <<= n"));
+        assertEquals("(compound-assign:int i:int (rem:int (target:int) (int-to-int:int (rv:char c:char))))",
+                expr("int i; char c;", "i %= c"));
+        assertEquals("(compound-assign:long l:long (bitor:long (target:long) (int-to-int:long 1:int)))", expr("long l;", "l |= 1"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (int-to-int:long (rv:int n:int))))",
+                expr("int *p; int n;", "p += n"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (neg:long (int-to-int:long 1:int))))",
+                expr("int *p;", "p -= 1"));
+        assertEquals("(compound-assign:double d:double (mul:double (target:double) (int-to-float:double (rv:int i:int))))",
+                expr("double d; int i;", "d *= i"));
+        assertEquals("(compound-assign:int (deref:int (rv:int * p:int *)) (add:int (target:int) 1:int))",
+                expr("int *p;", "*p += 1"));
+        assertEquals("(compound-assign:int a:int (add:int (target:int) (compound-assign:int b:int (add:int (target:int) 1:int))))",
+                expr("int a, b;", "a += b += 1"));
+        assertTrue(exprFails("double d;", "d %= 2").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int i; int *p;", "i += p").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p, *q;", "p -= q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p *= 2").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("const int c;", "c += 1").getMessage().contains("const-qualified"));
+        assertTrue(exprFails("int a, b;", "a + b += 1").getMessage().contains("not an lvalue"));
+    }
+
+    @Test
+    void prefixIncrementIsCompoundAssignmentAlready() {
+        // Desugar rewrote ++i to i += 1 before typing (6.5.4.1p2).
+        assertEquals("(compound-assign:int i:int (add:int (target:int) 1:int))", expr("int i;", "++i"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (neg:long (int-to-int:long 1:int))))",
+                expr("int *p;", "--p"));
+    }
+
+    @Test
+    void postfixIncrementYieldsTheOldValue() {
+        assertEquals("(assign:int j:int (postfix-assign:int i:int (add:int (target:int) 1:int)))", expr("int i, j;", "j = i++"));
+        assertEquals("(assign:int * q:int * (postfix-assign:int * p:int * (ptradd:int * (target:int *) (int-to-int:long 1:int))))",
+                expr("int *p, *q;", "q = p++"));
+        assertEquals("(assign:int j:int (int-to-int:int (postfix-assign:char c:char (int-to-int:char (sub:int (int-to-int:int (target:char)) 1:int)))))",
+                expr("char c; int j;", "j = c--"));
+        assertEquals("(assign:double e:double (postfix-assign:double d:double (add:double (target:double) (int-to-float:double 1:int))))",
+                expr("double d, e;", "e = d++"));
+        assertTrue(exprFails("bool b; int j;", "j = b++").getMessage().contains("increment"));
+        assertTrue(exprFails("int a, b, j;", "j = (a + b)++").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const int c; int j;", "j = c++").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void targetValueSharesTheTargetNode() {
+        var tree = exprTree("int a[4]; int k;", "a[k++] += 1");
+        var outer = (org.jbm.cc.tast.TExpr.CompoundAssign) tree;
+        assertEquals("(compound-assign:int (deref:int (ptradd:int * (decay:int * a:int [4]) (int-to-int:long (postfix-assign:int k:int (add:int (target:int) 1:int))))) (add:int (target:int) 1:int))",
+                TypedPrinter.print(tree));
+        var outerAdd = (org.jbm.cc.tast.TExpr.Add) outer.newValue();
+        var outerTarget = (org.jbm.cc.tast.TExpr.TargetValue) outerAdd.left();
+        assertSame(outer.target(), outerTarget.target(), "the TargetValue refers to the assignment's own target node");
+        var deref = (org.jbm.cc.tast.TExpr.Deref) outer.target();
+        var ptradd = (org.jbm.cc.tast.TExpr.PtrAdd) deref.pointer();
+        var conv = (org.jbm.cc.tast.TExpr.IntToInt) ptradd.index();
+        var inner = (org.jbm.cc.tast.TExpr.PostfixAssign) conv.operand();
+        var innerTarget = (org.jbm.cc.tast.TExpr.TargetValue) ((org.jbm.cc.tast.TExpr.Add) inner.newValue()).left();
+        assertSame(inner.target(), innerTarget.target(), "and the inner one to k, not to the outer target");
+        assertNotSame(outer.target(), innerTarget.target());
     }
 
     @Test

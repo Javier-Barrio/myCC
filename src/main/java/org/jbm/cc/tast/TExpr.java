@@ -37,7 +37,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** A value. */
     sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
-            AddrOf, PtrAdd, PtrDiff, Cond, Comma {
+            AddrOf, PtrAdd, PtrDiff, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma {
     }
 
     // ---- families -------------------------------------------------------------------------
@@ -439,6 +439,55 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     }
 
     record Not(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Unary {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    // ---- assignment (6.5.17) ----------------------------------------------------------------------
+
+    /** {@code target = value}: the value, already converted to the target's unqualified type, is stored and yielded. */
+    record Assign(@NonNull Lvalue target, @NonNull Rvalue value, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * {@code target op= value} (6.5.17.3): the target is evaluated once,
+     * {@code newValue} is computed over a {@link TargetValue} that refers
+     * to that one evaluation, stored, and yielded. {@code newValue} is an
+     * ordinary typed subtree, so the computation type and every conversion
+     * are explicit in it.
+     */
+    record CompoundAssign(@NonNull Lvalue target, @NonNull Rvalue newValue, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code target++} / {@code target--} with the value used: like {@link CompoundAssign} but yields the old value. */
+    record PostfixAssign(@NonNull Lvalue target, @NonNull Rvalue newValue, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * Inside the {@code newValue} of a {@link CompoundAssign} or
+     * {@link PostfixAssign} only: the value the target held when the
+     * assignment began. {@code target} is the <em>same node instance</em>
+     * as the enclosing assignment's target, which is what says "that one
+     * evaluation, not a repeat of it". The one place the tree shares a node.
+     */
+    record TargetValue(@NonNull Lvalue target, @NonNull CType type, @NonNull Token token) implements Rvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);
