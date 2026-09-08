@@ -1,0 +1,4 @@
+(global b7:_BitInt(7))
+(global u3:unsigned _BitInt(3) 5:unsigned _BitInt(3))
+(global b40:_BitInt(40))
+(function f:void (int, unsigned int, long) (params i:int u:unsigned int l:long) (locals) (block (expr (assign:_BitInt(7) b7:_BitInt(7) (add:_BitInt(7) (rv:_BitInt(7) b7:_BitInt(7)) (rv:_BitInt(7) b7:_BitInt(7))))) (expr (assign:int i:int (add:int (int-to-int:int (rv:_BitInt(7) b7:_BitInt(7))) (rv:int i:int)))) (expr (assign:_BitInt(40) b40:_BitInt(40) (add:_BitInt(40) (rv:_BitInt(40) b40:_BitInt(40)) (int-to-int:_BitInt(40) (rv:unsigned int u:unsigned int))))) (expr (assign:long l:long (mul:long (int-to-int:long (rv:_BitInt(40) b40:_BitInt(40))) (rv:long l:long)))) (expr (assign:unsigned _BitInt(3) u3:unsigned _BitInt(3) (shl:unsigned _BitInt(3) (rv:unsigned _BitInt(3) u3:unsigned _BitInt(3)) 1:int))) (expr (assign:_BitInt(7) b7:_BitInt(7) (neg:_BitInt(7) (rv:_BitInt(7) b7:_BitInt(7)))))))

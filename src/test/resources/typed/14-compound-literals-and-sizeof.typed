@@ -1,0 +1,6 @@
+(global <literal7>:struct Pt (init (0 0:int) (4 0:int)))
+(global origin:struct Pt * &<literal7>:struct Pt *)
+(global <literal8>:int [3] (init (0 1:int) (4 2:int) (8 3:int)))
+(global tbl:int * &<literal8>:int *)
+(global <literal12>:const int 7:int)
+(function f:int (int) (params k:int) (locals <literal10>:struct Pt p:struct Pt <literal11>:int [2] q:int * <literal13>:struct Pt) (block (local p:struct Pt (init (0 (rv:struct Pt (lit:struct Pt (init (0 (rv:int k:int)) (4 (add:int (rv:int k:int) 1:int)))))))) (local q:int * (decay:int * (lit:int [2] (init (0 (rv:int k:int)) (4 2:int))))) (expr (rv:int (lit:const int 7:int))) (return (int-to-int:int (add:unsigned long (add:unsigned long (int-to-int:unsigned long (rv:int (member:int (lit:struct Pt (init (0 1:int) (4 2:int))) y))) 8:unsigned long) 8:unsigned long)))))
