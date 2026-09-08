@@ -24,11 +24,13 @@ public final class Types {
 
     private final CType.Void voidType;
     private final CType.Int boolType;
+    private final CType.Nullptr nullptrType;
 
     public Types(@NonNull Target target) {
         this.target = target;
         this.voidType = (CType.Void) intern(new CType.Void(Quals.NONE));
         this.boolType = (CType.Int) intern(new CType.Int(Rank.BOOL, Sign.UNSIGNED, Quals.NONE));
+        this.nullptrType = (CType.Nullptr) intern(new CType.Nullptr(Quals.NONE));
     }
 
     public Target target() {
@@ -48,6 +50,10 @@ public final class Types {
 
     public CType.Int bool_() {
         return boolType;
+    }
+
+    public CType.Nullptr nullptrT() {
+        return nullptrType;
     }
 
     public CType.Int integer(@NonNull Rank rank, @NonNull Sign sign) {
@@ -158,6 +164,7 @@ public final class Types {
         else if (t instanceof CType.Int i) fresh = new CType.Int(i.rank(), i.sign(), quals);
         else if (t instanceof CType.Float f) fresh = new CType.Float(f.rank(), quals);
         else if (t instanceof CType.Pointer p) fresh = new CType.Pointer(p.target(), quals);
+        else if (t instanceof CType.Nullptr) fresh = new CType.Nullptr(quals);
         else if (t instanceof CType.Array a) fresh = new CType.Array(qualified(a.element(), quals), a.size());
         else throw new IllegalArgumentException("cannot qualify " + t.spelling());
         return intern(fresh);
@@ -199,7 +206,7 @@ public final class Types {
     /** Width in bits of an integer or pointer type. */
     public int width(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.width(i.rank());
-        if (t instanceof CType.Pointer) return target.pointerWidth();
+        if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerWidth();
         throw new IllegalArgumentException("no width: " + t.spelling());
     }
 
@@ -207,7 +214,7 @@ public final class Types {
     public long size(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.width(i.rank()) / 8;
         if (t instanceof CType.Float f) return target.size(f.rank());
-        if (t instanceof CType.Pointer) return target.pointerWidth() / 8;
+        if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerWidth() / 8;
         if (t instanceof CType.Array a && a.size().isPresent()) return size(a.element()) * a.size().getAsLong();
         throw new IllegalArgumentException("no size: " + t.spelling());
     }
@@ -216,7 +223,7 @@ public final class Types {
     public int align(@NonNull CType t) {
         if (t instanceof CType.Int i) return target.align(i.rank());
         if (t instanceof CType.Float f) return target.align(f.rank());
-        if (t instanceof CType.Pointer) return target.pointerAlign();
+        if (t instanceof CType.Pointer || t instanceof CType.Nullptr) return target.pointerAlign();
         if (t instanceof CType.Array a) return align(a.element());
         throw new IllegalArgumentException("no alignment: " + t.spelling());
     }

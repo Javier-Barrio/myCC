@@ -16,7 +16,8 @@ import java.util.OptionalLong;
  * Anything that produces a new type or compares two types lives on
  * {@link Types}, which is what keeps the interning airtight.
  */
-public sealed interface CType permits CType.Void, CType.Int, CType.Float, CType.Pointer, CType.Array, CType.Function {
+public sealed interface CType
+        permits CType.Void, CType.Int, CType.Float, CType.Pointer, CType.Nullptr, CType.Array, CType.Function {
 
     Quals quals();
 
@@ -43,9 +44,13 @@ public sealed interface CType permits CType.Void, CType.Int, CType.Float, CType.
         return false;
     }
 
-    /** Arithmetic or pointer (6.2.5p24). */
+    /** Arithmetic, pointer or {@code nullptr_t} (6.2.5p24). */
     default boolean isScalar() {
-        return isArithmetic() || isPointer();
+        return isArithmetic() || isPointer() || isNullptr();
+    }
+
+    default boolean isNullptr() {
+        return false;
     }
 
     default boolean isBool() {
@@ -196,6 +201,24 @@ public sealed interface CType permits CType.Void, CType.Int, CType.Float, CType.
         @Override
         public String spelling() {
             return Spelling.of(this);
+        }
+
+        @Override
+        public String toString() {
+            return spelling();
+        }
+    }
+
+    /** {@code nullptr_t} (6.2.5p24 in C2y, 7.21p2): the type of {@code nullptr}. */
+    record Nullptr(Quals quals) implements CType {
+        @Override
+        public boolean isNullptr() {
+            return true;
+        }
+
+        @Override
+        public String spelling() {
+            return quals.prefix() + "nullptr_t";
         }
 
         @Override

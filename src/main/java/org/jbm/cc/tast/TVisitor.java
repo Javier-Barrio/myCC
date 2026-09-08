@@ -12,10 +12,13 @@ public interface TVisitor<R> {
     // ---- lvalues and function designators ----
     R visit(TExpr.VarRef e);
     R visit(TExpr.FuncRef e);
+    R visit(TExpr.Deref e);
+    R visit(TExpr.FuncDeref e);
 
     // ---- constants ----
     R visit(TExpr.IntConst e);
     R visit(TExpr.FloatConst e);
+    R visit(TExpr.NullptrConst e);
 
     // ---- conversions ----
     R visit(TExpr.LvalueToRvalue e);
@@ -27,6 +30,15 @@ public interface TVisitor<R> {
     R visit(TExpr.FloatToFloat e);
     R visit(TExpr.ToBool e);
     R visit(TExpr.ToVoid e);
+    R visit(TExpr.PtrToPtr e);
+    R visit(TExpr.IntToPtr e);
+    R visit(TExpr.PtrToInt e);
+    R visit(TExpr.NullToPtr e);
+
+    // ---- pointer operators ----
+    R visit(TExpr.AddrOf e);
+    R visit(TExpr.PtrAdd e);
+    R visit(TExpr.PtrDiff e);
 
     // ---- arithmetic ----
     R visit(TExpr.Add e);
