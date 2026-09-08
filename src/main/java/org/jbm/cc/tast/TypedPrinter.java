@@ -342,6 +342,11 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
     }
 
     @Override
+    public String visit(TExpr.CompoundLit e) {
+        return "(lit:" + e.type().spelling() + " " + init(e.init(), e.type()) + ")";
+    }
+
+    @Override
     public String visit(TExpr.Materialize e) {
         return node("materialize", e, e.value());
     }

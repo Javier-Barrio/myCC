@@ -32,7 +32,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     // ---- value categories ----------------------------------------------------------
 
     /** Designates an object (6.3.3.1p1). */
-    sealed interface Lvalue extends TExpr permits VarRef, Deref, Member, Materialize {
+    sealed interface Lvalue extends TExpr permits VarRef, Deref, Member, Materialize, CompoundLit {
     }
 
     /** Designates a function (6.3.3.1p4). */
@@ -145,6 +145,20 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
      * it (6.2.4p8). The symbol is one of the function's locals.
      */
     record Materialize(@NonNull Rvalue value, @NonNull Symbol symbol, @NonNull CType type, @NonNull Token token)
+            implements Lvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * A compound literal (6.5.3.6): an anonymous object, automatic in a
+     * block (one of the function's locals, initialized where the literal
+     * is evaluated) or static at file scope or with {@code static} (one
+     * of the unit's globals, with a constant initializer).
+     */
+    record CompoundLit(@NonNull Symbol symbol, @NonNull TInit init, @NonNull CType type, @NonNull Token token)
             implements Lvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {

@@ -1270,6 +1270,48 @@ class TyperTest {
         assertTrue(fails("int x; static_assert((long)&x);").getMessage().contains("not a constant expression"));
     }
 
+    // ---- compound literals -------------------------------------------------------------------
+
+    @Test
+    void compoundLiterals() {
+        assertEquals("(lit:int [3] (init (0 1:int) (4 2:int) (8 3:int)))", expr("", "(int[]){1, 2, 3}"));
+        assertEquals("(lit:struct S (init (0 (rv:int x:int)) (4 2:int)))", expr("struct S { int a, b; }; int x;", "(struct S){x, 2}"));
+        assertEquals("(add:int (rv:int (member:int (lit:struct S (init (0 1:int))) a)) 0:int)", expr("struct S { int a, b; };", "(struct S){1}.a + 0"));
+        assertEquals("(call:int (fdecay:int (*)(int *) f:int (int *)) (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))",
+                expr("int f(int *);", "f((int[2]){1, 2})"));
+        assertEquals("(assign:int * p:int * (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))", expr("int *p;", "p = (int[2]){1, 2}"));
+        assertEquals("(addr:struct S * (lit:struct S (init)))", expr("struct S { int a; };", "&(struct S){}"));
+        assertEquals("(assign:int (member:int (lit:struct S (init)) a) 5:int)", expr("struct S { int a; };", "(struct S){}.a = 5"), "a modifiable lvalue");
+        assertEquals("(lit:int 7:int)", expr("", "(int){7}"));
+        assertEquals("(lit:const char [3] (init (0 104:char) (1 105:char)))", expr("", "(const char[]){\"hi\"}"));
+        assertEquals("12:unsigned long", expr("", "sizeof (int[]){1, 2, 3}"));
+        assertEquals("(add:int (rv:int (lit:int 1:int)) (rv:int (member:int (lit:struct S (init (0 2:int))) a)))",
+                expr("struct S { int a; };", "(int){1} + (struct S){2}.a"));
+        assertTrue(exprFails("struct Inc;", "(struct Inc){}").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("", "(int (void)){}").getMessage().contains("compound literal of type"));
+        assertTrue(exprFails("", "(int[2]){1, 2, 3}").getMessage().contains("excess"));
+        assertTrue(exprFails("", "(register int){1}").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void compoundLiteralStorage() {
+        var unit = parse("struct S { int a; }; int *gp = (int[]){1, 2}; struct S *gs = &(struct S){3};\n"
+                + "void f(int x) { (int[]){x}; (struct S){x}.a; (static int){4}; sizeof (int[]){x}; }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var lines = TypedPrinter.print(typed).lines().filter(l -> l.startsWith("(global")).toList();
+        // A literal in a global's initializer is registered before the global itself.
+        assertEquals(List.of("(global <literal5>:int [2] (init (0 1:int) (4 2:int)))", "(global gp:int * &<literal5>:int *)",
+                        "(global <literal6>:struct S (init (0 3:int)))", "(global gs:struct S * &<literal6>:struct S *)",
+                        "(global <literal9>:int 4:int)"),
+                lines, "file-scope and static literals are globals with constant initializers");
+        var f = typed.functions().get(0);
+        assertEquals(List.of("<literal7>", "<literal8>"), f.locals().stream().map(s -> s.name).toList(),
+                "block-scope literals are locals; the one under sizeof creates no object");
+        assertEquals("int [1]", f.locals().get(0).type().spelling());
+        assertTrue(fails("int x; int *p = (int[]){x};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("void f(int x) { (static int){x}; }").getMessage().contains("not a constant expression"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));

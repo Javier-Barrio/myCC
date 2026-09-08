@@ -8,6 +8,7 @@ import org.jbm.cc.tast.StringData;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TExpr.Lvalue;
 import org.jbm.cc.tast.TExpr.Rvalue;
+import org.jbm.cc.tast.TInit;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Quals;
@@ -42,9 +43,12 @@ final class ExprTyper {
     private final java.util.Map<Symbol, StringData> stringObjects = new java.util.IdentityHashMap<>();
     private int nextId;
 
-    // Where anonymous automatic objects (materialized temporaries) are
-    // registered: the current function's locals, set by the typer.
+    // Where anonymous automatic objects (materialized temporaries,
+    // compound literals) are registered: the current function's locals,
+    // set by the typer; and where anonymous static ones go.
     private @Nullable List<Symbol> locals;
+    private @Nullable Initializers initializers;
+    private @Nullable java.util.function.BiConsumer<Symbol, TInit> staticSink;
 
     ExprTyper(@NonNull Types types, @NonNull Bindings bindings, @NonNull TypeBuilder builder,
               @NonNull ConstEval constEval) {
@@ -58,6 +62,11 @@ final class ExprTyper {
 
     void setLocals(@Nullable List<Symbol> locals) {
         this.locals = locals;
+    }
+
+    void setInitializers(@NonNull Initializers initializers, @NonNull java.util.function.BiConsumer<Symbol, TInit> staticSink) {
+        this.initializers = initializers;
+        this.staticSink = staticSink;
     }
 
     int nextSymbolId() {
@@ -84,6 +93,7 @@ final class ExprTyper {
         if (e instanceof Expr.Unary u) return unary(u);
         if (e instanceof Expr.Call c) return call(c);
         if (e instanceof Expr.Cast c) return cast(c);
+        if (e instanceof Expr.CompoundLiteral c) return compoundLiteral(c);
         if (e instanceof Expr.Generic g) return generic(g);
         if (e instanceof Expr.TypeOperator t) return sizeOf(t.op(), builder.build(t.type()));
         if (e instanceof Expr.StaticAssertion s) throw unsupported("static_assert as an expression", s.keyword());
@@ -205,6 +215,42 @@ final class ExprTyper {
         if (converted instanceof TExpr.PtrToInt c) return new TExpr.PtrToInt(c.operand(), c.type(), at);
         if (converted instanceof TExpr.NullToPtr c) return new TExpr.NullToPtr(c.operand(), c.type(), at);
         return converted;
+    }
+
+    // ---- compound literals (6.5.3.6) ----------------------------------------------------------------
+
+    // (T){...}: an lvalue designating an anonymous object of type T,
+    // completed from the initializer if T is an incomplete array. Static
+    // storage at file scope or with `static`, else automatic in the
+    // enclosing block. No object is created for an unevaluated operand.
+    private TExpr compoundLiteral(Expr.CompoundLiteral e) {
+        Token at = e.paren();
+        if (initializers == null) throw new IllegalStateException("no initializers");
+        boolean isStatic = locals == null;
+        for (Token sc : e.storageClasses()) {
+            if (sc.text.equals("static")) isStatic = true;
+            else throw unsupported("'" + sc.text + "' on a compound literal", sc);
+        }
+        CType t = builder.build(e.type());
+        if (t.isFunction() || t.isVoid()) throw new SemaException("compound literal of type '" + t.spelling() + "'", at);
+        if (!t.isComplete() && !t.isArray()) throw new SemaException("compound literal of incomplete type '" + t.spelling() + "'", at);
+        var name = new Token(TokenType.IDENTIFIER, "<literal" + nextId + ">", at.line, at.column);
+        Symbol symbol = isStatic ? Symbol.anonymousStatic(nextId++, name) : Symbol.anonymousAutomatic(nextId++, name, 1);
+        var r = initializers.normalize(e.initializer(), t, at);
+        symbol.setType(r.type());
+        TInit init = r.init();
+        if (isStatic) {
+            var items = new ArrayList<TInit.Item>(init.items().size());
+            for (var item : init.items()) {
+                items.add(new TInit.Item(item.offset(), constEval.require(item.value(), item.value().token(), "initializer element")));
+            }
+            init = new TInit(items);
+        }
+        if (unevaluated == 0) {
+            if (isStatic) staticSink.accept(symbol, init);
+            else locals.add(symbol);
+        }
+        return new TExpr.CompoundLit(symbol, init, r.type(), at);
     }
 
     // ---- generic selection (6.5.2.1) ----------------------------------------------------------------
