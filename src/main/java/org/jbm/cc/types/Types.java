@@ -183,6 +183,62 @@ public final class Types {
         throw new IllegalArgumentException("no alignment: " + t.spelling());
     }
 
+    // ---- conversions (6.3) -------------------------------------------------------------
+
+    /**
+     * Integer promotions (6.3.2.1p2): an integer type of rank lower than
+     * {@code int} becomes {@code int} if that can represent all its values,
+     * otherwise {@code unsigned int}. Other types are returned unchanged.
+     * Qualifiers are dropped, since promotions apply to values.
+     */
+    public CType promote(@NonNull CType t) {
+        if (!(t instanceof CType.Int i)) return unqualified(t);
+        if (i.rank().compareTo(Rank.INT) >= 0) return unqualified(i);
+        boolean fits = isSigned(i) || target.width(i.rank()) < target.width(Rank.INT);
+        return fits ? int_() : uint();
+    }
+
+    /**
+     * Default argument promotions (6.5.3.3p6): integer promotions, and
+     * {@code float} to {@code double}.
+     */
+    public CType defaultArgumentPromote(@NonNull CType t) {
+        if (t instanceof CType.Float f && f.rank() == CType.Float.Rank.FLOAT) return double_();
+        return promote(t);
+    }
+
+    /**
+     * Usual arithmetic conversions (6.3.2.2): the common real type of two
+     * arithmetic operands. Floating wins by rank; otherwise both are
+     * promoted and the integer rules apply: same type, else same
+     * signedness takes the higher rank, else the unsigned one if its rank
+     * is at least the signed one's, else the signed one if it can
+     * represent every value of the unsigned one, else the unsigned
+     * counterpart of the signed one. The last two steps are where the
+     * target's widths decide.
+     */
+    public CType usualArithmetic(@NonNull CType a, @NonNull CType b) {
+        if (!a.isArithmetic() || !b.isArithmetic()) {
+            throw new IllegalArgumentException(a.spelling() + " and " + b.spelling());
+        }
+        if (a instanceof CType.Float fa) {
+            if (b instanceof CType.Float fb && fb.rank().compareTo(fa.rank()) > 0) return floating(fb.rank());
+            return floating(fa.rank());
+        }
+        if (b instanceof CType.Float fb) return floating(fb.rank());
+        var pa = (CType.Int) promote(a);
+        var pb = (CType.Int) promote(b);
+        if (pa == pb) return pa;
+        boolean ua = pa.isUnsigned(), ub = pb.isUnsigned();
+        int cmp = pa.rank().compareTo(pb.rank());
+        if (ua == ub) return cmp >= 0 ? pa : pb;
+        CType.Int unsigned = ua ? pa : pb;
+        CType.Int signed = ua ? pb : pa;
+        if (unsigned.rank().compareTo(signed.rank()) >= 0) return unsigned;
+        if (target.width(signed.rank()) > target.width(unsigned.rank())) return signed;
+        return integer(signed.rank(), Sign.UNSIGNED);
+    }
+
     /** How many distinct types have been created; for tests of interning. */
     public int internedCount() {
         return interned.size();

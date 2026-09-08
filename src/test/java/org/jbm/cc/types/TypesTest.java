@@ -116,6 +116,57 @@ class TypesTest {
         assertEquals(x64.pointer(x64.char_()).spelling(), ilp32.pointer(ilp32.char_()).spelling());
     }
 
+    // ---- promotions and usual arithmetic conversions -----------------------------------
+
+    @Test
+    void integerPromotions() {
+        assertSame(x64.int_(), x64.promote(x64.bool_()));
+        assertSame(x64.int_(), x64.promote(x64.char_()));
+        assertSame(x64.int_(), x64.promote(x64.uchar()));
+        assertSame(x64.int_(), x64.promote(x64.short_()));
+        assertSame(x64.int_(), x64.promote(x64.ushort()), "unsigned short fits in a 32-bit int");
+        assertSame(x64.uint(), x64.promote(x64.uint()));
+        assertSame(x64.long_(), x64.promote(x64.long_()));
+        assertSame(x64.double_(), x64.promote(x64.double_()));
+        assertSame(x64.int_(), x64.promote(x64.qualified(x64.short_(), Quals.CONST)), "promotion drops qualifiers");
+        assertSame(x64.int_(), x64.promote(x64.qualified(x64.int_(), Quals.CONST)));
+    }
+
+    @Test
+    void defaultArgumentPromotions() {
+        assertSame(x64.double_(), x64.defaultArgumentPromote(x64.float_()));
+        assertSame(x64.double_(), x64.defaultArgumentPromote(x64.double_()));
+        assertSame(x64.int_(), x64.defaultArgumentPromote(x64.char_()));
+        assertSame(x64.pointer(x64.int_()), x64.defaultArgumentPromote(x64.pointer(x64.int_())));
+    }
+
+    @Test
+    void usualArithmeticConversionsOnX86_64() {
+        assertSame(x64.int_(), x64.usualArithmetic(x64.char_(), x64.short_()));
+        assertSame(x64.int_(), x64.usualArithmetic(x64.bool_(), x64.bool_()));
+        assertSame(x64.uint(), x64.usualArithmetic(x64.uint(), x64.int_()));
+        assertSame(x64.long_(), x64.usualArithmetic(x64.long_(), x64.int_()));
+        assertSame(x64.ulong(), x64.usualArithmetic(x64.int_(), x64.ulong()));
+        assertSame(x64.ulong(), x64.usualArithmetic(x64.long_(), x64.ulong()));
+        assertSame(x64.ullong(), x64.usualArithmetic(x64.llong(), x64.ulong()), "same width: unsigned long long");
+        assertSame(x64.float_(), x64.usualArithmetic(x64.float_(), x64.int_()));
+        assertSame(x64.double_(), x64.usualArithmetic(x64.float_(), x64.double_()));
+        assertSame(x64.longDouble(), x64.usualArithmetic(x64.double_(), x64.longDouble()));
+        assertSame(x64.longDouble(), x64.usualArithmetic(x64.longDouble(), x64.ullong()));
+        assertSame(x64.int_(), x64.usualArithmetic(x64.qualified(x64.int_(), Quals.CONST), x64.int_()));
+        assertThrows(IllegalArgumentException.class, () -> x64.usualArithmetic(x64.pointer(x64.int_()), x64.int_()));
+    }
+
+    @Test
+    void usualArithmeticConversionsAskTheTargetForWidths() {
+        // long can hold every unsigned int on LP64 but not on ILP32 (6.3.2.2).
+        assertSame(x64.long_(), x64.usualArithmetic(x64.uint(), x64.long_()));
+        assertSame(ilp32.ulong(), ilp32.usualArithmetic(ilp32.uint(), ilp32.long_()));
+        // long long is wider than unsigned long only on ILP32.
+        assertSame(ilp32.llong(), ilp32.usualArithmetic(ilp32.llong(), ilp32.ulong()));
+        assertSame(x64.ullong(), x64.usualArithmetic(x64.llong(), x64.ulong()));
+    }
+
     // ---- spelling ------------------------------------------------------------------------
 
     @Test
