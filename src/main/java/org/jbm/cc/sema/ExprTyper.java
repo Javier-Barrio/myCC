@@ -4,11 +4,15 @@ import lombok.NonNull;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.cc.tast.StringData;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TExpr.Lvalue;
 import org.jbm.cc.tast.TExpr.Rvalue;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Types expressions (C2y 6.5): builds a {@link TExpr} bottom-up from an
@@ -22,15 +26,23 @@ final class ExprTyper {
 
     private final Types types;
     private final Bindings bindings;
+    private final Literals literals;
+
+    /** The string literals typed so far, in order; each one is its own object (6.4.5p7). */
+    final List<StringData> strings = new ArrayList<>();
+    private int nextId;
 
     ExprTyper(@NonNull Types types, @NonNull Bindings bindings) {
         this.types = types;
         this.bindings = bindings;
+        this.literals = new Literals(types);
+        this.nextId = bindings.symbolCount;
     }
 
     TExpr type(@NonNull Expr e) {
         if (e instanceof Expr.Identifier id) return identifier(id);
-        if (e instanceof Expr.Literal l) return literal(l);
+        if (e instanceof Expr.Literal l) return literals.constant(l.token());
+        if (e instanceof Expr.StringLiteral s) return string(s);
         if (e instanceof Expr.Binary b) return binary(b);
         throw unsupported(e.getClass().getSimpleName(), tokenOf(e));
     }
@@ -44,23 +56,18 @@ final class ExprTyper {
         return new TExpr.VarRef(s, s.type(), e.name());
     }
 
-    // Until Literals exists (step 7) only an unsuffixed decimal integer is
-    // decoded: int, long or long long, the first that can hold it (6.4.5.2p6).
-    private TExpr literal(Expr.Literal e) {
-        Token t = e.token();
-        if (t.type == TokenType.INTEGER_CONSTANT && t.text.matches("[0-9]+")) {
-            long value;
-            try {
-                value = Long.parseLong(t.text);
-            } catch (NumberFormatException ex) {
-                throw new SemaException("integer constant is too large", t);
-            }
-            for (CType.Int candidate : new CType.Int[] {types.int_(), types.long_(), types.llong()}) {
-                int bits = types.width(candidate) - 1;
-                if (bits >= 63 || value < (1L << bits)) return new TExpr.IntConst(value, candidate, t);
-            }
-        }
-        throw unsupported("this kind of literal", t);
+    // A string literal denotes an anonymous array object with static
+    // storage (6.4.5p7): one symbol per literal, named by its spelling,
+    // referenced as an lvalue of array type.
+    private TExpr string(Expr.StringLiteral e) {
+        Literals.StringValue value = literals.string(e.parts());
+        Token first = e.parts().get(0);
+        String spelling = e.parts().stream().map(t -> t.text).collect(java.util.stream.Collectors.joining(" "));
+        var name = new Token(TokenType.STRING_LITERAL, spelling, first.line, first.column);
+        Symbol symbol = Symbol.anonymousStatic(nextId++, name);
+        symbol.setType(types.array(value.elementType(), value.units().length));
+        strings.add(new StringData(symbol, value.units()));
+        return new TExpr.VarRef(symbol, symbol.type(), first);
     }
 
     // ---- binary operators ------------------------------------------------------------------
@@ -114,9 +121,13 @@ final class ExprTyper {
 
     /** {@code x} converted to {@code to}: itself when the type already matches, else one conversion node. */
     Rvalue convert(Rvalue x, CType to) {
-        if (x.type() == to) return x;
-        if (x.type().isInteger() && to.isInteger()) return new TExpr.IntToInt(x, to, x.token());
-        throw unsupported("conversion from '" + x.type().spelling() + "' to '" + to.spelling() + "'", x.token());
+        CType from = x.type();
+        if (from == to) return x;
+        if (from.isInteger() && to.isInteger()) return new TExpr.IntToInt(x, to, x.token());
+        if (from.isInteger() && to.isFloating()) return new TExpr.IntToFloat(x, to, x.token());
+        if (from.isFloating() && to.isInteger()) return new TExpr.FloatToInt(x, to, x.token());
+        if (from.isFloating() && to.isFloating()) return new TExpr.FloatToFloat(x, to, x.token());
+        throw unsupported("conversion from '" + from.spelling() + "' to '" + to.spelling() + "'", x.token());
     }
 
     // ---- helpers -------------------------------------------------------------------------------

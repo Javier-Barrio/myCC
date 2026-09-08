@@ -51,6 +51,9 @@ public final class Bindings {
     /** File-scope symbols in declaration order. */
     public final List<Symbol> fileScope = new ArrayList<>();
 
+    /** Symbol ids used so far; later passes that create symbols continue from here. */
+    public int symbolCount;
+
     public Symbol symbolOf(@NonNull Expr.Identifier id) {
         return require(identifiers.get(id), id.name().text);
     }
