@@ -2,6 +2,8 @@ package org.jbm.cc.sema;
 
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
+import org.jbm.cc.types.CType;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 
@@ -31,12 +33,34 @@ public sealed abstract class Symbol
     /** 0 for file scope. */
     public final int scopeDepth;
 
+    // The semantic type, set by the typing pass: the composite of every
+    // declaration seen so far (6.2.7p3), or what a typedef stands for.
+    private @Nullable CType type;
+
     Symbol(int id, Token declaredAt, Optional<Type> declaredType, int scopeDepth) {
         this.id = id;
         this.name = declaredAt.text;
         this.declaredType = declaredType;
         this.declaredAt = declaredAt;
         this.scopeDepth = scopeDepth;
+    }
+
+    /**
+     * The semantic type. Reading it before the typing pass has set it is a
+     * bug in the caller, not a lookup miss, so it throws rather than
+     * returning an absent value.
+     */
+    public CType type() {
+        if (type == null) throw new IllegalStateException("type of '" + name + "' has not been computed");
+        return type;
+    }
+
+    public boolean hasType() {
+        return type != null;
+    }
+
+    void setType(CType type) {
+        this.type = type;
     }
 
     public Linkage linkage() {
