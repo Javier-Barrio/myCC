@@ -94,6 +94,12 @@ public final class Typer {
         this.constEval = new ConstEval(types);
         this.exprs = new ExprTyper(types, bindings, builder, constEval);
         this.literals = new Literals(types);
+        builder.setEvaluator((e, at, what) -> {
+            Rvalue v = exprs.rvalue(exprs.type(e));
+            TExpr.Constant c = constEval.require(v, at, what);
+            if (!(c instanceof TExpr.IntConst i)) throw new SemaException(what + " must be an integer constant expression", at);
+            return i;
+        });
     }
 
     public static TUnit type(@NonNull List<? extends Decl> unit, @NonNull Bindings bindings) {
@@ -136,6 +142,9 @@ public final class Typer {
      * function declarations only get their type.
      */
     private void declaration(Decl.Declaration d, @Nullable List<TStmt> out) {
+        // A struct/union/enum body in the specifiers is typed once here,
+        // whether or not any declarator follows (`enum E { A, B };`).
+        d.specifiers().type().ifPresent(builder::build);
         for (var id : d.declarators()) {
             Type syntactic = id.type().orElseThrow(
                     () -> new SemaException("auto type inference is not supported yet", id.name()));

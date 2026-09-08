@@ -163,13 +163,27 @@ public sealed abstract class Symbol
         }
     }
 
-    /** An enumeration constant (6.7.3.3); enumType is the enum specifier that declares it. */
+    /**
+     * An enumeration constant (6.7.3.3); enumType is the enum specifier
+     * that declares it. Its value is computed once, when the enum is
+     * typed, and every use folds to it.
+     */
     public static final class Enumerator extends Symbol {
         public final Type.Enum enumType;
+        private long value;
 
         Enumerator(int id, Token declaredAt, Type.Enum enumType, int scopeDepth) {
             super(id, declaredAt, Optional.of(enumType), scopeDepth);
             this.enumType = enumType;
+        }
+
+        public long value() {
+            type(); // the value is set together with the type
+            return value;
+        }
+
+        void setValue(long value) {
+            this.value = value;
         }
     }
 }

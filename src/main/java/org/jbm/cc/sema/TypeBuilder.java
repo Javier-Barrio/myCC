@@ -5,12 +5,16 @@ import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Quals;
 import org.jbm.cc.types.Types;
+import org.jetbrains.annotations.Nullable;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Turns a syntactic {@link Type} into the semantic {@link CType} it means:
@@ -27,10 +31,25 @@ final class TypeBuilder {
 
     private final Types types;
     private final Bindings bindings;
+    private @Nullable IntegerEvaluator evaluator;
+
+    /** Evaluates an integer constant expression of the AST; supplied by the typer once expressions can be typed. */
+    interface IntegerEvaluator {
+        TExpr.IntConst evaluate(Expr e, Token at, String what);
+    }
 
     TypeBuilder(@NonNull Types types, @NonNull Bindings bindings) {
         this.types = types;
         this.bindings = bindings;
+    }
+
+    void setEvaluator(@NonNull IntegerEvaluator evaluator) {
+        this.evaluator = evaluator;
+    }
+
+    private TExpr.IntConst evaluate(Expr e, Token at, String what) {
+        if (evaluator == null) throw new IllegalStateException("no constant evaluator");
+        return evaluator.evaluate(e, at, what);
     }
 
     CType build(@NonNull Type t) {
@@ -42,7 +61,7 @@ final class TypeBuilder {
         if (t instanceof Type.Typeof to) return typeof(to);
         if (t instanceof Type.BitInt bi) throw unsupported("_BitInt", bi.token());
         if (t instanceof Type.Struct s) throw unsupported(s.keyword().text + " types", s.keyword());
-        if (t instanceof Type.Enum e) throw unsupported("enum types", e.keyword());
+        if (t instanceof Type.Enum e) return types.plusQuals(enumType(e), quals(e.quals()));
         throw new IllegalStateException(t.toString());
     }
 
@@ -129,6 +148,97 @@ final class TypeBuilder {
             params.add(pt);
         }
         return types.function(returnType, params, f.isVariadic());
+    }
+
+    // ---- enumerations (6.7.3.3) --------------------------------------------------------------
+
+    /**
+     * An enum specifier's type is its underlying integer type: the fixed
+     * one when spelled, otherwise the first of int, unsigned int, long,
+     * unsigned long that holds every enumerator. The tag caches it; the
+     * enumerators get their values here, in order, each visible to the
+     * next.
+     */
+    private CType enumType(Type.Enum e) {
+        TagSymbol tag = bindings.tagOf(e);
+        if (tag.hasType() && (e.enumerators().isEmpty() || tag.definition().orElse(null) != e || enumeratorsTyped(e))) {
+            return tag.type();
+        }
+        Optional<CType.Int> fixed = e.underlying().map(u -> fixedUnderlying(u, e.keyword()));
+        if (e.enumerators().isEmpty()) {
+            // A reference or forward declaration: complete only with a fixed type.
+            if (fixed.isPresent()) {
+                tag.setType(fixed.get());
+                return fixed.get();
+            }
+            throw new SemaException("enum '" + tag.name.orElse("<anonymous>") + "' is incomplete", e.keyword());
+        }
+        var values = new ArrayList<BigInteger>();
+        var symbols = new ArrayList<Symbol.Enumerator>();
+        BigInteger next = BigInteger.ZERO;
+        for (var en : e.enumerators().get()) {
+            var symbol = (Symbol.Enumerator) bindings.enumerators.get(en);
+            BigInteger value;
+            if (en.value().isPresent()) {
+                TExpr.IntConst c = evaluate(en.value().get(), en.name(), "enumerator value");
+                value = ((CType.Int) c.type()).isUnsigned() && c.value() < 0
+                        ? BigInteger.valueOf(c.value()).add(BigInteger.ONE.shiftLeft(64)) : BigInteger.valueOf(c.value());
+            } else {
+                value = next;
+            }
+            if (fixed.isPresent()) {
+                if (!fits(value, fixed.get())) {
+                    throw new SemaException("enumerator value " + value + " is not representable in '"
+                            + fixed.get().spelling() + "'", en.name());
+                }
+                symbol.setType(fixed.get());
+            } else {
+                // While the list is processed an enumerator has type int
+                // if it fits, else the narrowest type that holds it
+                // (6.7.3.3p15); B = A + 1 sees A with that type.
+                symbol.setType(narrowest(value, en.name()));
+            }
+            symbol.setValue(value.longValue());
+            values.add(value);
+            symbols.add(symbol);
+            next = value.add(BigInteger.ONE);
+        }
+        CType.Int underlying = fixed.orElseGet(() -> {
+            for (CType.Int candidate : List.of(types.int_(), types.uint(), types.long_(), types.ulong())) {
+                if (values.stream().allMatch(v -> fits(v, candidate))) return candidate;
+            }
+            throw new SemaException("enumerator values do not fit any integer type", e.keyword());
+        });
+        // Once complete, every enumerator has the enumerated type (6.7.3.3p16).
+        for (var symbol : symbols) symbol.setType(underlying);
+        tag.setType(underlying);
+        return underlying;
+    }
+
+    private boolean enumeratorsTyped(Type.Enum e) {
+        var first = e.enumerators().get();
+        return first.isEmpty() || bindings.enumerators.get(first.get(0)).hasType();
+    }
+
+    private CType.Int fixedUnderlying(Type underlying, Token at) {
+        CType t = types.unqualified(build(underlying));
+        if (!(t instanceof CType.Int i) || i.isBool()) {
+            throw new SemaException("enum underlying type must be an integer type ('" + t.spelling() + "')", at);
+        }
+        return i;
+    }
+
+    private boolean fits(BigInteger v, CType.Int t) {
+        int w = types.width(t);
+        return types.isSigned(t) ? v.bitLength() < w && v.compareTo(BigInteger.ONE.shiftLeft(w - 1).negate()) >= 0
+                : v.signum() >= 0 && v.bitLength() <= w;
+    }
+
+    private CType.Int narrowest(BigInteger v, Token at) {
+        for (CType.Int candidate : List.of(types.int_(), types.uint(), types.long_(), types.ulong())) {
+            if (fits(v, candidate)) return candidate;
+        }
+        throw new SemaException("enumerator value " + v + " does not fit any integer type", at);
     }
 
     private CType typeof(Type.Typeof t) {
