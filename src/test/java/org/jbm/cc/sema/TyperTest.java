@@ -5,6 +5,7 @@ import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
+import org.jbm.cc.tast.TypedPrinter;
 import org.jbm.cc.types.Ilp32;
 import org.jbm.cc.types.Types;
 import org.jbm.cc.types.X86_64SysV;
@@ -57,6 +58,70 @@ class TyperTest {
 
     private static SemaException fails(String source) {
         return assertThrows(SemaException.class, () -> type(source));
+    }
+
+    /** Types {@code src} as an expression statement in a function after {@code decls}; prints the tree. */
+    private static String expr(String decls, String src) {
+        var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        return TypedPrinter.print(typer.expressionStatements.get(typer.expressionStatements.size() - 1));
+    }
+
+    private static SemaException exprFails(String decls, String src) {
+        return assertThrows(SemaException.class, () -> expr(decls, src));
+    }
+
+    // ---- expressions: references, literals, arithmetic -----------------------------------
+
+    @Test
+    void referencesAndLiterals() {
+        assertEquals("a:int", expr("int a;", "a"));
+        assertEquals("f:int (void)", expr("int f(void);", "f"));
+        assertEquals("5:int", expr("", "5"));
+        assertEquals("2147483648:long", expr("", "2147483648"));
+        assertEquals("9223372036854775807:long", expr("", "9223372036854775807"));
+        assertTrue(exprFails("", "9223372036854775808").getMessage().contains("too large"));
+    }
+
+    @Test
+    void additionPromotesAndConverts() {
+        assertEquals("(add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))", expr("int a; char b;", "a + b"));
+        assertEquals("(add:int (rv:int a:int) 1:int)", expr("int a;", "a + 1"));
+        assertEquals("(add:int (int-to-int:int (rv:short s:short)) (int-to-int:int (rv:unsigned char c:unsigned char)))",
+                expr("short s; unsigned char c;", "s + c"));
+        assertEquals("(add:unsigned int (int-to-int:unsigned int (rv:int a:int)) (rv:unsigned int u:unsigned int))",
+                expr("int a; unsigned u;", "a + u"));
+        assertEquals("(add:long (rv:long l:long) (int-to-int:long (rv:unsigned int u:unsigned int)))",
+                expr("long l; unsigned u;", "l + u"));
+        assertEquals("(add:unsigned long (int-to-int:unsigned long (rv:long l:long)) (rv:unsigned long u:unsigned long))",
+                expr("long l; unsigned long u;", "l + u"));
+        // The harness returns the statement's operand as typed; lvalue
+        // conversion for the void context is the statement's job (step 13).
+        assertEquals("c:const int", expr("const int c;", "c"));
+        assertEquals("(add:int (rv:int c:const int) 1:int)", expr("const int c;", "c + 1"));
+    }
+
+    @Test
+    void theFourArithmeticOperatorsAndPrecedence() {
+        assertEquals("(sub:int (rv:int a:int) (mul:int (rv:int b:int) (rv:int c:int)))",
+                expr("int a, b, c;", "a - b * c"));
+        assertEquals("(div:int (mul:int (rv:int a:int) (rv:int b:int)) (rv:int c:int))",
+                expr("int a, b, c;", "a * b / c"));
+        assertEquals("(mul:int (add:int (rv:int a:int) (rv:int b:int)) 2:int)", expr("int a, b;", "(a + b) * 2"));
+    }
+
+    @Test
+    void parametersAreLvaluesToo() {
+        var unit = parse("int f(int p, char q) { p + q; return 0; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        assertEquals("(add:int (rv:int p:int) (int-to-int:int (rv:char q:char)))",
+                TypedPrinter.print(typer.expressionStatements.get(0)));
+    }
+
+    @Test
+    void invalidOperands() {
+        assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
+        assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("invalid operands"));
     }
 
     // ---- scalar declarations --------------------------------------------------------
