@@ -39,6 +39,11 @@ public final class Resolver extends AstWalker {
     private final Bindings bindings = new Bindings();
     private int nextId = 1;
 
+    // Every symbol with external linkage declared so far, by name: all
+    // declarations of such a name in the unit denote one entity (6.2.2p2),
+    // wherever they appear.
+    private final Map<String, Symbol> externals = new HashMap<>();
+
     // Per-function state: the label namespace (6.2.1p3), gotos to resolve
     // once the whole body is seen, and the enclosing loops/switches that a
     // break or continue may target, innermost first. Reset per function;
@@ -149,7 +154,7 @@ public final class Resolver extends AstWalker {
     private Symbol declare(Token name, Optional<Type> type, Specifiers specs, boolean defined) {
         int depth = table.depth();
         Class<? extends Symbol> kind = specs.isTypedef() ? Symbol.Typedef.class
-                : type.filter(t -> t instanceof Type.Function).isPresent() ? Symbol.Function.class
+                : type.filter(Resolver::isFunctionType).isPresent() ? Symbol.Function.class
                 : Symbol.Variable.class;
         var found = table.lookupHere(name.text);
         if (found.isPresent()) {
@@ -170,6 +175,28 @@ public final class Resolver extends AstWalker {
         }
 
         boolean isStatic = specs.has("static");
+        // A declaration with linkage denotes a visible prior declaration
+        // with linkage (6.2.2p4-5), or the unit's entity of that name with
+        // external linkage (6.2.2p2), when there is one.
+        boolean hasLinkage = kind != Symbol.Typedef.class
+                && (depth == 0 || kind == Symbol.Function.class || specs.has("extern"));
+        if (hasLinkage) {
+            Symbol prior = table.lookup(name.text).filter(s -> s.linkage() != Symbol.Linkage.NONE)
+                    .orElse(externals.get(name.text));
+            if (prior != null) {
+                if (prior.getClass() != kind) throw redeclaration(name, prior);
+                if (defined) {
+                    if (prior.isDefined()) {
+                        throw new SemaException("redefinition of '" + name.text + "' (previous definition at "
+                                + prior.declaredAt.line + ":" + prior.declaredAt.column + ")", name);
+                    }
+                    prior.markDefined();
+                }
+                table.declare(prior);
+                if (depth == 0 && !bindings.fileScope.contains(prior)) bindings.fileScope.add(prior);
+                return prior;
+            }
+        }
         Symbol symbol;
         if (kind == Symbol.Typedef.class) {
             symbol = new Symbol.Typedef(nextId++, name, type.orElseThrow(), depth);
@@ -187,7 +214,17 @@ public final class Resolver extends AstWalker {
         }
         table.declare(symbol);
         if (depth == 0) bindings.fileScope.add(symbol);
+        if (symbol.linkage() == Symbol.Linkage.EXTERNAL) externals.put(name.text, symbol);
         return symbol;
+    }
+
+    // A function declarator, or a typedef name that stands for one
+    // (`typedef int F(void); F f;` declares a function). A typeof cannot
+    // be seen through here; the typing pass treats an object whose type
+    // turns out to be a function type as a function declaration.
+    private static boolean isFunctionType(Type t) {
+        if (t instanceof Type.Function) return true;
+        return t instanceof Type.TypedefName n && isFunctionType(n.aliased());
     }
 
     private static SemaException redeclaration(Token name, Symbol existing) {

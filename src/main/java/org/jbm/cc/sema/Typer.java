@@ -50,8 +50,11 @@ public final class Typer {
     private final Initializers initializers;
 
     // Static-storage objects in declaration order; a definition's
-    // initializer replaces the absent one of an earlier declaration.
+    // initializer replaces the absent one of an earlier declaration. A
+    // symbol declared at least once without `extern` is a tentative
+    // definition (6.9.2p2) and gets storage in this unit.
     private final Map<Symbol, Optional<TInit>> globals = new LinkedHashMap<>();
+    private final Set<Symbol> tentative = new HashSet<>();
     private final List<TFunction> functions = new ArrayList<>();
 
     // Expression statements typed so far, unconverted, in order: the test
@@ -146,7 +149,21 @@ public final class Typer {
 
     TUnit unit() {
         var g = new ArrayList<TUnit.Global>(globals.size());
-        globals.forEach((symbol, init) -> g.add(new TUnit.Global(symbol, init)));
+        globals.forEach((symbol, init) -> {
+            boolean isDefinition = init.isPresent() || tentative.contains(symbol);
+            if (isDefinition && !symbol.type().isComplete()) {
+                // A tentative definition of an incomplete array is an array of
+                // one element at the end of the unit (6.9.2p5); any other
+                // incomplete type has no storage size.
+                if (symbol.type() instanceof CType.Array a) {
+                    symbol.setType(types.array(a.element(), 1));
+                } else {
+                    throw new SemaException("storage size of '" + symbol.name + "' is not known ('"
+                            + symbol.type().spelling() + "')", symbol.declaredAt);
+                }
+            }
+            g.add(new TUnit.Global(symbol, isDefinition, init));
+        });
         return new TUnit(g, functions, exprs.strings);
     }
 
@@ -169,12 +186,17 @@ public final class Typer {
         // A struct/union/enum body in the specifiers is typed once here,
         // whether or not any declarator follows (`enum E { A, B };`).
         d.specifiers().type().ifPresent(builder::build);
+        boolean isExtern = d.specifiers().has("extern");
         for (var id : d.declarators()) {
-            Type syntactic = id.type().orElseThrow(
-                    () -> new SemaException("auto type inference is not supported yet", id.name()));
             Symbol symbol = bindings.symbolOf(id);
-            declare(symbol, builder.build(syntactic), id.name());
-            if (!(symbol instanceof Symbol.Variable v)) {
+            if (id.type().isPresent()) {
+                declare(symbol, builder.build(id.type().get()), id.name());
+            } else {
+                declare(symbol, inferred(d, id, symbol), id.name());
+            }
+            // Typedefs, functions, and objects whose type turned out to be a
+            // function type (through a typedef or typeof) only get a type.
+            if (!(symbol instanceof Symbol.Variable v) || v.type().isFunction()) {
                 if (id.initializer().isPresent()) {
                     throw new SemaException("'" + symbol.name + "' cannot have an initializer", id.name());
                 }
@@ -193,6 +215,7 @@ public final class Typer {
                 // folded to its constant here.
                 init = init.map(i -> constantInit(i, id.name()));
                 if (init.isPresent() || !globals.containsKey(v)) globals.put(v, init);
+                if (!isExtern) tentative.add(v);
             } else {
                 if (!v.type().isComplete()) {
                     throw new SemaException("variable '" + v.name + "' has incomplete type '" + v.type().spelling()
@@ -202,6 +225,20 @@ public final class Typer {
                 out.add(new TStmt.LocalDecl(v, init, id.name()));
             }
         }
+    }
+
+    // auto (6.7.10): the type is the initializer's after lvalue conversion
+    // and decay; the initializer is a single expression.
+    private CType inferred(Decl.Declaration d, Decl.InitDeclarator id, Symbol symbol) {
+        if (!d.specifiers().has("auto")) throw new IllegalStateException("declarator without a type");
+        if (symbol instanceof Symbol.Typedef) throw new SemaException("typedef cannot be declared with auto", id.name());
+        if (!(id.initializer().orElse(null) instanceof org.jbm.cc.ast.Initializer.Expression e)) {
+            throw new SemaException("'" + symbol.name + "' declared with auto needs an initializer that is an expression",
+                    id.name());
+        }
+        Rvalue value = exprs.rvalue(exprs.type(e.expr()));
+        if (value.type().isVoid()) throw new SemaException("cannot infer 'void' for '" + symbol.name + "'", id.name());
+        return value.type();
     }
 
     private TInit constantInit(TInit init, Token at) {
