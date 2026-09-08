@@ -5,6 +5,8 @@ import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.sema.Symbol;
 import org.jbm.cc.types.CType;
 
+import java.util.List;
+
 /**
  * A typed expression (C2y 6.5). The three value categories of 6.3.3.1 are
  * the sealed sub-interfaces, and every node kind implements exactly one,
@@ -37,7 +39,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** A value. */
     sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
-            AddrOf, PtrAdd, PtrDiff, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma {
+            AddrOf, PtrAdd, PtrDiff, Call, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma {
     }
 
     // ---- families -------------------------------------------------------------------------
@@ -439,6 +441,27 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     }
 
     record Not(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Unary {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    // ---- calls (6.5.3.3) ---------------------------------------------------------------------------
+
+    /**
+     * A call through a pointer to function: the callee is an rvalue of
+     * pointer-to-function type (a named function has decayed), the
+     * arguments are converted to the parameter types as if by assignment,
+     * with default argument promotions past the prototype's end. The type
+     * is the function's return type; a call is never an lvalue.
+     */
+    record Call(@NonNull Rvalue callee, @NonNull List<Rvalue> arguments, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
+        public Call {
+            arguments = List.copyOf(arguments);
+        }
+
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);
