@@ -39,6 +39,7 @@ final class ExprTyper {
 
     /** The string literals typed so far, in order; each one is its own object (6.4.5p7). */
     final List<StringData> strings = new ArrayList<>();
+    private final java.util.Map<Symbol, StringData> stringObjects = new java.util.IdentityHashMap<>();
     private int nextId;
 
     // Where anonymous automatic objects (materialized temporaries) are
@@ -112,8 +113,21 @@ final class ExprTyper {
         var name = new Token(TokenType.STRING_LITERAL, spelling, first.line, first.column);
         Symbol symbol = Symbol.anonymousStatic(nextId++, name);
         symbol.setType(types.array(value.elementType(), value.units().length));
-        if (unevaluated == 0) strings.add(new StringData(symbol, value.units()));
+        var data = new StringData(symbol, value.units());
+        stringObjects.put(symbol, data);
+        if (unevaluated == 0) strings.add(data);
         return new TExpr.VarRef(symbol, symbol.type(), first);
+    }
+
+    /** The string literal an expression is, if it is one (possibly parenthesized), before any decay. */
+    java.util.Optional<StringData> stringLiteral(TExpr x) {
+        if (x instanceof TExpr.VarRef v) return java.util.Optional.ofNullable(stringObjects.get(v.symbol()));
+        return java.util.Optional.empty();
+    }
+
+    /** Drops a string literal's object: its bytes were copied into an array it initialized. */
+    void dropString(StringData data) {
+        strings.remove(data);
     }
 
     // ---- binary operators ------------------------------------------------------------------
