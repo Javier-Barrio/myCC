@@ -36,6 +36,9 @@ public final class Bindings {
 
     public final Map<Type.Enumerator, Symbol> enumerators = new IdentityHashMap<>();
 
+    /** Every typedef-name use in a type, bound to the typedef it names (a shared node is bound once). */
+    public final Map<Type.TypedefName, Symbol.Typedef> typedefs = new IdentityHashMap<>();
+
     /** Every struct/union/enum specifier node, bound to its tag (anonymous ones get their own). */
     public final Map<Type, TagSymbol> tags = new IdentityHashMap<>();
 
@@ -62,6 +65,10 @@ public final class Bindings {
 
     public Symbol symbolOf(@NonNull Type.Parameter p) {
         return require(parameters.get(p), p.name().map(n -> n.text).orElse("<unnamed parameter>"));
+    }
+
+    public Symbol.Typedef typedefOf(@NonNull Type.TypedefName t) {
+        return require(typedefs.get(t), t.name().text);
     }
 
     public TagSymbol tagOf(@NonNull Type t) {
