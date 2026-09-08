@@ -299,10 +299,100 @@ class TyperTest {
         assertTrue(exprFails("void f(void);", "f() ? 1 : 2").getMessage().contains("not supported"));
     }
 
+    // ---- pointers -----------------------------------------------------------------------------
+
+    @Test
+    void dereferenceAndAddressOf() {
+        assertEquals("(deref:int (rv:int * p:int *))", expr("int *p;", "*p"));
+        assertEquals("(add:int (rv:int (deref:int (rv:int * p:int *))) 0:int)", expr("int *p;", "*p + 0"));
+        assertEquals("(deref:const int (rv:const int * p:const int *))", expr("const int *p;", "*p"));
+        assertEquals("(addr:int * a:int)", expr("int a;", "&a"));
+        assertEquals("(addr:const int * c:const int)", expr("const int c;", "&c"));
+        assertEquals("(addr:int (*)[3] arr:int [3])", expr("int arr[3];", "&arr"));
+        assertEquals("(rv:int * p:int *)", expr("int *p;", "&*p"), "&*p is p");
+        assertEquals("(fdecay:int (*)(void) f:int (void))", expr("int f(void);", "&f"), "&f is f's decay");
+        assertEquals("(fderef:int (void) (rv:int (*)(void) fp:int (*)(void)))", expr("int (*fp)(void);", "*fp"));
+        assertEquals("(deref:int (rv:int * (deref:int * (rv:int * * pp:int * *))))", expr("int **pp;", "**pp"));
+        assertTrue(exprFails("int a;", "*a").getMessage().contains("indirection requires a pointer"));
+        assertTrue(exprFails("void *v;", "*v").getMessage().contains("pointer to void"));
+        assertTrue(exprFails("int a;", "&(a + 1)").getMessage().contains("address of an rvalue"));
+    }
+
+    @Test
+    void subscriptingIsDereferencedPointerArithmetic() {
+        assertEquals("(deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long (rv:int i:int))))",
+                expr("int a[3]; int i;", "a[i]"));
+        assertEquals("(deref:int (ptradd:int * (rv:int * p:int *) (int-to-int:long 2:int)))", expr("int *p;", "p[2]"));
+        assertEquals("(deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long 1:int)))", expr("int a[3];", "1[a]"));
+        assertEquals("(deref:int (ptradd:int * (decay:int * (deref:int [3] (ptradd:int (*)[3] (decay:int (*)[3] m:int [2][3]) (int-to-int:long 1:int)))) (int-to-int:long 2:int)))",
+                expr("int m[2][3];", "m[1][2]"));
+        assertEquals("(ptradd:int * (decay:int * a:int [3]) (int-to-int:long (rv:int i:int)))", expr("int a[3]; int i;", "&a[i]"));
+        assertEquals("(deref:const char (ptradd:const char * (rv:const char * s:const char *) (rv:long l:long)))",
+                expr("const char *s; long l;", "s[l]"));
+        assertTrue(exprFails("int a;", "a[0]").getMessage().contains("not an array or pointer"));
+        assertTrue(exprFails("int *p;", "p[1.5]").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("void *v;", "v[0]").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int (*fp)(void);", "fp[0]").getMessage().contains("pointer to a function"));
+    }
+
+    @Test
+    void pointerArithmetic() {
+        assertEquals("(ptradd:int * (rv:int * p:int *) (int-to-int:long (rv:int i:int)))", expr("int *p; int i;", "p + i"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (int-to-int:long (rv:int i:int)))", expr("int *p; int i;", "i + p"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (neg:long (int-to-int:long (rv:int i:int))))",
+                expr("int *p; int i;", "p - i"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (rv:long l:long))", expr("int *p; long l;", "p + l"));
+        assertEquals("(ptrdiff:long (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p - q"));
+        assertEquals("(ptrdiff:long (rv:const int * p:const int *) (rv:int * q:int *))", expr("const int *p; int *q;", "p - q"));
+        assertEquals("(ptrdiff:long (decay:int * a:int [3]) (rv:int * q:int *))", expr("int a[3]; int *q;", "a - q"));
+        assertTrue(exprFails("int *p; int *q;", "p + q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; int i;", "i - p").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; long *q;", "p - q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("void *v;", "v + 1").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int *p; double d;", "p + d").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void pointerComparisonsAndNullPointerConstants() {
+        assertEquals("(eq:int (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p == q"));
+        assertEquals("(lt:int (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p < q"));
+        assertEquals("(ne:int (rv:int * p:int *) (null:int * 0:int))", expr("int *p;", "p != 0"));
+        assertEquals("(eq:int (null:int * 0:int) (rv:int * p:int *))", expr("int *p;", "0 == p"));
+        assertEquals("(eq:int (rv:int * p:int *) (null:int * nullptr:nullptr_t))", expr("int *p;", "p == nullptr"));
+        assertEquals("(eq:int (ptr-to-ptr:void * (rv:int * p:int *)) (rv:void * v:void *))", expr("int *p; void *v;", "p == v"));
+        assertEquals("(eq:int (rv:const int * p:const int *) (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("const int *p; int *q;", "p == q"));
+        assertEquals("(eq:int (ptr-to-ptr:const void * (rv:int * p:int *)) (rv:const void * v:const void *))",
+                expr("int *p; const void *v;", "p == v"));
+        assertEquals("(eq:int (fdecay:int (*)(void) f:int (void)) (null:int (*)(void) 0:int))", expr("int f(void);", "f == 0"));
+        assertTrue(exprFails("int *p; long *q;", "p == q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; void *v;", "p < v").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p < 0").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p == 1").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int (*f)(void); void *v;", "f == v").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void conditionalWithPointerArms() {
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (rv:int * p:int *) (rv:int * q:int *))",
+                expr("int c; int *p, *q;", "c ? p : q"));
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (rv:int * p:int *) (null:int * 0:int))",
+                expr("int c; int *p;", "c ? p : 0"));
+        assertEquals("(cond:const int * (to-bool:bool (rv:int c:int)) (rv:const int * p:const int *) (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("int c; const int *p; int *q;", "c ? p : q"));
+        assertEquals("(cond:void * (to-bool:bool (rv:int c:int)) (ptr-to-ptr:void * (rv:int * p:int *)) (rv:void * v:void *))",
+                expr("int c; int *p; void *v;", "c ? p : v"));
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (decay:int * a:int [2]) (rv:int * p:int *))",
+                expr("int c; int a[2]; int *p;", "c ? a : p"));
+        assertEquals("(cond:nullptr_t (to-bool:bool (rv:int c:int)) nullptr:nullptr_t nullptr:nullptr_t)",
+                expr("int c;", "c ? nullptr : nullptr"));
+        assertTrue(exprFails("int c; int *p; long *q;", "c ? p : q").getMessage().contains("not supported"));
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
-        assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("pointer to a function"));
     }
 
     // ---- scalar declarations --------------------------------------------------------

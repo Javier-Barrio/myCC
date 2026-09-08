@@ -9,7 +9,9 @@ import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TExpr.Lvalue;
 import org.jbm.cc.tast.TExpr.Rvalue;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Quals;
 import org.jbm.cc.types.Types;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +46,7 @@ final class ExprTyper {
         if (e instanceof Expr.Literal l) return literals.constant(l.token());
         if (e instanceof Expr.StringLiteral s) return string(s);
         if (e instanceof Expr.Binary b) return binary(b);
+        if (e instanceof Expr.Index i) return index(i);
         if (e instanceof Expr.Unary u) return unary(u);
         if (e instanceof Expr.Conditional c) return conditional(c);
         if (e instanceof Expr.Comma c) return comma(c);
@@ -80,8 +83,10 @@ final class ExprTyper {
         Rvalue l = rvalue(type(e.left()));
         Rvalue r = rvalue(type(e.right()));
         return switch (op.text) {
-            case "+" -> arithmetic(op, l, r, false, TExpr.Add::new);
-            case "-" -> arithmetic(op, l, r, false, TExpr.Sub::new);
+            case "+" -> l.type().isPointer() || r.type().isPointer() ? pointerAdd(op, l, r, false)
+                    : arithmetic(op, l, r, false, TExpr.Add::new);
+            case "-" -> l.type().isPointer() || r.type().isPointer() ? pointerSub(op, l, r)
+                    : arithmetic(op, l, r, false, TExpr.Sub::new);
             case "*" -> arithmetic(op, l, r, false, TExpr.Mul::new);
             case "/" -> arithmetic(op, l, r, false, TExpr.Div::new);
             case "%" -> arithmetic(op, l, r, true, TExpr.Rem::new);
@@ -125,20 +130,132 @@ final class ExprTyper {
         return node.make(value, promote(r), value.type(), op);
     }
 
-    // 6.5.9 - 6.5.10 for arithmetic operands; pointer comparisons come later.
+    // 6.5.9 - 6.5.10: arithmetic operands under the usual arithmetic
+    // conversions, or pointers brought to one common pointer type.
     private TExpr comparison(Token op, Rvalue l, Rvalue r, BinaryNode node) {
-        if (!l.type().isArithmetic() || !r.type().isArithmetic()) {
-            if (l.type().isPointer() || r.type().isPointer()) throw unsupported("pointer comparison", op);
-            throw invalidOperands(op, l, r);
+        if (l.type().isArithmetic() && r.type().isArithmetic()) {
+            CType common = types.usualArithmetic(l.type(), r.type());
+            return node.make(convert(l, common), convert(r, common), types.int_(), op);
         }
-        CType common = types.usualArithmetic(l.type(), r.type());
+        boolean equality = op.text.equals("==") || op.text.equals("!=");
+        CType common = commonPointerType(l, r, equality);
+        if (common == null) throw invalidOperands(op, l, r);
         return node.make(convert(l, common), convert(r, common), types.int_(), op);
+    }
+
+    /**
+     * The type two pointer-ish operands are brought to for comparison
+     * (6.5.10p2, 6.5.11p2) or as the arms of {@code ?:} (6.5.16p3, p6):
+     * pointers to compatible types compose (with the union of the target
+     * qualifiers), {@code void *} absorbs any object pointer, a null
+     * pointer constant or {@code nullptr_t} takes the other operand's
+     * type. Relational operators only allow the first case. Null when
+     * the operands do not combine.
+     */
+    private @Nullable CType commonPointerType(Rvalue l, Rvalue r, boolean allowVoidAndNull) {
+        CType lt = l.type(), rt = r.type();
+        if (lt instanceof CType.Pointer lp && rt instanceof CType.Pointer rp) {
+            CType lTarget = lp.target(), rTarget = rp.target();
+            Quals quals = lTarget.quals().plus(rTarget.quals());
+            if (types.compatible(types.unqualified(lTarget), types.unqualified(rTarget))) {
+                return types.pointer(types.qualified(types.composite(types.unqualified(lTarget),
+                        types.unqualified(rTarget)), quals));
+            }
+            if (allowVoidAndNull && (lTarget.isVoid() || rTarget.isVoid())
+                    && !lTarget.isFunction() && !rTarget.isFunction()) {
+                return types.pointer(types.qualified(types.void_(), quals));
+            }
+            return null;
+        }
+        if (!allowVoidAndNull) return null;
+        if (lt.isPointer() && isNullish(r)) return lt;
+        if (rt.isPointer() && isNullish(l)) return rt;
+        if (lt.isNullptr() && rt.isNullptr()) return lt;
+        return null;
+    }
+
+    /** A null pointer constant (6.3.2.3p3) or a value of type {@code nullptr_t}. */
+    static boolean isNullish(Rvalue x) {
+        return x.type().isNullptr() || isNullPointerConstant(x);
+    }
+
+    // An integer constant expression with value 0; until the constant
+    // evaluator exists only a literal 0 qualifies.
+    static boolean isNullPointerConstant(Rvalue x) {
+        return x instanceof TExpr.IntConst c && c.value() == 0 && c.type().isInteger();
     }
 
     // 6.5.14 - 6.5.15: scalar operands, each tested against zero.
     private TExpr logical(Token op, Rvalue l, Rvalue r, BinaryNode node) {
         if (!l.type().isScalar() || !r.type().isScalar()) throw invalidOperands(op, l, r);
         return node.make(toBool(l), toBool(r), types.int_(), op);
+    }
+
+    // ---- pointer arithmetic (6.5.7) and subscripting (6.5.3.1) -------------------------------
+
+    // pointer + integer, in either order; the pointee must be a complete object type.
+    private TExpr pointerAdd(Token op, Rvalue l, Rvalue r, boolean negate) {
+        Rvalue pointer = l.type().isPointer() ? l : r;
+        Rvalue index = pointer == l ? r : l;
+        if (!index.type().isInteger()) throw invalidOperands(op, l, r);
+        requireCompleteObjectPointer(op, pointer);
+        Rvalue offset = convert(index, types.ptrdiffT());
+        if (negate) offset = new TExpr.Neg(offset, offset.type(), op);
+        return new TExpr.PtrAdd(pointer, offset, pointer.type(), op);
+    }
+
+    // pointer - integer, or pointer - pointer to compatible object types.
+    private TExpr pointerSub(Token op, Rvalue l, Rvalue r) {
+        if (!l.type().isPointer()) throw invalidOperands(op, l, r);
+        if (r.type().isInteger()) return pointerAdd(op, l, r, true);
+        if (!(r.type() instanceof CType.Pointer)) throw invalidOperands(op, l, r);
+        requireCompleteObjectPointer(op, l);
+        requireCompleteObjectPointer(op, r);
+        CType lTarget = types.unqualified(((CType.Pointer) l.type()).target());
+        CType rTarget = types.unqualified(((CType.Pointer) r.type()).target());
+        if (!types.compatible(lTarget, rTarget)) throw invalidOperands(op, l, r);
+        return new TExpr.PtrDiff(l, r, types.ptrdiffT(), op);
+    }
+
+    // a[i] is *(a + i) (6.5.3.1p2), in either order.
+    private TExpr index(Expr.Index e) {
+        Rvalue a = rvalue(type(e.array()));
+        Rvalue i = rvalue(type(e.index()));
+        if (!a.type().isPointer() && !i.type().isPointer()) {
+            throw new SemaException("subscripted value is not an array or pointer ('" + a.type().spelling() + "')",
+                    e.bracket());
+        }
+        Rvalue sum = (Rvalue) pointerAdd(e.bracket(), a, i, false);
+        return deref(e.bracket(), sum);
+    }
+
+    private void requireCompleteObjectPointer(Token op, Rvalue p) {
+        CType target = ((CType.Pointer) p.type()).target();
+        if (target.isFunction() || !target.isComplete()) {
+            throw new SemaException("arithmetic on a pointer to " + (target.isFunction() ? "a function"
+                    : "an incomplete type") + " ('" + p.type().spelling() + "')", op);
+        }
+    }
+
+    // *p: an lvalue of the pointee type, or a function designator for a
+    // pointer to function (6.5.4.2p4).
+    private TExpr deref(Token op, Rvalue p) {
+        if (!(p.type() instanceof CType.Pointer pointer)) {
+            throw new SemaException("indirection requires a pointer operand ('" + p.type().spelling() + "')", op);
+        }
+        CType target = pointer.target();
+        if (target.isFunction()) return new TExpr.FuncDeref(p, target, op);
+        if (target.isVoid()) throw new SemaException("cannot dereference a pointer to void", op);
+        return new TExpr.Deref(p, target, op);
+    }
+
+    // &x: neither & nor * is evaluated in &*p, whose result is p (6.5.4.2p3);
+    // &f on a function is its decay.
+    private TExpr addressOf(Token op, TExpr x) {
+        if (x instanceof TExpr.Deref d) return d.pointer();
+        if (x instanceof TExpr.FunctionDesignator fd) return rvalue(fd);
+        if (x instanceof TExpr.Lvalue lv) return new TExpr.AddrOf(lv, types.pointer(lv.type()), op);
+        throw new SemaException("cannot take the address of an rvalue", op);
     }
 
     private static SemaException invalidOperands(Token op, Rvalue l, Rvalue r) {
@@ -165,6 +282,12 @@ final class ExprTyper {
                         yield new TExpr.Not(toBool(x), types.int_(), op);
                     }
                 };
+            }
+            case "*" -> {
+                return deref(op, rvalue(type(e.operand())));
+            }
+            case "&" -> {
+                return addressOf(op, type(e.operand()));
             }
             default -> throw unsupported("unary operator " + op.text, op);
         }
@@ -193,6 +316,8 @@ final class ExprTyper {
             result = types.usualArithmetic(t.type(), f.type());
         } else if (t.type().isVoid() && f.type().isVoid()) {
             result = types.void_();
+        } else if (commonPointerType(t, f, true) != null) {
+            result = commonPointerType(t, f, true);
         } else {
             throw unsupported("?: with operands '" + t.type().spelling() + "' and '" + f.type().spelling() + "'",
                     e.question());
@@ -222,6 +347,8 @@ final class ExprTyper {
             }
             return new TExpr.LvalueToRvalue(lv, types.unqualified(lv.type()), x.token());
         }
+        // FunctionDecay(FuncDeref(p)) is p: (*f)(x) types like f(x) (6.5.3.3).
+        if (x instanceof TExpr.FuncDeref fd) return fd.pointer();
         var fd = (TExpr.FunctionDesignator) x;
         return new TExpr.FunctionDecay(fd, types.pointer(fd.type()), x.token());
     }
@@ -247,6 +374,12 @@ final class ExprTyper {
         // Conversion to bool is a comparison against zero (6.3.2.2p1), not a
         // truncation, so it precedes the integer case.
         if (to.isBool() && from.isScalar()) return new TExpr.ToBool(x, to, x.token());
+        if (to.isPointer()) {
+            if (isNullish(x)) return new TExpr.NullToPtr(x, to, x.token());
+            if (from.isPointer()) return new TExpr.PtrToPtr(x, to, x.token());
+            if (from.isInteger()) return new TExpr.IntToPtr(x, to, x.token());
+        }
+        if (from.isPointer() && to.isInteger()) return new TExpr.PtrToInt(x, to, x.token());
         if (from.isInteger() && to.isInteger()) return new TExpr.IntToInt(x, to, x.token());
         if (from.isInteger() && to.isFloating()) return new TExpr.IntToFloat(x, to, x.token());
         if (from.isFloating() && to.isInteger()) return new TExpr.FloatToInt(x, to, x.token());

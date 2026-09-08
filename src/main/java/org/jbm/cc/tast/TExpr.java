@@ -28,27 +28,27 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     // ---- value categories ----------------------------------------------------------
 
     /** Designates an object (6.3.3.1p1). */
-    sealed interface Lvalue extends TExpr permits VarRef {
+    sealed interface Lvalue extends TExpr permits VarRef, Deref {
     }
 
     /** Designates a function (6.3.3.1p4). */
-    sealed interface FunctionDesignator extends TExpr permits FuncRef {
+    sealed interface FunctionDesignator extends TExpr permits FuncRef, FuncDeref {
     }
 
     /** A value. */
     sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
-            Cond, Comma {
+            AddrOf, PtrAdd, PtrDiff, Cond, Comma {
     }
 
     // ---- families -------------------------------------------------------------------------
 
-    sealed interface Constant extends Rvalue permits IntConst, FloatConst {
+    sealed interface Constant extends Rvalue permits IntConst, FloatConst, NullptrConst {
     }
 
     /** One of the conversions of 6.3, implicit or written as a cast. */
     sealed interface Conversion extends Rvalue
             permits LvalueToRvalue, ArrayDecay, FunctionDecay, IntToInt, IntToFloat, FloatToInt, FloatToFloat, ToBool,
-            ToVoid {
+            ToVoid, PtrToPtr, IntToPtr, PtrToInt, NullToPtr {
         TExpr operand();
     }
 
@@ -106,6 +106,22 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
         }
     }
 
+    /** {@code *p} on a pointer to an object (6.5.4.2p4): the object, an lvalue of the pointee type. */
+    record Deref(@NonNull Rvalue pointer, @NonNull CType type, @NonNull Token token) implements Lvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code *p} on a pointer to a function: a function designator. {@code FunctionDecay(FuncDeref(p))} is {@code p}. */
+    record FuncDeref(@NonNull Rvalue pointer, @NonNull CType type, @NonNull Token token) implements FunctionDesignator {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     // ---- constants ----------------------------------------------------------------------------
 
     /** An integer constant of an integer type; value is its two's-complement bits in a long. */
@@ -122,6 +138,14 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
      * {@code long double} spelling, whose extra precision is not modeled.
      */
     record FloatConst(double value, @NonNull CType type, @NonNull Token token) implements Constant {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code nullptr} (6.4.4.5), of type {@code nullptr_t}. */
+    record NullptrConst(@NonNull CType type, @NonNull Token token) implements Constant {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);
@@ -197,6 +221,69 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** Value discarded (6.3.3.2p2): the operand is evaluated for its side effects. */
     record ToVoid(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Pointer to pointer of another type (6.3.2.3p1, p7). */
+    record PtrToPtr(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Integer to pointer (6.3.2.3p5); only an explicit cast produces one. */
+    record IntToPtr(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Pointer to integer (6.3.2.3p6); only an explicit cast produces one. */
+    record PtrToInt(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** A null pointer constant or {@code nullptr_t} value to a null pointer of the given type (6.3.2.3p3). */
+    record NullToPtr(@NonNull Rvalue operand, @NonNull CType type, @NonNull Token token) implements Conversion {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    // ---- pointer operators --------------------------------------------------------------------
+
+    /** {@code &x} (6.5.4.2p3): pointer to the object; {@code &f} is {@code FunctionDecay(f)} and {@code &*p} is {@code p}. */
+    record AddrOf(@NonNull Lvalue operand, @NonNull CType type, @NonNull Token token) implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * Pointer plus integer (6.5.7p8): the index is {@code ptrdiff_t}, the
+     * element type is the pointer's target; {@code p - i} is {@code p + (-i)}.
+     */
+    record PtrAdd(@NonNull Rvalue pointer, @NonNull Rvalue index, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** Pointer minus pointer (6.5.7p9): the element count between them, {@code ptrdiff_t}. */
+    record PtrDiff(@NonNull Rvalue left, @NonNull Rvalue right, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);

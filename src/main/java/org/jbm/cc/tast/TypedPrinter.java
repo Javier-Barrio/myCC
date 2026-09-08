@@ -203,4 +203,54 @@ public final class TypedPrinter implements TVisitor<String> {
     public String visit(TExpr.Comma e) {
         return node("comma", e, e.left(), e.right());
     }
+
+    @Override
+    public String visit(TExpr.Deref e) {
+        return node("deref", e, e.pointer());
+    }
+
+    @Override
+    public String visit(TExpr.FuncDeref e) {
+        return node("fderef", e, e.pointer());
+    }
+
+    @Override
+    public String visit(TExpr.NullptrConst e) {
+        return "nullptr:" + e.type().spelling();
+    }
+
+    @Override
+    public String visit(TExpr.PtrToPtr e) {
+        return node("ptr-to-ptr", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.IntToPtr e) {
+        return node("int-to-ptr", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.PtrToInt e) {
+        return node("ptr-to-int", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.NullToPtr e) {
+        return node("null", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.AddrOf e) {
+        return node("addr", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.PtrAdd e) {
+        return node("ptradd", e, e.pointer(), e.index());
+    }
+
+    @Override
+    public String visit(TExpr.PtrDiff e) {
+        return node("ptrdiff", e, e.left(), e.right());
+    }
 }

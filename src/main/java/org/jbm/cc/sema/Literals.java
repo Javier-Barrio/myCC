@@ -41,6 +41,7 @@ final class Literals {
             case KEYWORD -> switch (t.text) {
                 case "true" -> new TExpr.IntConst(1, types.bool_(), t);
                 case "false" -> new TExpr.IntConst(0, types.bool_(), t);
+                case "nullptr" -> new TExpr.NullptrConst(types.nullptrT(), t);
                 default -> throw new SemaException("'" + t.text + "' is not supported yet", t);
             };
             default -> throw new IllegalArgumentException(t.type + " is not a constant");
