@@ -878,6 +878,80 @@ class TyperTest {
         type("unsigned _BitInt(1) one;");
     }
 
+    // ---- casts, _Generic, typeof ----------------------------------------------------------------
+
+    @Test
+    void explicitCasts() {
+        assertEquals("(int-to-int:char 300:int)", expr("", "(char)300"));
+        assertEquals("(int-to-float:double 1:int)", expr("", "(double)1"));
+        assertEquals("(float-to-int:int 1.5:double)", expr("", "(int)1.5"));
+        assertEquals("(to-void:void (rv:int x:int))", expr("int x;", "(void)x"));
+        assertEquals("(to-bool:bool (rv:int * p:int *))", expr("int *p;", "(bool)p"));
+        assertEquals("(ptr-to-int:long (rv:int * p:int *))", expr("int *p;", "(long)p"));
+        assertEquals("(int-to-ptr:int * 8:int)", expr("", "(int *)8"));
+        assertEquals("(null:int * 0:int)", expr("", "(int *)0"));
+        assertEquals("(null:void * 0:int)", expr("", "(void *)0"));
+        assertEquals("(ptr-to-ptr:char * (rv:int * p:int *))", expr("int *p;", "(char *)p"));
+        assertEquals("(rv:int x:int)", expr("int x;", "(int)x"), "no node when the type does not change");
+        assertEquals("(rv:int x:int)", expr("int x;", "(const int)x"), "the result is unqualified");
+        assertEquals("(ptr-to-int:long (decay:int * a:int [3]))", expr("int a[3];", "(long)a"));
+        assertEquals("(ptr-to-ptr:int (*)(void) (rv:void * v:void *))", expr("void *v;", "(int (*)(void))v"));
+        assertEquals("(null:int * (null:void * 0:int))", expr("", "(int *)(void *)0"));
+        assertEquals("(assign:int * p:int * (null:int * (null:void * 0:int)))", expr("int *p;", "p = (void *)0"),
+                "(void *)0 is still a null pointer constant");
+        assertEquals("(null:nullptr_t 0:int)", expr("", "(typeof(nullptr))0"));
+        assertTrue(exprFails("int *p;", "(float)p").getMessage().contains("cannot cast"));
+        assertTrue(exprFails("", "(int *)1.5").getMessage().contains("cannot cast"));
+        assertTrue(exprFails("int x;", "(int[3])x").getMessage().contains("non-scalar type"));
+        assertTrue(exprFails("void v(void);", "(int)v()").getMessage().contains("non-scalar type"));
+        assertTrue(exprFails("", "(typeof(nullptr))1").getMessage().contains("null pointer constant"));
+        assertTrue(exprFails("", "(int)nullptr").getMessage().contains("cannot cast"));
+    }
+
+    @Test
+    void castsFoldInConstantExpressions() {
+        holds("(char)300 == 44 && (unsigned char)-1 == 255 && (short)65535 == -1");
+        holds("(int)2.9 == 2 && (int)-2.9 == -2 && (bool)0.5 == 1 && (unsigned)-1 == 4294967295u");
+        holds("(long)1 << 40 == 1099511627776 && (float)0.1 != 0.1 && (double)(float)0.5 == 0.5");
+        holds("(_BitInt(4))7 + (_BitInt(4))-8 == -1");
+        assertTrue(staticAssertFails("(int)1e10").contains("out of range"));
+        holds("(_BitInt(4))8 == -8");
+        holds("(unsigned _BitInt(3))9 == 1");
+    }
+
+    @Test
+    void genericSelection() {
+        String assoc = "_Generic(x, int: 1, double: 2.5, char *: 3u, default: 'c')";
+        assertEquals("1:int", expr("int x;", assoc));
+        assertEquals("2.5:double", expr("double x;", assoc));
+        assertEquals("3:unsigned int", expr("char x[4];", assoc), "the controlling array decays");
+        assertEquals("99:int", expr("float x;", assoc), "default");
+        assertEquals("1:int", expr("const int x;", assoc), "lvalue conversion drops const");
+        assertEquals("1:int", expr("", "_Generic(int, int: 1, default: 2)"), "a type-name controls");
+        assertEquals("y:int", expr("int y;", "_Generic(1, int: y)"), "the chosen expression is typed as itself");
+        assertEquals("1:int", expr("int f(void);", "_Generic(f, int (*)(void): 1, default: 0)"));
+        assertEquals("(add:int 2:int (rv:int y:int))", expr("int x, y;", "_Generic(x++, int: 2) + y"), "the controlling expression is not evaluated");
+        assertTrue(exprFails("float x;", "_Generic(x, int: 1)").getMessage().contains("no _Generic association"));
+        assertTrue(exprFails("int x;", "_Generic(x, int: 1, signed int: 2)").getMessage().contains("compatible"));
+        assertTrue(exprFails("int x;", "_Generic(x, default: 1, default: 2)").getMessage().contains("duplicate default"));
+        assertTrue(exprFails("int x;", "_Generic(x, int[]: 1, default: 2)").getMessage().contains("complete object type"));
+    }
+
+    @Test
+    void typeofOfAnExpression() {
+        assertEquals(List.of("x: int", "y: int", "a: int [3]", "b: int [3]", "p: int *", "q: int *", "d: double",
+                        "cx: const int", "cy: const int", "u: int", "f: int (void)", "g: int (void)", "fp: int (*)(void)",
+                        "cp: const int *", "r: const int", "s: unsigned long"),
+                declaredTypes("int x; typeof(x) y; int a[3]; typeof(a) b; int *p; typeof(p + 1) q; typeof(1.5) d; "
+                        + "const int cx; const typeof(x) cy; typeof_unqual(cx) u; int f(void); typeof(f) g; typeof(f) *fp; "
+                        + "const int *cp; typeof(*cp) r; typeof(sizeof 1) s;"));
+        assertEquals("4:unsigned long", expr("int x;", "sizeof(typeof(x++))"));
+        assertEquals(List.of("i: int", "j: int"), declaredTypes("int i; typeof(i++) j;"));
+        var unit = parse("void f(void) { \"s\"; typeof(\"abc\") t; }");
+        assertEquals(1, Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE)).strings().size(),
+                "a typeof operand is not evaluated, so its string literal creates no object");
+    }
+
     @Test
     void invalidOperands() {
         assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));

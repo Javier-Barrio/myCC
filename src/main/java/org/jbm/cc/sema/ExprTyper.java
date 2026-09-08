@@ -68,6 +68,8 @@ final class ExprTyper {
         if (e instanceof Expr.Index i) return index(i);
         if (e instanceof Expr.Unary u) return unary(u);
         if (e instanceof Expr.Call c) return call(c);
+        if (e instanceof Expr.Cast c) return cast(c);
+        if (e instanceof Expr.Generic g) return generic(g);
         if (e instanceof Expr.TypeOperator t) return sizeOf(t.op(), builder.build(t.type()));
         if (e instanceof Expr.StaticAssertion s) throw unsupported("static_assert as an expression", s.keyword());
         if (e instanceof Expr.Assign a) return assign(a);
@@ -132,6 +134,88 @@ final class ExprTyper {
             case "||" -> logical(op, l, r, TExpr.Or::new);
             default -> throw unsupported("operator " + opText, op);
         };
+    }
+
+    // ---- casts (6.5.5) -----------------------------------------------------------------------------
+
+    // (T) e: T is void or a scalar type and e a scalar; the result is an
+    // rvalue of the unqualified T. Every scalar pair converts except
+    // floating with pointer; an integer zero cast to void * stays a null
+    // pointer constant.
+    private TExpr cast(Expr.Cast e) {
+        Token at = e.paren();
+        CType to = types.unqualified(builder.build(e.type()));
+        Rvalue x = rvalue(type(e.operand()));
+        if (to.isVoid()) return toVoid(x);
+        if (!to.isScalar()) throw new SemaException("cast to non-scalar type '" + to.spelling() + "'", at);
+        CType from = x.type();
+        if (!from.isScalar()) throw new SemaException("cast of non-scalar type '" + from.spelling() + "'", at);
+        boolean floatingWithPointer = from.isFloating() && !to.isArithmetic() || to.isFloating() && !from.isArithmetic();
+        if (floatingWithPointer) {
+            throw new SemaException("cannot cast '" + from.spelling() + "' to '" + to.spelling() + "'", at);
+        }
+        if (to.isNullptr() && !isNullish(x)) {
+            throw new SemaException("only a null pointer constant converts to nullptr_t", at);
+        }
+        if (from.isNullptr() && to.isInteger() && !to.isBool()) {
+            throw new SemaException("cannot cast 'nullptr_t' to '" + to.spelling() + "'", at);
+        }
+        Rvalue converted = to.isNullptr() ? (from.isNullptr() ? x : new TExpr.NullToPtr(x, to, at)) : convert(x, to);
+        return retoken(converted, x, at);
+    }
+
+    // A cast's conversion node is anchored at the cast, not at its operand.
+    private Rvalue retoken(Rvalue converted, Rvalue operand, Token at) {
+        if (converted == operand) return converted;
+        if (converted instanceof TExpr.IntToInt c) return new TExpr.IntToInt(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.IntToFloat c) return new TExpr.IntToFloat(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.FloatToInt c) return new TExpr.FloatToInt(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.FloatToFloat c) return new TExpr.FloatToFloat(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.ToBool c) return new TExpr.ToBool(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.PtrToPtr c) return new TExpr.PtrToPtr(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.IntToPtr c) return new TExpr.IntToPtr(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.PtrToInt c) return new TExpr.PtrToInt(c.operand(), c.type(), at);
+        if (converted instanceof TExpr.NullToPtr c) return new TExpr.NullToPtr(c.operand(), c.type(), at);
+        return converted;
+    }
+
+    // ---- generic selection (6.5.2.1) ----------------------------------------------------------------
+
+    // The controlling type is the operand's after lvalue conversion and
+    // decay (or the type-name given); the association whose type is
+    // compatible with it is chosen, else the default. Only the chosen
+    // expression is typed, since no other is evaluated.
+    private TExpr generic(Expr.Generic e) {
+        Token at = e.keyword();
+        CType controlling = e.controllingType().isPresent() ? builder.build(e.controllingType().get())
+                : rvalue(typeUnevaluated(e.controllingExpr().orElseThrow())).type();
+        Expr.Generic.Association chosen = null;
+        Expr.Generic.Association defaultAssociation = null;
+        var seen = new ArrayList<CType>();
+        for (var a : e.associations()) {
+            if (a.type().isEmpty()) {
+                if (defaultAssociation != null) throw new SemaException("duplicate default in _Generic", at);
+                defaultAssociation = a;
+                continue;
+            }
+            CType t = builder.build(a.type().get());
+            if (!t.isComplete() || t.isFunction()) {
+                throw new SemaException("_Generic association type '" + t.spelling() + "' is not a complete object type", at);
+            }
+            for (CType s : seen) {
+                if (types.compatible(s, t)) {
+                    throw new SemaException("_Generic associations '" + s.spelling() + "' and '" + t.spelling()
+                            + "' are compatible", at);
+                }
+            }
+            seen.add(t);
+            if (chosen == null && types.compatible(t, controlling)) chosen = a;
+        }
+        if (chosen == null) chosen = defaultAssociation;
+        if (chosen == null) {
+            throw new SemaException("no _Generic association matches '" + controlling.spelling() + "'", at);
+        }
+        return type(chosen.expr());
     }
 
     // ---- calls (6.5.3.3) --------------------------------------------------------------------------
@@ -324,8 +408,9 @@ final class ExprTyper {
         return x.type().isNullptr() || isNullPointerConstant(x);
     }
 
-    // An integer constant expression with value 0.
+    // An integer constant expression with value 0, or one cast to void * (6.3.2.3p3).
     boolean isNullPointerConstant(Rvalue x) {
+        if (x instanceof TExpr.NullToPtr n) return n.type() == types.pointer(types.void_()) && isNullPointerConstant(n.operand());
         if (!x.type().isInteger()) return false;
         return constEval.fold(x).filter(c -> c instanceof TExpr.IntConst i && i.value() == 0).isPresent();
     }
