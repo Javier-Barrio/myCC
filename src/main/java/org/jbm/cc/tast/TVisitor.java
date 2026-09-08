@@ -16,6 +16,7 @@ public interface TVisitor<R> {
     R visit(TExpr.FuncDeref e);
     R visit(TExpr.Member e);
     R visit(TExpr.Materialize e);
+    R visit(TExpr.CompoundLit e);
 
     // ---- constants ----
     R visit(TExpr.IntConst e);

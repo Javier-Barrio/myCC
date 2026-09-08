@@ -117,6 +117,9 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
             Constant p = d.pointer().accept(this);
             return p instanceof TExpr.AddrConst a ? new TExpr.AddrConst(a.base(), a.offset(), pointerType, at) : null;
         }
+        if (lv instanceof TExpr.CompoundLit c && ((Symbol.Variable) c.symbol()).storage == Symbol.Variable.Storage.STATIC) {
+            return new TExpr.AddrConst(Optional.of(c.symbol()), 0, pointerType, at);
+        }
         return null;
     }
 
@@ -149,6 +152,11 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
 
     @Override
     public Constant visit(TExpr.Materialize e) {
+        return null;
+    }
+
+    @Override
+    public Constant visit(TExpr.CompoundLit e) {
         return null;
     }
 
