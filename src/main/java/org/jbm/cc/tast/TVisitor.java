@@ -25,10 +25,35 @@ public interface TVisitor<R> {
     R visit(TExpr.IntToFloat e);
     R visit(TExpr.FloatToInt e);
     R visit(TExpr.FloatToFloat e);
+    R visit(TExpr.ToBool e);
+    R visit(TExpr.ToVoid e);
 
     // ---- arithmetic ----
     R visit(TExpr.Add e);
     R visit(TExpr.Sub e);
     R visit(TExpr.Mul e);
     R visit(TExpr.Div e);
+    R visit(TExpr.Rem e);
+    R visit(TExpr.BitAnd e);
+    R visit(TExpr.BitOr e);
+    R visit(TExpr.BitXor e);
+
+    // ---- shifts, comparisons, logical, unary ----
+    R visit(TExpr.Shl e);
+    R visit(TExpr.Shr e);
+    R visit(TExpr.Eq e);
+    R visit(TExpr.Ne e);
+    R visit(TExpr.Lt e);
+    R visit(TExpr.Le e);
+    R visit(TExpr.Gt e);
+    R visit(TExpr.Ge e);
+    R visit(TExpr.And e);
+    R visit(TExpr.Or e);
+    R visit(TExpr.Neg e);
+    R visit(TExpr.BitNot e);
+    R visit(TExpr.Not e);
+
+    // ---- conditional and comma ----
+    R visit(TExpr.Cond e);
+    R visit(TExpr.Comma e);
 }

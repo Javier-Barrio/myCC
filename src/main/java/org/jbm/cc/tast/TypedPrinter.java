@@ -98,4 +98,109 @@ public final class TypedPrinter implements TVisitor<String> {
     public String visit(TExpr.Div e) {
         return node("div", e, e.left(), e.right());
     }
+
+    @Override
+    public String visit(TExpr.ToBool e) {
+        return node("to-bool", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.ToVoid e) {
+        return node("to-void", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.Rem e) {
+        return node("rem", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.BitAnd e) {
+        return node("bitand", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.BitOr e) {
+        return node("bitor", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.BitXor e) {
+        return node("bitxor", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Shl e) {
+        return node("shl", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Shr e) {
+        return node("shr", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Eq e) {
+        return node("eq", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Ne e) {
+        return node("ne", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Lt e) {
+        return node("lt", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Le e) {
+        return node("le", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Gt e) {
+        return node("gt", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Ge e) {
+        return node("ge", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.And e) {
+        return node("and", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Or e) {
+        return node("or", e, e.left(), e.right());
+    }
+
+    @Override
+    public String visit(TExpr.Neg e) {
+        return node("neg", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.BitNot e) {
+        return node("bitnot", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.Not e) {
+        return node("not", e, e.operand());
+    }
+
+    @Override
+    public String visit(TExpr.Cond e) {
+        return node("cond", e, e.condition(), e.thenValue(), e.elseValue());
+    }
+
+    @Override
+    public String visit(TExpr.Comma e) {
+        return node("comma", e, e.left(), e.right());
+    }
 }
