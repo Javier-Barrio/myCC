@@ -594,6 +594,7 @@ class LowerTest {
         assertEquals("  %t0 = addrof %litN\n  zero %P %t0\n  mov %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov %t3, 2\n  store.32 %t2, %t3\n  %t4 = load.s32 %t0",
                 instrsN("struct P { int x, y; };", "(struct P){1, 2}.x;"));
         assertEquals("  mov %t0, 7\n  mov %litN, %t0", instrsN("", "(int){7};"));
+        assertEquals("  %t0 = addrof @.lit.1\n  %t1 = load.s32 %t0", instrs("", "(static const int){7};"));
         assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  mov %t1, 3\n  store.32 %t0, %t1\n  mov %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
     }
 
