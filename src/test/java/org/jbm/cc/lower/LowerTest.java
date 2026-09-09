@@ -659,4 +659,72 @@ class LowerTest {
         assertEquals("  %t0 = addrof %call.1\n  call () -> %P @mk() into %t0\n  call (%P) -> void @g(%t0)", instrs(AGG, "g(mk());"));
         assertTrue(body("", AGG + " mk();").contains("  %P %call.1\n"));
     }
+
+    // ---- 18: conditional, comma, void ------------------------------------------------------------
+
+    @Test
+    void conditionalIsThreeBlocksWithAResultVariable() {
+        assertEquals("""
+                  i32 %c
+                  i32 %x
+                  i32 %t0
+                  u8 %t1
+                  i32 %t2
+                  i32 %t3
+                .entry:
+                  %t1 = ne %c, 0
+                  condbr %t1, .then, .else
+                .then:
+                  mov %t2, 1
+                  mov %t0, %t2
+                  br .cond.done
+                .else:
+                  mov %t3, 2
+                  mov %t0, %t3
+                  br .cond.done
+                .cond.done:
+                  mov %x, %t0""", body("", "int c; int x; x = c ? 1 : 2;"));
+    }
+
+    @Test
+    void conditionalOfAggregatesCopiesIntoATemporaryObject() {
+        String decls = "struct P { int x, y; }; struct P s, t; int c;";
+        assertEquals("""
+                  %t0 = addrof %tmpN
+                  %t1 = addrof %cond.1
+                  %t2 = ne %c, 0
+                  condbr %t2, .then, .else
+                .then:
+                  %t3 = addrof %s
+                  copy %P %t1, %t3
+                  br .cond.done
+                .else:
+                  %t4 = addrof %t
+                  copy %P %t1, %t4
+                  br .cond.done
+                .cond.done:
+                  copy %P %t0, %t1
+                  %t5 = load.s32 %t0""", instrsN(decls, "(c ? s : t).x;"));
+        assertTrue(body("", decls + " (c ? s : t).x;").contains("  %P %cond.1\n"));
+    }
+
+    @Test
+    void conditionalOfVoidHasNoResult() {
+        assertEquals("""
+                  %t0 = ne %c, 0
+                  condbr %t0, .then, .else
+                .then:
+                  call () -> void @f()
+                  br .cond.done
+                .else:
+                  call () -> void @g()
+                  br .cond.done
+                .cond.done:""", instrs("void f(void); void g(void); int c;", "c ? f() : g();"));
+    }
+
+    @Test
+    void commaEvaluatesTheLeftForItsEffect() {
+        assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %x, %b", instrs("int a, b, x;", "x = (a = 1, b);"));
+        assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %t1, 2\n  mov %b, %t1", instrs("int a, b;", "a = 1, b = 2;"));
+    }
 }
