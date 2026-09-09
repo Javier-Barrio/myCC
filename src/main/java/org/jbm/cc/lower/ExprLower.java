@@ -15,6 +15,7 @@ import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Types;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -27,18 +28,21 @@ import java.util.Optional;
  */
 final class ExprLower implements TVisitor<Val> {
 
+    private final Lower lower;
     private final Types types;
     private final TypeMap typeMap;
     private final Names names;
     private final TargetDesc target;
     private final Builder b;
     private final Map<Symbol, Var> vars;
+    private int callTemps;
     // The value a compound or postfix assignment's target held, keyed by
     // the target node the tree shares between the assignment and its
     // TargetValue.
     private final Map<TExpr.Lvalue, Val> targetValues = new IdentityHashMap<>();
 
     ExprLower(@NonNull Lower lower, @NonNull Builder b, @NonNull Map<Symbol, Var> vars) {
+        this.lower = lower;
         this.types = lower.types;
         this.typeMap = lower.typeMap;
         this.names = lower.names;
@@ -360,9 +364,17 @@ final class ExprLower implements TVisitor<Val> {
         return new Val(pointer(place(e.operand()), e.token()), e.type());
     }
 
+    // A named function decays to its address; a dereferenced pointer to
+    // function decays back to the pointer.
     @Override
     public Val visit(TExpr.FunctionDecay e) {
-        throw notYet(e);
+        if (e.operand() instanceof TExpr.FuncRef f) {
+            lower.referenced(f.symbol());
+            Var p = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfGlobal(p, names.of(f.symbol()), e.token()));
+            return new Val(p, e.type());
+        }
+        return new Val(value(((TExpr.FuncDeref) e.operand()).pointer()).var(), e.type());
     }
 
     @Override
@@ -658,9 +670,35 @@ final class ExprLower implements TVisitor<Val> {
         return new Val(d, e.type());
     }
 
-    /** A call whose aggregate result, if any, goes to {@code into}; a fresh temporary object when null. */
+    /**
+     * A call: the arguments in order, scalars by variable and aggregates
+     * by pointer; the result in a fresh variable, or for an aggregate
+     * written through {@code into}, a fresh temporary object when the
+     * caller has none.
+     */
     private Val call(TExpr.Call e, Var into) {
-        throw new UnsupportedOperationException("lowering of calls is not implemented");
+        Var callee = e instanceof TExpr.IndirectCall ic ? value(ic.callee()).var() : null;
+        var args = new ArrayList<Operand>(e.arguments().size());
+        for (TExpr.Rvalue a : e.arguments()) args.add(value(a).var());
+        Type.Func sig = typeMap.func(e.signature());
+        CType rt = e.type();
+        Var dst = null;
+        if (rt.isArray() || rt.isRecord()) {
+            if (into == null) {
+                Var object = b.local("call." + ++callTemps, typeMap.of(rt), false);
+                into = b.temp(Type.PTR);
+                b.emit(new Instr.AddrOfVar(into, object, e.token()));
+            }
+        } else if (!rt.isVoid()) {
+            dst = temp(rt);
+        }
+        if (e instanceof TExpr.DirectCall dc) {
+            lower.referenced(dc.callee());
+            b.emit(new Instr.Call(dst, sig, names.of(dc.callee()), args, into, e.token()));
+        } else {
+            b.emit(new Instr.ICall(dst, sig, callee, args, into, e.token()));
+        }
+        return new Val(into != null ? into : dst, rt);
     }
 
     @Override

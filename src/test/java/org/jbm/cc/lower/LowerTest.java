@@ -594,4 +594,69 @@ class LowerTest {
         assertEquals("  mov %t0, 7\n  mov %litN, %t0", instrsN("", "(int){7};"));
         assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  mov %t1, 3\n  store.32 %t0, %t1\n  mov %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
     }
+
+    // ---- 16: calls ---------------------------------------------------------------------------
+
+    @Test
+    void directCalls() {
+        assertEquals("  mov %t0, 1\n  mov %t1, 2.0\n  %t2 = call (i32, f64) -> i32 @f(%t0, %t1)", instrs("int f(int, double);", "f(1, 2.0);"));
+        assertEquals("  call () -> void @g()", instrs("void g(void);", "g();"));
+        assertEquals("  mov %t0, 1\n  mov %t1, %c\n  %t2 = call (i32, ...) -> i32 @v(%t0, %t1)", instrs("int v(int, ...); char c;", "v(1, c);"));
+        assertEquals("  %t0 = fcvt %f\n  %t1 = call (f64) -> f64 @half(%t0)", instrs("double half(double); float f;", "half(f);"));
+        assertEquals("  %t0 = call () -> i32 @f\n  mov %x, %t0".replace("@f\n", "@f()\n"), instrs("int f(void); int x;", "x = f();"));
+    }
+
+    @Test
+    void indirectCalls() {
+        assertEquals("  mov %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "fp(3);"));
+        assertEquals("  mov %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "(*fp)(3);"));
+        assertEquals("  %t0 = addrof @f\n  mov %fp, %t0", instrs("int f(int); int (*fp)(int);", "fp = f;"));
+        assertEquals("  mov %t0, 1\n  %t1 = call (i32) -> i32 @f(%t0)", instrs("int f(int);", "(&f)(1);"));
+        assertEquals("  %t0 = addrof @f\n  mov %t1, 1\n  %t2 = icall (i32) -> i32 %t0(%t1)", instrs("int f(int);", "((int (*)(int)) (void *) f)(1);"));
+    }
+
+    @Test
+    void calledFunctionsTheUnitDoesNotDefineAreDeclared() {
+        assertEquals("""
+                declare @h() -> void
+                declare @f(i32, f64) -> i32
+                define @g() -> void {
+                  ptr %t0
+                  i32 %t1
+                  f64 %t2
+                  i32 %t3
+                .entry:
+                  %t0 = addrof @h
+                  mov %t1, 1
+                  mov %t2, 2.0
+                  %t3 = call (i32, f64) -> i32 @f(%t1, %t2)
+                  ret
+                }
+                """, unit("int f(int, double); void h(void); void g(void) { &h; f(1, 2.0); }"));
+        assertEquals("""
+                define @f() -> void {
+                .entry:
+                  ret
+                }
+                define @g() -> void {
+                .entry:
+                  call () -> void @f()
+                  ret
+                }
+                """, unit("void f(void) {} void g(void) { f(); }"));
+    }
+
+    // ---- 17: aggregate calls -------------------------------------------------------------------
+
+    static final String AGG = "struct P { int x, y; }; struct P mk(void); void g(struct P); struct P s;";
+
+    @Test
+    void aggregateArgumentsAndResults() {
+        assertEquals("  %t0 = addrof %s\n  call (%P) -> void @g(%t0)", instrs(AGG, "g(s);"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %call.1\n  call () -> %P @mk() into %t1\n  copy %P %t0, %t1", instrs(AGG, "s = mk();"));
+        assertEquals("  %t0 = addrof %tmpN\n  call () -> %P @mk() into %t0\n  %t1 = load.s32 %t0", instrsN(AGG, "mk().x;"));
+        assertEquals("  %t0 = addrof %call.1\n  call () -> %P @mk() into %t0", instrs(AGG, "mk();"));
+        assertEquals("  %t0 = addrof %call.1\n  call () -> %P @mk() into %t0\n  call (%P) -> void @g(%t0)", instrs(AGG, "g(mk());"));
+        assertTrue(body("", AGG + " mk();").contains("  %P %call.1\n"));
+    }
 }

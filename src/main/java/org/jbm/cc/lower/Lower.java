@@ -21,9 +21,12 @@ import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** The typed tree to the TAC ({@code docs/lower-plan.md}). */
 public final class Lower {
@@ -40,11 +43,25 @@ public final class Lower {
         this.names = new Names(unit);
     }
 
+    // Functions called or taken the address of; the ones the unit does not define are declared.
+    private final Set<Symbol> referenced = new LinkedHashSet<>();
+    private final Set<Symbol> defined = new HashSet<>();
+
     public static Module lower(@NonNull TUnit unit, @NonNull Types types) {
         var lower = new Lower(types, unit);
         for (TUnit.Global g : unit.globals()) lower.global(g);
+        for (TFunction f : unit.functions()) lower.defined.add(f.symbol());
         for (TFunction f : unit.functions()) lower.function(f);
+        for (Symbol f : lower.referenced) {
+            if (!lower.defined.contains(f)) {
+                lower.module.funcDecls.add(new Module.FuncDecl(lower.names.of(f), lower.typeMap.func((CType.Function) f.type())));
+            }
+        }
         return lower.module;
+    }
+
+    void referenced(@NonNull Symbol function) {
+        referenced.add(function);
     }
 
     private void global(TUnit.Global g) {
