@@ -12,6 +12,7 @@ import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TInit;
 import org.jbm.cc.tast.TVisitor;
 import org.jbm.cc.types.CType;
+import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Types;
 
 import java.util.Map;
@@ -53,9 +54,13 @@ final class ExprLower implements TVisitor<Val> {
      * mask for an unsigned one, nothing for a type as wide as its class.
      */
     private void canon(Var r, CType t, Token at) {
-        int n = types.width(t), c = classWidth(t);
+        canon(r, types.isSigned(t), types.width(t), classWidth(t), at);
+    }
+
+    /** Canonical form for an {@code n}-bit value, signed or not, in a class {@code c} bits wide. */
+    private void canon(Var r, boolean signed, int n, int c, Token at) {
         if (n >= c) return;
-        if (types.isSigned(t)) {
+        if (signed) {
             b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(c - n), at));
             b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - n), at));
         } else {
@@ -134,9 +139,37 @@ final class ExprLower implements TVisitor<Val> {
         var m = (Place.Memory) place;
         CType t = m.type();
         if (t.isArray() || t.isRecord()) return new Val(m.ptr(), t);
+        if (m.bits().isPresent()) return readBits(m, m.bits().get(), at);
         Var r = temp(t);
         b.emit(new Instr.Load(r, m.ptr(), width(t), ext(t), m.isVolatile(), at));
         return new Val(r, t);
+    }
+
+    // A bit-field: the storage unit is loaded zero-extended, then the
+    // field is shifted down and masked (unsigned) or shifted up to the
+    // top and arithmetically down (signed), which lands it canonical.
+    private Val readBits(Place.Memory m, Layout.BitField bits, Token at) {
+        CType t = m.type();
+        int unit = width(t), c = classWidth(t);
+        Var u = b.temp(typeMap.integer(types.unsignedOf(t)));
+        b.emit(new Instr.Load(u, m.ptr(), unit, Instr.Ext.UNSIGNED, m.isVolatile(), at));
+        Var r = temp(t);
+        if (types.isSigned(t)) {
+            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, u, new Operand.IntImm(c - bits.bitOffset() - bits.width()), at));
+            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - bits.width()), at));
+        } else {
+            Var shifted = u;
+            if (bits.bitOffset() != 0) {
+                b.emit(new Instr.Bin(Instr.BinOp.LSHR, r, u, new Operand.IntImm(bits.bitOffset()), at));
+                shifted = r;
+            }
+            b.emit(new Instr.Bin(Instr.BinOp.AND, r, shifted, new Operand.IntImm(mask(bits.width())), at));
+        }
+        return new Val(r, t);
+    }
+
+    private static long mask(int width) {
+        return width == 64 ? -1L : (1L << width) - 1;
     }
 
     /** Stores a value at a place: a mov, or a store. */
@@ -151,7 +184,27 @@ final class ExprLower implements TVisitor<Val> {
             b.emit(new Instr.Copy(typeMap.of(t), m.ptr(), v.var(), at));
             return;
         }
+        if (m.bits().isPresent()) {
+            writeBits(m, m.bits().get(), v, at);
+            return;
+        }
         b.emit(new Instr.Store(m.ptr(), v.var(), width(t), t.isFloating(), m.isVolatile(), at));
+    }
+
+    // A bit-field store is a read-modify-write of the storage unit: clear
+    // the field's bits, mask and shift the value into place, or, store.
+    private void writeBits(Place.Memory m, Layout.BitField bits, Val v, Token at) {
+        CType t = m.type();
+        int unit = width(t);
+        Type ut = typeMap.integer(types.unsignedOf(t));
+        Var u = b.temp(ut);
+        b.emit(new Instr.Load(u, m.ptr(), unit, Instr.Ext.UNSIGNED, m.isVolatile(), at));
+        b.emit(new Instr.Bin(Instr.BinOp.AND, u, u, new Operand.IntImm(~(mask(bits.width()) << bits.bitOffset())), at));
+        Var f = b.temp(ut);
+        b.emit(new Instr.Bin(Instr.BinOp.AND, f, v.var(), new Operand.IntImm(mask(bits.width())), at));
+        if (bits.bitOffset() != 0) b.emit(new Instr.Bin(Instr.BinOp.SHL, f, f, new Operand.IntImm(bits.bitOffset()), at));
+        b.emit(new Instr.Bin(Instr.BinOp.OR, u, u, f, at));
+        b.emit(new Instr.Store(m.ptr(), u, unit, false, m.isVolatile(), at));
     }
 
     /** The address of a place, into a ptr variable. */
