@@ -111,6 +111,7 @@ public final class Lower {
         var exprs = new ExprLower(this, b, vars);
         new StmtLower(b, exprs, vars).lower(f.body());
         endOfBody(b, f, ctype.returnType());
+        b.finish();
         module.functions.add(fn);
     }
 

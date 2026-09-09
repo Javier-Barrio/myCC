@@ -42,8 +42,10 @@ final class StmtLower implements TStmtVisitor<Void> {
         s.accept(this);
     }
 
+    // A jump target's name may be the typer's "case 5" or "case 97...102";
+    // a block name is an identifier with dots.
     private Block label(JumpTarget t) {
-        return labels.computeIfAbsent(t, k -> b.block(k.name));
+        return labels.computeIfAbsent(t, k -> b.block(k.name.replaceAll("[^A-Za-z0-9_]+", ".")));
     }
 
     private void br(Block target, Token at) {
