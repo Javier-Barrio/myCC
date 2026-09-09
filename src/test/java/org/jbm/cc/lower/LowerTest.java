@@ -293,4 +293,29 @@ class LowerTest {
         assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", instrsOn(ILP32, "int i;", "(long long) i;"));
         assertEquals("  mov %t0, %ll", instrsOn(ILP32, "long long ll;", "(long) ll;"));
     }
+
+    // ---- 6: floating conversions and ToBool ------------------------------------------------------
+
+    @Test
+    void floatingConversions() {
+        assertEquals("  %t0 = i2f %i", instrs("int i;", "(double) i;"));
+        assertEquals("  %t0 = u2f %u", instrs("unsigned u;", "(double) u;"));
+        assertEquals("  %t0 = i2f %l", instrs("long l;", "(float) l;"));
+        assertEquals("  %t0 = i2f %c", instrs("char c;", "(double) c;"));
+        assertEquals("  %t0 = f2i %d", instrs("double d;", "(int) d;"));
+        assertEquals("  %t0 = f2u %d", instrs("double d;", "(unsigned long) d;"));
+        assertEquals("  %t0 = f2u %d\n  %t0 = and %t0, 255", instrs("double d;", "(unsigned char) d;"));
+        assertEquals("  %t0 = f2i %f\n  %t0 = shl %t0, 16\n  %t0 = ashr %t0, 16", instrs("float f;", "(short) f;"));
+        assertEquals("  %t0 = fcvt %d", instrs("double d;", "(float) d;"));
+        assertEquals("  %t0 = fcvt %f", instrs("float f;", "(double) f;"));
+        assertEquals("  f64 %d\n  f80 %t0\n.entry:\n  %t0 = fcvt %d", body("", "double d; (long double) d;"));
+    }
+
+    @Test
+    void toBool() {
+        assertEquals("  %t0 = ne %i, 0\n  mov %b, %t0", instrs("bool b; int i;", "b = i;"));
+        assertEquals("  %t0 = ne %p, 0\n  mov %b, %t0", instrs("bool b; int *p;", "b = p;"));
+        assertEquals("  %t0 = fne %d, 0.0\n  mov %b, %t0", instrs("bool b; double d;", "b = d;"));
+        assertEquals("  u8 %b\n  i64 %l\n  u8 %t0\n.entry:\n  %t0 = ne %l, 0\n  mov %b, %t0", body("", "bool b; long l; b = l;"));
+    }
 }
