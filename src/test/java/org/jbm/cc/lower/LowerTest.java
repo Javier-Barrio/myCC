@@ -318,4 +318,27 @@ class LowerTest {
         assertEquals("  %t0 = fne %d, 0.0\n  mov %b, %t0", instrs("bool b; double d;", "b = d;"));
         assertEquals("  u8 %b\n  i64 %l\n  u8 %t0\n.entry:\n  %t0 = ne %l, 0\n  mov %b, %t0", body("", "bool b; long l; b = l;"));
     }
+
+    // ---- 7: pointer conversions -------------------------------------------------------------------
+
+    @Test
+    void pointerConversions() {
+        assertEquals("  mov %t0, %p", instrs("int *p;", "(long) p;"));
+        assertEquals("  mov %t0, %p", instrs("int *p;", "(unsigned long) p;"));
+        assertEquals("  mov %t0, %p", instrs("int *p;", "(int) p;"));
+        assertEquals("  mov %t0, %p\n  %t0 = and %t0, 255", instrs("int *p;", "(unsigned char) p;"));
+        assertEquals("  mov %t0, 5\n  mov %t1, %t0\n  %t1 = shl %t1, 32\n  %t1 = ashr %t1, 32", instrs("", "(void *) 5;"));
+        assertEquals("  mov %t0, %u", instrs("unsigned u;", "(void *) u;"));
+        assertEquals("  mov %t0, %l", instrs("long l;", "(char *) l;"));
+        assertEquals("", instrs("void *vp;", "(int *) vp;"));
+        assertEquals("  mov %t0, 0\n  mov %p, %t0", instrs("int *p;", "p = 0;"));
+        assertEquals("  i32 %i\n  ptr %t0\n.entry:\n  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", body("", "int i; (int *) i;"));
+    }
+
+    @Test
+    void pointerConversionsOnTheOtherTarget() {
+        assertEquals("  mov %t0, %p", instrsOn(ILP32, "int *p;", "(long) p;"));
+        assertEquals("  mov %t0, %p", instrsOn(ILP32, "int *p;", "(long long) p;"));
+        assertEquals("  mov %t0, %i", instrsOn(ILP32, "int i;", "(int *) i;"));
+    }
 }
