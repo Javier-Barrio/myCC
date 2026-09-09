@@ -170,4 +170,78 @@ class LowerTest {
                 }
                 """, functionOn(ILP32, "void f(long l, int *p) { char c; long long ll; }"));
     }
+
+    // ---- 3: constants and variables --------------------------------------------------------
+
+    @Test
+    void constantsAreMovsInTheClassOfTheirType() {
+        assertEquals("  i32 %t0\n.entry:\n  mov %t0, 5", expr("", "5"));
+        assertEquals("  i64 %t0\n.entry:\n  mov %t0, 5", expr("", "5L"));
+        assertEquals("  u32 %t0\n.entry:\n  mov %t0, 4294967295", expr("", "4294967295u"));
+        assertEquals("  f64 %t0\n.entry:\n  mov %t0, 1.5", expr("", "1.5"));
+        assertEquals("  f32 %t0\n.entry:\n  mov %t0, 1.5", expr("", "1.5f"));
+        assertEquals("  i32 %t0\n.entry:\n  mov %t0, 97", expr("", "'a'"));
+        assertEquals("  ptr %t0\n.entry:\n  mov %t0, 0", expr("", "nullptr"));
+    }
+
+    @Test
+    void aLocalIsUsedDirectly() {
+        assertEquals("  i32 %x\n.entry:", body("", "int x; x;"));
+        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov %t0, 1\n  mov %x, %t0", body("", "int x; x = 1;"));
+        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov %t0, 3\n  mov %x, %t0", body("", "int x = 3;"));
+        assertEquals("  f64 %d\n  i32 %x\n  f64 %t0\n.entry:\n  mov %t0, 2.0\n  mov %d, %t0", body("", "double d; int x; d = 2.0;"));
+    }
+
+    // ---- 4: globals, loads and stores --------------------------------------------------------
+
+    @Test
+    void aGlobalIsLoadedThroughItsAddress() {
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @g\n  %t1 = load.s32 %t0", expr("int g;", "g"));
+        assertEquals("  ptr %t0\n  i8 %t1\n.entry:\n  %t0 = addrof @c\n  %t1 = load.s8 %t0", expr("char c;", "c"));
+        assertEquals("  ptr %t0\n  u16 %t1\n.entry:\n  %t0 = addrof @us\n  %t1 = load.u16 %t0", expr("unsigned short us;", "us"));
+        assertEquals("  ptr %t0\n  i64 %t1\n.entry:\n  %t0 = addrof @l\n  %t1 = load.s64 %t0", expr("long l;", "l"));
+        assertEquals("  ptr %t0\n  u8 %t1\n.entry:\n  %t0 = addrof @b\n  %t1 = load.u8 %t0", expr("bool b;", "b"));
+        assertEquals("  ptr %t0\n  f32 %t1\n.entry:\n  %t0 = addrof @f\n  %t1 = load.f32 %t0", expr("float f;", "f"));
+        assertEquals("  ptr %t0\n  f64 %t1\n.entry:\n  %t0 = addrof @d\n  %t1 = load.f64 %t0", expr("double d;", "d"));
+        assertEquals("  ptr %t0\n  ptr %t1\n.entry:\n  %t0 = addrof @p\n  %t1 = load.u64 %t0", expr("int *p;", "p"));
+        assertEquals("  ptr %t0\n  ptr %t1\n.entry:\n  %t0 = addrof @p\n  %t1 = load.u32 %t0", exprOn(ILP32, "int *p;", "p"));
+    }
+
+    @Test
+    void aGlobalIsStoredThroughItsAddress() {
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @g\n  mov %t1, 1\n  store.32 %t0, %t1", expr("int g;", "g = 1"));
+        assertEquals("  ptr %t0\n  f32 %t1\n.entry:\n  %t0 = addrof @f\n  mov %t1, 1.0\n  store.f32 %t0, %t1", expr("float f;", "f = 1.0f"));
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @v\n  %t1 = load.s32 %t0 volatile", expr("volatile int v;", "v"));
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @v\n  mov %t1, 1\n  store.32 %t0, %t1 volatile", expr("volatile int v;", "v = 1"));
+    }
+
+    @Test
+    void throughAPointer() {
+        assertEquals("""
+                define @f(ptr %p) -> void {
+                  i32 %t0
+                  i32 %t1
+                .entry:
+                  %t0 = load.s32 %p
+                  mov %t1, 1
+                  store.32 %p, %t1
+                  ret
+                }
+                """, function("void f(int *p) { *p; *p = 1; }"));
+        assertEquals("  ptr %t0\n  ptr %t1\n  i8 %t2\n.entry:\n  %t0 = addrof @p\n  %t1 = load.u64 %t0\n  %t2 = load.s8 %t1", expr("char *p;", "*p"));
+    }
+
+    @Test
+    void globalsAreEmitted() {
+        assertEquals("""
+                global @a : i32 align 4
+                global @b : i32 align 4 = { 0 : i32 7 }
+                global internal @c : f64 align 8 = { 0 : f64 2.5 }
+                global @k : i32 align 4 readonly = { 0 : i32 1 }
+                global @p : ptr align 8 = { 0 : addr @b }
+                global @q : ptr align 8 = { 0 : u64 0 }
+                global @arr : [3 x i32] align 4 = { 0 : i32 1, 4 : i32 2 }
+                declare @e : i32
+                """, unit("int a; int b = 7; static double c = 2.5; const int k = 1; int *p = &b; int *q = 0; int arr[3] = {1, 2}; extern int e;"));
+    }
 }
