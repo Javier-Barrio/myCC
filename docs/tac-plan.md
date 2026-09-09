@@ -515,12 +515,21 @@ on `tac`. The VM depends on `tac` only.
 
 Each step is one commit with the suite green and `Main` still running.
 
-1. [ ] **The model**: `Type`, `RegClass`, `Var`, `Operand`, `Instr`, `Block`,
+1. [x] **The model**: `Type`, `RegClass`, `Var`, `Operand`, `Instr`, `Block`,
    `Function`, `Global`, `Module`, the target descriptor, `TacVisitor`;
    hand-built module tests.
-2. [ ] **`TacWriter`** and **`TacInvariants`**; the text form fixed by tests.
-3. [ ] **`Lower`**, by the steps of `lower-plan.md`.
+2. [x] **`TacWriter`** and **`TacInvariants`**; the text form fixed by tests.
+3. [x] **`Lower`**, by the steps of `lower-plan.md`.
 4. [ ] **`TacReader`** and the round trip on the whole corpus.
+
+Steps 1 to 3 are implemented (September 2026). The instruction records
+differ from "one record per instruction" in one way: the arithmetic,
+comparison and conversion families are one record each (`Bin`, `Cmp`,
+`Cvt`) carrying an operation code, since their members differ only by
+operation and a consumer switches on the code either way; the rest are
+one record per instruction. `TacInvariants` reports a violation as an
+`IllegalStateException` naming the function and printing the
+instruction.
 
 ### Deferred
 - `i128` and `_BitInt` above 64 bits (two `l` variables)

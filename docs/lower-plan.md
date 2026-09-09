@@ -379,6 +379,37 @@ its C type is; then the body; then the end-of-body rule. Variables that
 `Lower` introduces (results, `Cond` and call temporaries) are declared as
 they are allocated. Nothing is stored at entry.
 
+## Status
+
+Steps 1 to 28 are implemented (September 2026): `Lower.lower(TUnit,
+Types)` produces the `Module` that `Main` prints, `LowerTest` holds the
+per-step tests, `TacCorpusTest` compares every typed-corpus program with
+a `.tac` golden on its target (regenerated with `-Dtac.update=true`),
+checks the invariants, and asserts every instruction kind and operation
+appears. What the implementation settled differently from the text:
+
+- The end of `main` is `ret 0` rather than a `mov` and a `ret`, since
+  `ret` takes an immediate.
+- A static local is named `name.static`, with `.2`, `.3` for later ones
+  of the same name in the unit, because the typer's `TUnit` does not say
+  which function a static local belongs to. A file-scope compound
+  literal is `.lit.N`; the typer's temporaries are `tmpN` and `litN`.
+- The temporary object for a discarded aggregate call result is
+  `call.N`, and for an aggregate conditional `cond.N`; a conditional
+  under a `Materialize` is copied twice, once into `cond.N` and once
+  into the temporary, which a later step may fold.
+- `ToBool` of a comparison, a logical operator or `!` is the value
+  itself, since those already yield 0 or 1.
+- An assignment used as a statement does not compute the value it
+  would yield; `ExprLower.effect` passes that down for the top node.
+- Temporaries are declared only if an emitted instruction uses them,
+  so dropped dead code leaves no declaration behind.
+- `Names` hashes string units with SHA-256 truncated to 64 bits.
+- The typed corpus gained `21-lowering-extras.c` so that `trap` and the
+  unsigned and floating operations appear; the lowering goldens live in
+  `src/test/resources/tac/` next to nothing else, named after the typed
+  corpus programs.
+
 ## Changes to existing code
 
 - **`TInit.Item`** carries an offset and a value. For a bit-field member it
@@ -423,94 +454,94 @@ code, then the suite green with `Main` still running. Steps 1 and 2 of
 `tac-plan.md` (the model, the writer and the invariants) come first.
 
 **Harness and skeleton**
-1. [ ] **`LowerTest` helpers, `Builder`, `Names`, `Lower` skeleton.** Test:
+1. [x] **`LowerTest` helpers, `Builder`, `Names`, `Lower` skeleton.** Test:
    `unit("void f(void) {}")` prints `define @f() -> void { .entry: ret }`;
    a function with parameters and locals declares them with their types;
    a shadowed local gets `.2`; a `volatile` local is marked.
-2. [ ] **End-of-body rule.** Tests: `void`, `main`, and a non-void function
+2. [x] **End-of-body rule.** Tests: `void`, `main`, and a non-void function
    whose body falls through, each ending as the rule says.
 
 **Scalars**
-3. [ ] **Constants and variables.** Tests: `expr` of an `int`, a `long`, a
+3. [x] **Constants and variables.** Tests: `expr` of an `int`, a `long`, a
    `double`, a `float`, `nullptr`, and `(void *)0`, each one `mov` in the
    right type; `x` for a local is the variable itself with no
    instruction; `x = 1` is one `mov`.
-4. [ ] **Globals, loads and stores.** Tests: `g` for a global of each scalar
+4. [x] **Globals, loads and stores.** Tests: `g` for a global of each scalar
    type prints `addrof` and the right `load.sN`/`load.uN`/`load.fN`; `g =
    1` prints `addrof` and `store.N`; a `volatile` global marks both; `*p`
    and `*p = 1` through a pointer parameter.
-5. [ ] **Integer conversions.** Tests, one per row and per case of the
+5. [x] **Integer conversions.** Tests, one per row and per case of the
    `IntToInt` rule: `(unsigned short) s`, `(unsigned short) sc`, `(short)
    uc`, `(char) i`, `(unsigned char) i`, `(long) i`, `(long) u`, `(unsigned
    long) i`, `(int) l`, `(char) l`, on both targets.
-6. [ ] **Floating conversions and `ToBool`.** Tests: `(double) i`, `(double)
+6. [x] **Floating conversions and `ToBool`.** Tests: `(double) i`, `(double)
    u`, `(float) l`, `(int) d`, `(unsigned char) d`, `(float) d`, `(double)
    f`, `!!i`, `!!p`, `!!d`.
-7. [ ] **Pointer conversions.** Tests: `(long) p`, `(int) p`, `(void *) 5`,
+7. [x] **Pointer conversions.** Tests: `(long) p`, `(int) p`, `(void *) 5`,
    `(char *) l`, `(int *) vp`.
-8. [ ] **Arithmetic.** Tests: `a + b` for `int`, `unsigned`, `long`,
+8. [x] **Arithmetic.** Tests: `a + b` for `int`, `unsigned`, `long`,
    `double`; `a / b` and `a % b` signed and unsigned; the bit operators;
    `_BitInt(7)` addition with its `canon`.
-9. [ ] **Shifts.** Tests: `i << n`, `i >> n`, `u >> n`, `l >> n` with the
+9. [x] **Shifts.** Tests: `i << n`, `i >> n`, `u >> n`, `l >> n` with the
    `mov` of the amount into an `l`.
-10. [ ] **Comparisons.** Tests: each operator on `int`, `unsigned`, pointers
+10. [x] **Comparisons.** Tests: each operator on `int`, `unsigned`, pointers
     and `double`, including the swap for `>` and `>=` with side-effecting
     operands evaluated left to right.
-11. [ ] **Unary and logical.** Tests: `-i`, `-u`, `-d`, `~i`, `!i`; `a && b`
+11. [x] **Unary and logical.** Tests: `-i`, `-u`, `-d`, `~i`, `!i`; `a && b`
     and `a || b` print the two block shapes.
 
 **Objects**
-12. [ ] **Pointers and members.** Tests: `p[i]`, `p + 3`, `p - q`, `s.m` on a
+12. [x] **Pointers and members.** Tests: `p[i]`, `p + 3`, `p - q`, `s.m` on a
     local struct (`addrof`, `wadd`, `load.s32`), `p->m`, `s.in.y` with one
     `wadd` of the summed offset, `&s.m`, `&a[2]`, `&x` on a scalar local.
-13. [ ] **Bit-fields.** Tests: load of an unsigned and a signed field, store
+13. [x] **Bit-fields.** Tests: load of an unsigned and a signed field, store
     to each, on both targets.
-14. [ ] **Assignments.** Tests: `x = y` yields the stored value; `bf = 300`
+14. [x] **Assignments.** Tests: `x = y` yields the stored value; `bf = 300`
     yields 12; `x += 1` and `x++` on a local (no memory), `p->m += 1`
     (pointer evaluated once), `++x`, `p++`, `a[k++] += 1` with
     `TargetValue` used once; `bf += 1`.
-15. [ ] **Aggregates.** Tests: `s = t` is a `copy` yielding `s`'s pointer;
+15. [x] **Aggregates.** Tests: `s = t` is a `copy` yielding `s`'s pointer;
     `(s = t).m` loads from `s`; `sizeof` is already a constant.
 
 **Calls and conditionals**
-16. [ ] **Direct and indirect calls.** Tests: `f(1, 2.0)`, `fp(3)`, a
+16. [x] **Direct and indirect calls.** Tests: `f(1, 2.0)`, `fp(3)`, a
     variadic call with promoted extras, a `void` call as a statement, a
     call of an undeclared-in-unit function producing a `declare`.
-17. [ ] **Aggregate calls.** Tests: `g(s)` passes the pointer, `s = mk()`
+17. [x] **Aggregate calls.** Tests: `g(s)` passes the pointer, `s = mk()`
     lands `into` the `Materialize` variable then copies, `mk().x` uses
     it, `mk();` as a statement uses a `.callN` variable.
-18. [ ] **Conditional, comma, void.** Tests: `c ? 1 : 2`, `c ? s : t`, `c ?
+18. [x] **Conditional, comma, void.** Tests: `c ? 1 : 2`, `c ? s : t`, `c ?
     f() : g()` with `void`, `(a, b)`.
-19. [ ] **Compound literals and local initializers.** Tests: `(struct P){1,
+19. [x] **Compound literals and local initializers.** Tests: `(struct P){1,
     2}.x`, `int v[3] = {1, 2}` as `zero` then two stores, `struct P p =
     {.y = 2}`, `char s[] = "ab"`, `struct Out o = {in, "z"}` with the
     `copy`, `int x = e` as one `mov`, an initializer in a loop body
     re-run each iteration.
 
 **Statements**
-20. [ ] **`if`.** Tests: with and without `else`, nested, an empty branch.
-21. [ ] **Loops.** Tests: `while`, `do`, `for` with and without each clause,
+20. [x] **`if`.** Tests: with and without `else`, nested, an empty branch.
+21. [x] **Loops.** Tests: `while`, `do`, `for` with and without each clause,
     `break` and `continue` in each, a `for` with a declaration.
-22. [ ] **Labels and `goto`.** Tests: forward and backward `goto`, a label
+22. [x] **Labels and `goto`.** Tests: forward and backward `goto`, a label
     after a `return` opening a block, dead code after `return` dropped,
     a `goto` into a loop body.
-23. [ ] **`switch`.** Tests: cases and default, fallthrough, `break`, a
+23. [x] **`switch`.** Tests: cases and default, fallthrough, `break`, a
     statement before the first case dropped, a `case 1 ... 5` range,
     nested switches, a switch on a `long`.
-24. [ ] **`return`.** Tests: scalar, aggregate by pointer, `return` inside a
+24. [x] **`return`.** Tests: scalar, aggregate by pointer, `return` inside a
     loop, `main` without `return`.
 
 **Data and the unit**
-25. [ ] **`TInit.Item` bit placement** in the typer, test first in
+25. [x] **`TInit.Item` bit placement** in the typer, test first in
     `TyperTest` and the typed corpus (`08-records.c` gains a bit-field
     initializer).
-26. [ ] **Globals.** Tests: scalar, array, struct with designators, a union,
+26. [x] **Globals.** Tests: scalar, array, struct with designators, a union,
     a pointer to a global with an offset, a bit-field item, a tentative
     definition, an `extern`, `const` as `readonly`.
-27. [ ] **Strings and statics.** Tests: a string literal as `@.str.<hash>`
+27. [x] **Strings and statics.** Tests: a string literal as `@.str.<hash>`
     shared by two uses, a `wchar_t` string, a static local named
     `f.count`, two statics of one name, a file-scope compound literal.
-28. [ ] **`Main` prints the TAC** of its program; the corpus gains it; both
+28. [x] **`Main` prints the TAC** of its program; the corpus gains it; both
     targets run the whole corpus; the coverage checks pass.
 
 ### Deferred
