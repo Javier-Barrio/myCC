@@ -553,4 +553,45 @@ class LowerTest {
         assertEquals("  %t0 = load.u32 %p\n  %t1 = and %t0, 15\n  mov %t2, 1\n  mov %t3, %t2\n  %t4 = wadd %t1, %t3\n  %t5 = load.u32 %p\n  %t5 = and %t5, -16\n  %t6 = and %t4, 15\n  %t5 = or %t5, %t6\n  store.32 %p, %t5",
                 instrs(BITS, "p->lo += 1;"));
     }
+
+    // ---- 15: aggregates ----------------------------------------------------------------------
+
+    /** Instructions with the typer's temporary numbers normalized to {@code N}. */
+    static String instrsN(String decls, String body) {
+        return instrs(decls, body).replaceAll("(tmp|lit)\\d+", "$1N");
+    }
+
+    @Test
+    void aggregateAssignmentIsACopyYieldingTheTarget() {
+        String decls = "struct In { int x, y; }; struct In s, t;";
+        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %t\n  copy %In %t0, %t1", instrs(decls, "s = t;"));
+        assertEquals("  %t0 = addrof %tmpN\n  %t1 = addrof %s\n  %t2 = addrof %t\n  copy %In %t1, %t2\n  copy %In %t0, %t1\n  %t3 = wadd %t0, 4\n  %t4 = load.s32 %t3",
+                instrsN(decls, "(s = t).y;"));
+    }
+
+    @Test
+    void sizeofIsAlreadyAConstant() {
+        assertEquals("  mov %t0, 8", instrs("struct In { int x, y; }; struct In s;", "sizeof s;"));
+        assertEquals("  u64 %t0\n.entry:\n  mov %t0, 4", body("", "sizeof(int);"));
+    }
+
+    @Test
+    void aggregateLocalInitializers() {
+        assertEquals("  %t0 = addrof %v\n  zero [3 x i32] %t0\n  mov %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov %t3, 2\n  store.32 %t2, %t3",
+                instrs("", "int v[3] = {1, 2};"));
+        assertEquals("  %t0 = addrof %p\n  zero %P %t0\n  %t1 = wadd %t0, 4\n  mov %t2, 2\n  store.32 %t1, %t2",
+                instrs("struct P { int x, y; };", "struct P p = {.y = 2};"));
+        assertEquals("  %t0 = addrof %s\n  zero [3 x i8] %t0\n  mov %t1, 97\n  store.8 %t0, %t1\n  %t2 = wadd %t0, 1\n  mov %t3, 98\n  store.8 %t2, %t3",
+                instrs("", "char s[] = \"ab\";"));
+        assertEquals("  %t0 = addrof %o\n  zero %Out %t0\n  %t1 = addrof %in\n  copy %In %t0, %t1\n  %t2 = wadd %t0, 8\n  mov %t3, 122\n  store.8 %t2, %t3",
+                instrs("struct In { int x, y; }; struct Out { struct In in; char name[8]; }; struct In in;", "struct Out o = {in, \"z\"};"));
+    }
+
+    @Test
+    void compoundLiterals() {
+        assertEquals("  %t0 = addrof %litN\n  zero %P %t0\n  mov %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov %t3, 2\n  store.32 %t2, %t3\n  %t4 = load.s32 %t0",
+                instrsN("struct P { int x, y; };", "(struct P){1, 2}.x;"));
+        assertEquals("  mov %t0, 7\n  mov %litN, %t0", instrsN("", "(int){7};"));
+        assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  mov %t1, 3\n  store.32 %t0, %t1\n  mov %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
+    }
 }

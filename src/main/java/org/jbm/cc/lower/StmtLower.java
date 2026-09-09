@@ -2,6 +2,8 @@ package org.jbm.cc.lower;
 
 import lombok.NonNull;
 import org.jbm.cc.sema.Symbol;
+import org.jbm.cc.tac.Instr;
+import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
 import org.jbm.cc.tast.TStmt;
 import org.jbm.cc.tast.TStmtVisitor;
@@ -45,7 +47,12 @@ final class StmtLower implements TStmtVisitor<Void> {
     public Void visit(TStmt.LocalDecl s) {
         if (s.init().isEmpty()) return null;
         Var v = vars.get(s.symbol());
-        if (s.symbol().type().isArray() || s.symbol().type().isRecord()) throw notYet(s);
+        if (s.symbol().type().isArray() || s.symbol().type().isRecord()) {
+            Var p = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfVar(p, v, s.token()));
+            exprs.initialize(p, s.symbol().type(), s.init().get(), s.token());
+            return null;
+        }
         exprs.initialize(new Place.Variable(v, s.symbol().type()), s.init().get(), s.token());
         return null;
     }

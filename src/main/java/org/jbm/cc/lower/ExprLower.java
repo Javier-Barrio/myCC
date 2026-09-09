@@ -108,7 +108,7 @@ final class ExprLower implements TVisitor<Val> {
 
     /** Lowers an expression whose value is not used. */
     void effect(@NonNull TExpr.Rvalue e) {
-        discard = true;
+        discard = e instanceof TExpr.Assign || e instanceof TExpr.CompoundAssign || e instanceof TExpr.PostfixAssign;
         e.accept(this);
         discard = false;
     }
@@ -148,7 +148,38 @@ final class ExprLower implements TVisitor<Val> {
             }
             return new Place.Memory(p, m.type(), m.member().bits(), m.type().quals().isVolatile());
         }
+        if (e instanceof TExpr.Materialize m) return materialize(m);
+        if (e instanceof TExpr.CompoundLit c) return compoundLiteral(c);
         throw notYet(e);
+    }
+
+    // A struct rvalue is copied into its temporary object; a call result
+    // is written there directly.
+    private Place materialize(TExpr.Materialize m) {
+        Var p = b.temp(Type.PTR);
+        b.emit(new Instr.AddrOfVar(p, vars.get(m.symbol()), m.token()));
+        if (m.value() instanceof TExpr.Call call) {
+            call(call, p);
+        } else {
+            Val v = value(m.value());
+            b.emit(new Instr.Copy(typeMap.of(m.type()), p, v.var(), m.token()));
+        }
+        return memory(p, m.type());
+    }
+
+    // A compound literal's object is initialized each time the expression
+    // is evaluated (6.5.3.6).
+    private Place compoundLiteral(TExpr.CompoundLit c) {
+        Var v = vars.get(c.symbol());
+        if (c.type().isArray() || c.type().isRecord()) {
+            Var p = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfVar(p, v, c.token()));
+            initialize(p, c.type(), c.init(), c.token());
+            return memory(p, c.type());
+        }
+        var place = new Place.Variable(v, c.type());
+        initialize(place, c.init(), c.token());
+        return place;
     }
 
     private static Place.Memory memory(Var ptr, CType type) {
@@ -627,14 +658,19 @@ final class ExprLower implements TVisitor<Val> {
         return new Val(d, e.type());
     }
 
+    /** A call whose aggregate result, if any, goes to {@code into}; a fresh temporary object when null. */
+    private Val call(TExpr.Call e, Var into) {
+        throw new UnsupportedOperationException("lowering of calls is not implemented");
+    }
+
     @Override
     public Val visit(TExpr.DirectCall e) {
-        throw notYet(e);
+        return call(e, null);
     }
 
     @Override
     public Val visit(TExpr.IndirectCall e) {
-        throw notYet(e);
+        return call(e, null);
     }
 
     @Override
@@ -712,5 +748,23 @@ final class ExprLower implements TVisitor<Val> {
     void initialize(@NonNull Place.Variable v, @NonNull TInit init, @NonNull Token at) {
         if (init.items().size() != 1 || init.items().get(0).offset() != 0) throw new IllegalStateException("a scalar initializer has one item");
         write(v, value(init.items().get(0).value()), at);
+    }
+
+    /**
+     * An aggregate's initializer at run time: the object is zeroed, then
+     * each item is stored at its offset in order, a later item overriding
+     * an earlier one where they overlap.
+     */
+    void initialize(@NonNull Var ptr, @NonNull CType type, @NonNull TInit init, @NonNull Token at) {
+        b.emit(new Instr.Zero(typeMap.of(type), ptr, at));
+        for (TInit.Item item : init.items()) {
+            Var q = ptr;
+            if (item.offset() != 0) {
+                q = b.temp(Type.PTR);
+                b.emit(new Instr.Bin(Instr.BinOp.WADD, q, ptr, new Operand.IntImm(item.offset()), at));
+            }
+            Val v = value(item.value());
+            write(memory(q, types.unqualified(v.type())), v, at);
+        }
     }
 }
