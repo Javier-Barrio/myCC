@@ -351,7 +351,16 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.AddrConst e) {
-        throw notYet(e);
+        Var r = b.temp(Type.PTR);
+        if (e.base().isEmpty()) {
+            b.emit(new Instr.Mov(r, new Operand.IntImm(e.offset()), e.token()));
+            return new Val(r, e.type());
+        }
+        Symbol base = e.base().get();
+        if (base instanceof Symbol.Function) lower.referenced(base);
+        b.emit(new Instr.AddrOfGlobal(r, names.of(base), e.token()));
+        if (e.offset() != 0) b.emit(new Instr.Bin(Instr.BinOp.WADD, r, r, new Operand.IntImm(e.offset()), e.token()));
+        return new Val(r, e.type());
     }
 
     // ---- conversions ---------------------------------------------------------------------------------
