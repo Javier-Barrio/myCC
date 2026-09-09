@@ -255,7 +255,8 @@ Rvalue
   PtrAdd(Rvalue ptr, Rvalue index)  index converted to ptrdiff_t; element type is type.target(); Sub is a negated index
   PtrDiff(Rvalue l, Rvalue r)       ptrdiff_t
   AddrOf(Lvalue | FunctionDesignator)      &f on a function is FunctionDecay(FuncRef f); AddrOf takes lvalues only
-  Call(Rvalue callee, List<Rvalue> args)   callee is pointer-to-function; args converted as if by assignment
+  Call                              sealed: DirectCall(Symbol callee, args) names the function, IndirectCall(Rvalue callee,
+                                    args) computes a pointer-to-function; args converted as if by assignment
   Assign(Lvalue target, Rvalue value)      value converted to the target's unqualified type; yields the new value
   CompoundAssign(Lvalue target, Rvalue newValue)   yields the new value
   PostfixAssign(Lvalue target, Rvalue newValue)    yields the old value (i++, i--)
@@ -542,7 +543,7 @@ is visible in the expectation:
 assertEquals("(add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))", expr("int a; char b;", "a + b"));
 assertEquals("(ptradd:int* (decay:int* a:int[3]) (int-to-int:long (rv:int i:int)))", expr("int a[3]; int i;", "a + i"));
 assertEquals("8:unsigned long", expr("struct S { char c; int i; };", "sizeof(struct S)"));
-assertEquals("(member:int (materialize:struct S (call:struct S (fdecay:struct S(*)(void) f))) i)",
+assertEquals("(member:int (materialize:struct S (icall:struct S (fdecay:struct S(*)(void) f))) i)",
              expr("struct S { int i; } f(void);", "f().i"));
 ```
 
@@ -652,7 +653,8 @@ typed and printed.
     `PostfixAssign` over `TargetValue`. Tests: the `c += 1.5` tree from the
     node list, `p++`, `a[k++] += 1` with the identity of `TargetValue.target`
     asserted, `const int` rejected, an array rejected.
-11. [x] **Calls.** `Call` with `FunctionDecay`, arity and prototype checks,
+11. [x] **Calls.** `DirectCall` for a named function and `IndirectCall` through
+    a pointer value, arity and prototype checks,
     arguments through `assignConvert`, default argument promotions for
     variadic arguments, calls through function pointers. Failure tests for
     too few arguments and an incompatible pointer argument.

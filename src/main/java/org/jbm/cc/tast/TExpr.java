@@ -510,16 +510,56 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     // ---- calls (6.5.3.3) ---------------------------------------------------------------------------
 
     /**
-     * A call through a pointer to function: the callee is an rvalue of
-     * pointer-to-function type (a named function has decayed), the
-     * arguments are converted to the parameter types as if by assignment,
-     * with default argument promotions past the prototype's end. The type
-     * is the function's return type; a call is never an lvalue.
+     * A call (6.5.3.3). The arguments are converted to the parameter types
+     * as if by assignment, with default argument promotions past the
+     * prototype's end. The type is the function's return type; a call is
+     * never an lvalue. Whether the callee is known statically is the node
+     * kind: a {@link DirectCall} names the function, an
+     * {@link IndirectCall} computes a pointer to it.
      */
-    record Call(@NonNull Rvalue callee, @NonNull List<Rvalue> arguments, @NonNull CType type, @NonNull Token token)
-            implements Rvalue {
-        public Call {
+    sealed interface Call extends Rvalue permits DirectCall, IndirectCall {
+        List<Rvalue> arguments();
+
+        /** The type of the function called, which the arguments were converted against. */
+        CType.Function signature();
+    }
+
+    /**
+     * A call of a named function: {@code f(x)}, and also {@code (*f)(x)}
+     * and {@code (&f)(x)}, which 6.5.3.3 makes the same call. The callee
+     * is the function's symbol; its type is the function type.
+     */
+    record DirectCall(@NonNull Symbol callee, @NonNull List<Rvalue> arguments, @NonNull CType type, @NonNull Token token)
+            implements Call {
+        public DirectCall {
             arguments = List.copyOf(arguments);
+        }
+
+        @Override
+        public CType.Function signature() {
+            return (CType.Function) callee.type();
+        }
+
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /**
+     * A call through a computed pointer to function: the callee is an
+     * rvalue of pointer-to-function type whose value is not a named
+     * function, so the address is known only at run time.
+     */
+    record IndirectCall(@NonNull Rvalue callee, @NonNull List<Rvalue> arguments, @NonNull CType type, @NonNull Token token)
+            implements Call {
+        public IndirectCall {
+            arguments = List.copyOf(arguments);
+        }
+
+        @Override
+        public CType.Function signature() {
+            return (CType.Function) ((CType.Pointer) callee.type()).target();
         }
 
         @Override

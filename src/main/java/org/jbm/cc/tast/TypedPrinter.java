@@ -406,8 +406,17 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
     }
 
     @Override
-    public String visit(TExpr.Call e) {
-        var sb = new StringBuilder("(call:").append(e.type().spelling()).append(' ').append(e.callee().accept(this));
+    public String visit(TExpr.DirectCall e) {
+        return call("call", e, e.callee().name + ":" + e.callee().type().spelling());
+    }
+
+    @Override
+    public String visit(TExpr.IndirectCall e) {
+        return call("icall", e, e.callee().accept(this));
+    }
+
+    private String call(String head, TExpr.Call e, String callee) {
+        var sb = new StringBuilder("(").append(head).append(':').append(e.type().spelling()).append(' ').append(callee);
         for (TExpr a : e.arguments()) sb.append(' ').append(a.accept(this));
         return sb.append(')').toString();
     }

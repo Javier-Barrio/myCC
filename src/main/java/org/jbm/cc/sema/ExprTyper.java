@@ -319,7 +319,12 @@ final class ExprTyper {
                 args.add(convert(arg, types.defaultArgumentPromote(arg.type())));
             }
         }
-        return new TExpr.Call(callee, args, f.returnType(), at);
+        // f(x), (*f)(x) and (&f)(x) all decay the designator of f (6.5.3.3):
+        // the function is known statically, so the call names it.
+        if (callee instanceof TExpr.FunctionDecay fd && fd.operand() instanceof TExpr.FuncRef fr) {
+            return new TExpr.DirectCall(fr.symbol(), args, f.returnType(), at);
+        }
+        return new TExpr.IndirectCall(callee, args, f.returnType(), at);
     }
 
     // ---- assignment (6.5.17) -------------------------------------------------------------------
