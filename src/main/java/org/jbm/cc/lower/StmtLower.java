@@ -37,7 +37,7 @@ final class StmtLower implements TStmtVisitor<Void> {
 
     @Override
     public Void visit(TStmt.ExprStmt s) {
-        exprs.value(s.expr());
+        exprs.effect(s.expr());
         return null;
     }
 

@@ -519,4 +519,38 @@ class LowerTest {
     void bitFieldsOnTheOtherTarget() {
         assertEquals("  %t0 = load.u32 %p\n  %t1 = shl %t0, 4\n  %t1 = ashr %t1, 12", instrsOn(ILP32, BITS, "p->wide;"));
     }
+
+    // ---- 14: assignments ---------------------------------------------------------------------
+
+    @Test
+    void anAssignmentYieldsWhatTheTargetHolds() {
+        assertEquals("  mov %x, %y\n  mov %z, %y", instrs("int x, y, z;", "z = x = y;"));
+        assertEquals("  mov %t0, 300\n  mov %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -16\n  %t3 = and %t1, 15\n  %t2 = or %t2, %t3\n  store.32 %p, %t2\n  mov %t4, %t1\n  %t4 = and %t4, 15\n  mov %u, %t4",
+                instrs(BITS + " unsigned u;", "u = p->lo = 300;"));
+    }
+
+    @Test
+    void compoundAssignmentOnAVariable() {
+        assertEquals("  mov %t0, 1\n  %t1 = add %x, %t0\n  mov %x, %t1", instrs("int x;", "x += 1;"));
+        assertEquals("  mov %t0, 1\n  %t1 = add %x, %t0\n  mov %x, %t1", instrs("int x;", "++x;"));
+        assertEquals("  mov %t0, 1\n  %t1 = add %x, %t0\n  mov %x, %t1", instrs("int x;", "x++;"));
+        assertEquals("  mov %t0, %x\n  mov %t1, 1\n  %t2 = add %t0, %t1\n  mov %x, %t2\n  mov %y, %t0", instrs("int x, y;", "y = x++;"));
+        assertEquals("  mov %t0, 1\n  mov %t1, %t0\n  %t1 = shl %t1, 32\n  %t1 = ashr %t1, 32\n  %t2 = wmul %t1, 4\n  %t3 = wadd %p, %t2\n  mov %p, %t3", instrs("int *p;", "p++;"));
+        assertEquals("  mov %t0, %p\n  mov %t1, 1\n  mov %t2, %t1\n  %t2 = shl %t2, 32\n  %t2 = ashr %t2, 32\n  %t3 = wmul %t2, 4\n  %t4 = wadd %t0, %t3\n  mov %p, %t4\n  mov %q, %t0", instrs("int *p, *q;", "q = p++;"));
+        assertEquals("  %t0 = i2f %x\n  %t1 = fadd %t0, %d\n  %t2 = f2i %t1\n  mov %x, %t2", instrs("int x; double d;", "x += d;"));
+    }
+
+    @Test
+    void compoundAssignmentThroughAPointerEvaluatesTheTargetOnce() {
+        assertEquals("  %t0 = wadd %p, 4\n  %t1 = load.s32 %t0\n  mov %t2, 1\n  %t3 = add %t1, %t2\n  store.32 %t0, %t3",
+                instrs("struct In { int x, y; }; struct In *p;", "p->y += 1;"));
+        assertEquals("  mov %t0, %k\n  mov %t1, 1\n  %t2 = add %t0, %t1\n  mov %k, %t2\n  mov %t3, %t0\n  %t3 = shl %t3, 32\n  %t3 = ashr %t3, 32\n  %t4 = wmul %t3, 4\n  %t5 = wadd %a, %t4\n  %t6 = load.s32 %t5\n  mov %t7, 1\n  %t8 = add %t6, %t7\n  store.32 %t5, %t8",
+                instrs("int *a; int k;", "a[k++] += 1;"));
+    }
+
+    @Test
+    void compoundAssignmentOnABitField() {
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = and %t0, 15\n  mov %t2, 1\n  mov %t3, %t2\n  %t4 = wadd %t1, %t3\n  %t5 = load.u32 %p\n  %t5 = and %t5, -16\n  %t6 = and %t4, 15\n  %t5 = or %t5, %t6\n  store.32 %p, %t5",
+                instrs(BITS, "p->lo += 1;"));
+    }
 }
