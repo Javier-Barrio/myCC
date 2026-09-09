@@ -98,4 +98,9 @@ public final class Ilp32 implements Target {
     public boolean wcharIsSigned() {
         return false;
     }
+
+    @Override
+    public String toString() {
+        return "ilp32";
+    }
 }
