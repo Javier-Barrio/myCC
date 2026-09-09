@@ -337,44 +337,60 @@ final class ExprLower implements TVisitor<Val> {
         throw notYet(e);
     }
 
+    /**
+     * A binary operation in the node's type: the wrapping form for an
+     * unsigned type, the plain form for a signed one, the floating form
+     * for a floating one; then canonical form for a {@code _BitInt}.
+     */
+    private Val binary(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Token at,
+                       Instr.BinOp wrapping, Instr.BinOp signed, Instr.BinOp floating) {
+        Val l = value(left);
+        Val r = value(right);
+        Instr.BinOp op = t.isFloating() ? floating : types.isSigned(t) ? signed : wrapping;
+        Var d = temp(t);
+        b.emit(new Instr.Bin(op, d, l.var(), r.var(), at));
+        if (t instanceof CType.BitInt) canon(d, t, at);
+        return new Val(d, t);
+    }
+
     @Override
     public Val visit(TExpr.Add e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.WADD, Instr.BinOp.ADD, Instr.BinOp.FADD);
     }
 
     @Override
     public Val visit(TExpr.Sub e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.WSUB, Instr.BinOp.SUB, Instr.BinOp.FSUB);
     }
 
     @Override
     public Val visit(TExpr.Mul e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.WMUL, Instr.BinOp.MUL, Instr.BinOp.FMUL);
     }
 
     @Override
     public Val visit(TExpr.Div e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.UDIV, Instr.BinOp.SDIV, Instr.BinOp.FDIV);
     }
 
     @Override
     public Val visit(TExpr.Rem e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.UREM, Instr.BinOp.SREM, Instr.BinOp.FDIV);
     }
 
     @Override
     public Val visit(TExpr.BitAnd e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.AND, Instr.BinOp.AND, Instr.BinOp.AND);
     }
 
     @Override
     public Val visit(TExpr.BitOr e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.OR, Instr.BinOp.OR, Instr.BinOp.OR);
     }
 
     @Override
     public Val visit(TExpr.BitXor e) {
-        throw notYet(e);
+        return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.XOR, Instr.BinOp.XOR, Instr.BinOp.XOR);
     }
 
     @Override

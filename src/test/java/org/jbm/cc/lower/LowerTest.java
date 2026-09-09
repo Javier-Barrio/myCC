@@ -341,4 +341,33 @@ class LowerTest {
         assertEquals("  mov %t0, %p", instrsOn(ILP32, "int *p;", "(long long) p;"));
         assertEquals("  mov %t0, %i", instrsOn(ILP32, "int i;", "(int *) i;"));
     }
+
+    // ---- 8: arithmetic -----------------------------------------------------------------------------
+
+    @Test
+    void arithmeticIsWrappingForUnsignedPlainForSignedFloatingForFloating() {
+        assertEquals("  %t0 = add %a, %b", instrs("int a, b;", "a + b;"));
+        assertEquals("  %t0 = wadd %a, %b", instrs("unsigned a, b;", "a + b;"));
+        assertEquals("  %t0 = sub %a, %b", instrs("long a, b;", "a - b;"));
+        assertEquals("  %t0 = wmul %a, %b", instrs("unsigned long a, b;", "a * b;"));
+        assertEquals("  %t0 = fadd %a, %b", instrs("double a, b;", "a + b;"));
+        assertEquals("  %t0 = fmul %a, %b", instrs("float a, b;", "a * b;"));
+        assertEquals("  %t0 = fdiv %a, %b", instrs("double a, b;", "a / b;"));
+        assertEquals("  %t0 = sdiv %a, %b\n  %t1 = srem %a, %b", instrs("int a, b;", "a / b; a % b;"));
+        assertEquals("  %t0 = udiv %a, %b\n  %t1 = urem %a, %b", instrs("unsigned a, b;", "a / b; a % b;"));
+        assertEquals("  %t0 = and %a, %b\n  %t1 = or %a, %b\n  %t2 = xor %a, %b", instrs("int a, b;", "a & b; a | b; a ^ b;"));
+    }
+
+    @Test
+    void promotedOperandsAreConvertedFirst() {
+        assertEquals("  mov %t0, %c\n  mov %t1, %s\n  %t2 = add %t0, %t1", instrs("char c; short s;", "c + s;"));
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32\n  %t1 = add %t0, %l", instrs("int i; long l;", "i + l;"));
+        assertEquals("  %t0 = i2f %i\n  %t1 = fadd %t0, %d", instrs("int i; double d;", "i + d;"));
+    }
+
+    @Test
+    void bitPreciseArithmeticIsMadeCanonical() {
+        assertEquals("  %t0 = add %a, %b\n  %t0 = shl %t0, 25\n  %t0 = ashr %t0, 25", instrs("_BitInt(7) a, b;", "a + b;"));
+        assertEquals("  %t0 = wmul %a, %b\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) a, b;", "a * b;"));
+    }
 }
