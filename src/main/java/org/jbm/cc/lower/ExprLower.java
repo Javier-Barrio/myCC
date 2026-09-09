@@ -174,9 +174,15 @@ final class ExprLower implements TVisitor<Val> {
     }
 
     // A compound literal's object is initialized each time the expression
-    // is evaluated (6.5.3.6).
+    // is evaluated (6.5.3.6); a static one is a global, initialized once
+    // by its items.
     private Place compoundLiteral(TExpr.CompoundLit c) {
         Var v = vars.get(c.symbol());
+        if (v == null) {
+            Var p = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfGlobal(p, names.of(c.symbol()), c.token()));
+            return memory(p, c.type());
+        }
         if (c.type().isArray() || c.type().isRecord()) {
             Var p = b.temp(Type.PTR);
             b.emit(new Instr.AddrOfVar(p, v, c.token()));

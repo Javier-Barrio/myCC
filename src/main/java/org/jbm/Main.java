@@ -1,14 +1,18 @@
 package org.jbm;
 
+import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.AstPrinter;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
+import org.jbm.cc.lower.Lower;
 import org.jbm.cc.parse.Parser;
 import org.jbm.cc.sema.Desugar;
 import org.jbm.cc.sema.Resolver;
 import org.jbm.cc.sema.Typer;
+import org.jbm.cc.tac.TacWriter;
 import org.jbm.cc.tast.TypedPrinter;
+import org.jbm.cc.types.Types;
 
 public class Main {
 
@@ -61,8 +65,13 @@ public class Main {
         // Semantic analysis: syntactic rewrites, name resolution, typing.
         var desugared = Desugar.desugar(translationUnit);
         var bindings = Resolver.resolve(desugared);
-        var typed = Typer.type(desugared, bindings);
+        var types = new Types(X86_64SysV.INSTANCE);
+        var typed = Typer.type(desugared, bindings, types);
         System.out.println();
         System.out.println(TypedPrinter.print(typed));
+
+        // Lowering: the typed tree to the TAC, the input of the VM and of code generation.
+        System.out.println();
+        System.out.print(TacWriter.print(Lower.lower(typed, types)));
     }
 }
