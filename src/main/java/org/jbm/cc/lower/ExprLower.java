@@ -112,6 +112,15 @@ final class ExprLower implements TVisitor<Val> {
             return memory(p, v.type());
         }
         if (e instanceof TExpr.Deref d) return memory(value(d.pointer()).var(), d.type());
+        if (e instanceof TExpr.Member m) {
+            Var base = pointer(place(m.base()), m.token());
+            Var p = base;
+            if (m.member().offset() != 0) {
+                p = b.temp(Type.PTR);
+                b.emit(new Instr.Bin(Instr.BinOp.WADD, p, base, new Operand.IntImm(m.member().offset()), m.token()));
+            }
+            return new Place.Memory(p, m.type(), m.member().bits(), m.type().quals().isVolatile());
+        }
         throw notYet(e);
     }
 
@@ -242,7 +251,7 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.ArrayDecay e) {
-        throw notYet(e);
+        return new Val(pointer(place(e.operand()), e.token()), e.type());
     }
 
     @Override
@@ -324,17 +333,39 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.AddrOf e) {
-        throw notYet(e);
+        return new Val(pointer(place(e.operand()), e.token()), e.type());
     }
 
+    private long elementSize(CType pointerType) {
+        return types.size(((CType.Pointer) pointerType).target());
+    }
+
+    // The index is already ptrdiff_t, in the pointer's class: scale it by
+    // the element size unless that is 1, then add.
     @Override
     public Val visit(TExpr.PtrAdd e) {
-        throw notYet(e);
+        Val p = value(e.pointer());
+        Val i = value(e.index());
+        Var offset = i.var();
+        long size = elementSize(e.type());
+        if (size != 1) {
+            offset = b.temp(typeMap.of(i.type()));
+            b.emit(new Instr.Bin(Instr.BinOp.WMUL, offset, i.var(), new Operand.IntImm(size), e.token()));
+        }
+        Var r = b.temp(Type.PTR);
+        b.emit(new Instr.Bin(Instr.BinOp.WADD, r, p.var(), offset, e.token()));
+        return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.PtrDiff e) {
-        throw notYet(e);
+        Val l = value(e.left());
+        Val r = value(e.right());
+        Var d = temp(e.type());
+        b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, l.var(), r.var(), e.token()));
+        long size = elementSize(l.type());
+        if (size != 1) b.emit(new Instr.Bin(Instr.BinOp.SDIV, d, d, new Operand.IntImm(size), e.token()));
+        return new Val(d, e.type());
     }
 
     /**
