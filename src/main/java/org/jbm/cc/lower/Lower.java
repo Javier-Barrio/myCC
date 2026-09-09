@@ -5,6 +5,7 @@ import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.sema.Symbol;
 import org.jbm.cc.tac.Block;
 import org.jbm.cc.tac.Function;
+import org.jbm.cc.tac.Global;
 import org.jbm.cc.tac.Instr;
 import org.jbm.cc.tac.Linkage;
 import org.jbm.cc.tac.Module;
@@ -12,13 +13,16 @@ import org.jbm.cc.tac.Operand;
 import org.jbm.cc.tac.TargetDesc;
 import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
+import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TFunction;
+import org.jbm.cc.tast.TInit;
 import org.jbm.cc.tast.TUnit;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** The typed tree to the TAC ({@code docs/lower-plan.md}). */
@@ -38,8 +42,37 @@ public final class Lower {
 
     public static Module lower(@NonNull TUnit unit, @NonNull Types types) {
         var lower = new Lower(types, unit);
+        for (TUnit.Global g : unit.globals()) lower.global(g);
         for (TFunction f : unit.functions()) lower.function(f);
         return lower.module;
+    }
+
+    private void global(TUnit.Global g) {
+        Symbol s = g.symbol();
+        Type type = typeMap.of(s.type());
+        if (!g.isDefinition()) {
+            module.globalDecls.add(new Module.GlobalDecl(names.of(s), type));
+            return;
+        }
+        Linkage linkage = s.linkage() == Symbol.Linkage.EXTERNAL ? Linkage.EXTERNAL : Linkage.INTERNAL;
+        List<Global.Item> items = g.init().map(this::items).orElse(null);
+        module.globals.add(new Global(names.of(s), linkage, type, types.align(s.type()), s.type().quals().isConst(), items));
+    }
+
+    // A static initializer's items are already constants; each becomes the TAC item of its kind.
+    private List<Global.Item> items(TInit init) {
+        var out = new ArrayList<Global.Item>(init.items().size());
+        for (TInit.Item item : init.items()) {
+            TExpr.Rvalue v = item.value();
+            if (v instanceof TExpr.IntConst c) out.add(new Global.IntItem(item.offset(), typeMap.integer(c.type()), c.value()));
+            else if (v instanceof TExpr.FloatConst c) out.add(new Global.FloatItem(item.offset(), (Type.Float) typeMap.of(c.type()), c.value()));
+            else if (v instanceof TExpr.NullptrConst) out.add(new Global.IntItem(item.offset(), typeMap.integer(types.sizeT()), 0));
+            else if (v instanceof TExpr.AddrConst a) {
+                if (a.base().isPresent()) out.add(new Global.AddrItem(item.offset(), names.of(a.base().get()), a.offset()));
+                else out.add(new Global.IntItem(item.offset(), typeMap.integer(types.sizeT()), a.offset()));
+            } else throw new IllegalStateException("a static initializer item that is not a constant: " + v);
+        }
+        return out;
     }
 
     private void function(TFunction f) {
@@ -58,6 +91,8 @@ public final class Lower {
         var b = new Builder(fn);
         for (Symbol l : f.locals()) vars.put(l, b.local(localNames.of(l), typeMap.of(l.type()), l.type().quals().isVolatile()));
         b.open(b.block("entry"));
+        var exprs = new ExprLower(this, b, vars);
+        new StmtLower(b, exprs, vars).lower(f.body());
         endOfBody(b, f, ctype.returnType());
         module.functions.add(fn);
     }
