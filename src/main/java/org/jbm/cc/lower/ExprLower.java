@@ -5,6 +5,7 @@ import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.sema.Symbol;
 import org.jbm.cc.tac.Instr;
 import org.jbm.cc.tac.Operand;
+import org.jbm.cc.tac.TargetDesc;
 import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
 import org.jbm.cc.tast.TExpr;
@@ -27,6 +28,7 @@ final class ExprLower implements TVisitor<Val> {
     private final Types types;
     private final TypeMap typeMap;
     private final Names names;
+    private final TargetDesc target;
     private final Builder b;
     private final Map<Symbol, Var> vars;
 
@@ -34,8 +36,56 @@ final class ExprLower implements TVisitor<Val> {
         this.types = lower.types;
         this.typeMap = lower.typeMap;
         this.names = lower.names;
+        this.target = lower.module.target;
         this.b = b;
         this.vars = vars;
+    }
+
+    // ---- canonical form -------------------------------------------------------------------------
+
+    private int classWidth(CType t) {
+        return target.widthOf(target.classOf(typeMap.of(t)));
+    }
+
+    /**
+     * Restores canonical form for {@code t} in {@code r}: a sign extension
+     * from the type's width for a signed type narrower than its class, a
+     * mask for an unsigned one, nothing for a type as wide as its class.
+     */
+    private void canon(Var r, CType t, Token at) {
+        int n = types.width(t), c = classWidth(t);
+        if (n >= c) return;
+        if (types.isSigned(t)) {
+            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(c - n), at));
+            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - n), at));
+        } else {
+            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm((1L << n) - 1), at));
+        }
+    }
+
+    /**
+     * An integer value of C type {@code from}, canonical, to a variable of
+     * TAC type {@code dest} holding C type {@code to} canonically
+     * ({@code lower-plan.md}, the IntToInt rows).
+     */
+    private Val convertInt(Val v, CType to, Type dest, Token at) {
+        CType from = v.type();
+        if (typeMap.of(from).equals(dest)) return new Val(v.var(), to);
+        int wf = types.width(from), wt = types.width(to);
+        boolean sf = types.isSigned(from), st = types.isSigned(to);
+        Var r = b.temp(dest);
+        b.emit(new Instr.Mov(r, v.var(), at));
+        int cf = classWidth(from), ct = classWidth(to);
+        if (cf < ct) {
+            if (sf) {
+                b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(ct - cf), at));
+                b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(ct - cf), at));
+            }
+            return new Val(r, to);
+        }
+        boolean implied = cf == ct && (wt > wf && (!sf || st) || wt == wf && sf == st);
+        if (!implied) canon(r, to, at);
+        return new Val(r, to);
     }
 
     Val value(@NonNull TExpr.Rvalue e) {
@@ -202,7 +252,7 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.IntToInt e) {
-        throw notYet(e);
+        return convertInt(value(e.operand()), e.type(), typeMap.of(e.type()), e.token());
     }
 
     @Override
