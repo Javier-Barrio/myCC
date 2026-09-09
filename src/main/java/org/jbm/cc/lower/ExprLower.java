@@ -419,34 +419,51 @@ final class ExprLower implements TVisitor<Val> {
         return shift(e.left(), e.right(), e.type(), types.isSigned(e.type()) ? Instr.BinOp.ASHR : Instr.BinOp.LSHR, e.token());
     }
 
+    /**
+     * A comparison of two operands of one type into a W holding 0 or 1;
+     * signed, unsigned (pointers included) or floating by the operand
+     * type. Operands are evaluated left to right and only swapped in the
+     * instruction, for {@code >} and {@code >=}.
+     */
+    private Val compare(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Token at, boolean swap,
+                        Instr.CmpOp signed, Instr.CmpOp unsigned, Instr.CmpOp floating) {
+        Val l = value(left);
+        Val r = value(right);
+        CType ot = l.type();
+        Instr.CmpOp op = ot.isFloating() ? floating : ot.isInteger() && types.isSigned(ot) ? signed : unsigned;
+        Var d = temp(t);
+        b.emit(new Instr.Cmp(op, d, swap ? r.var() : l.var(), swap ? l.var() : r.var(), at));
+        return new Val(d, t);
+    }
+
     @Override
     public Val visit(TExpr.Eq e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), false, Instr.CmpOp.EQ, Instr.CmpOp.EQ, Instr.CmpOp.FEQ);
     }
 
     @Override
     public Val visit(TExpr.Ne e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), false, Instr.CmpOp.NE, Instr.CmpOp.NE, Instr.CmpOp.FNE);
     }
 
     @Override
     public Val visit(TExpr.Lt e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), false, Instr.CmpOp.SLT, Instr.CmpOp.ULT, Instr.CmpOp.FLT);
     }
 
     @Override
     public Val visit(TExpr.Le e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), false, Instr.CmpOp.SLE, Instr.CmpOp.ULE, Instr.CmpOp.FLE);
     }
 
     @Override
     public Val visit(TExpr.Gt e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), true, Instr.CmpOp.SLT, Instr.CmpOp.ULT, Instr.CmpOp.FLT);
     }
 
     @Override
     public Val visit(TExpr.Ge e) {
-        throw notYet(e);
+        return compare(e.left(), e.right(), e.type(), e.token(), true, Instr.CmpOp.SLE, Instr.CmpOp.ULE, Instr.CmpOp.FLE);
     }
 
     @Override

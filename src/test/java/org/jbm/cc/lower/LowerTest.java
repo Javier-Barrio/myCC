@@ -383,4 +383,23 @@ class LowerTest {
         assertEquals("  mov %t0, %c\n  mov %t1, 2\n  %t2 = shl %t0, %t1", instrs("char c;", "c << 2;"));
         assertEquals("  %t0 = lshr %b, %n\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b; int n;", "b >> n;"));
     }
+
+    // ---- 10: comparisons -----------------------------------------------------------------------
+
+    @Test
+    void comparisons() {
+        assertEquals("  %t0 = eq %a, %b\n  %t1 = ne %a, %b", instrs("int a, b;", "a == b; a != b;"));
+        assertEquals("  %t0 = slt %a, %b\n  %t1 = sle %a, %b", instrs("int a, b;", "a < b; a <= b;"));
+        assertEquals("  %t0 = slt %b, %a\n  %t1 = sle %b, %a", instrs("int a, b;", "a > b; a >= b;"));
+        assertEquals("  %t0 = ult %a, %b\n  %t1 = ule %b, %a", instrs("unsigned a, b;", "a < b; a >= b;"));
+        assertEquals("  %t0 = ult %p, %q\n  %t1 = eq %p, %q", instrs("int *p, *q;", "p < q; p == q;"));
+        assertEquals("  %t0 = flt %a, %b\n  %t1 = fle %b, %a\n  %t2 = feq %a, %b\n  %t3 = fne %a, %b", instrs("double a, b;", "a < b; a >= b; a == b; a != b;"));
+        assertEquals("  %t0 = slt %a, %b", instrs("long a, b;", "a < b;"));
+        assertEquals("  i32 %a\n  i32 %b\n  i32 %t0\n.entry:\n  %t0 = slt %a, %b", body("", "int a, b; a < b;"));
+    }
+
+    @Test
+    void swappedOperandsAreStillEvaluatedLeftToRight() {
+        assertEquals("  %t0 = load.s32 %p\n  %t1 = load.s32 %q\n  %t2 = slt %t1, %t0", instrs("int *p, *q;", "*p > *q;"));
+    }
 }
