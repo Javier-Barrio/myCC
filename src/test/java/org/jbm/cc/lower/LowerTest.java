@@ -1058,4 +1058,111 @@ class LowerTest {
         assertEquals("global @g : %B align 4 = { 0 : 4/4 : 3, 3 : 4/1 : 1 }\n",
                 unit("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; }; struct B g = {.hi = 3, .flag = 1};").replaceFirst("(?s)^type[^\\n]*\\n", ""));
     }
+
+    // ---- 26: globals ---------------------------------------------------------------------------
+
+    @Test
+    void globalInitializersAreTheTypersItems() {
+        assertEquals("""
+                type %P = { i32 @0, i32 @4 } size 8 align 4
+                type %U = { i8 @0, i32 @0 } size 4 align 4
+                global @g : %P align 4 = { 4 : i32 2 }
+                global @u : %U align 4 = { 0 : i32 1 }
+                global @arr : [3 x i32] align 4 = { 0 : i32 1, 4 : i32 2 }
+                global @q : ptr align 8 = { 0 : addr @arr + 4 }
+                global @name : [4 x i8] align 1 = { 0 : i8 97, 1 : i8 98 }
+                global @m : [2 x [2 x i32]] align 4 = { 0 : i32 1, 4 : i32 2, 8 : i32 3 }
+                """, unit("struct P { int x, y; }; union U { char c; int i; }; struct P g = {.y = 2}; union U u = {.i = 1}; int arr[3] = {1, 2}; int *q = &arr[1]; char name[4] = \"ab\"; int m[2][2] = {1, 2, 3};"));
+    }
+
+    @Test
+    void tentativeDefinitionsExternsAndConst() {
+        assertEquals("""
+                global @t : i32 align 4
+                global @a : [2 x i32] align 4
+                global @k : f64 align 8 readonly = { 0 : f64 1.5 }
+                global @later : f64 align 8 = { 0 : f64 2.5 }
+                declare @e : i32
+                declare @never : [0 x i32]
+                """, unit("extern int e; int t; int t; int a[]; int a[2]; const double k = 1.5; extern int never[]; double later = 2.5;"));
+    }
+
+    @Test
+    void addressConstantsInStaticInitializers() {
+        assertEquals("""
+                global @arr : [3 x i32] align 4
+                global internal @p.static : ptr align 8 = { 0 : addr @arr + 4 }
+                global internal @q.static : ptr align 8 = { 0 : addr @f }
+                global internal @n.static : ptr align 8 = { 0 : u64 16 }
+                define @f() -> void {
+                .entry:
+                  ret
+                }
+                """, unit("int arr[3]; void f(void) { static int *p = &arr[1]; static void (*q)(void) = f; static int *n = (int *) 16; }"));
+    }
+
+    // ---- 27: strings and statics -----------------------------------------------------------------
+
+    static String normalizeStrings(String text) {
+        return text.replaceAll("\\.str\\.[0-9a-f]{16}", ".str.H");
+    }
+
+    @Test
+    void stringLiteralsAreReadOnlyGlobalsNamedByContent() {
+        assertEquals("""
+                global internal @.str.H : [3 x i8] align 1 readonly = { 0 : bytes "hi\\00" }
+                global @p : ptr align 8 = { 0 : addr @.str.H }
+                define @f() -> ptr {
+                  ptr %t0
+                .entry:
+                  %t0 = addrof @.str.H
+                  ret %t0
+                }
+                """, normalizeStrings(unit("const char *p = \"hi\"; const char *f(void) { return \"hi\"; }")));
+        assertEquals("  %t0 = addrof @.str.H", normalizeStrings(instrs("", "\"x\";")));
+        assertEquals("  %t0 = addrof @.str.H\n  mov %t1, 1\n  mov %t2, %t1\n  %t2 = shl %t2, 32\n  %t2 = ashr %t2, 32\n  %t3 = wadd %t0, %t2\n  %t4 = load.s8 %t3", normalizeStrings(instrs("", "\"xy\"[1];")));
+    }
+
+    @Test
+    void wideStringsAreOneItemPerUnit() {
+        assertEquals("""
+                global internal @.str.H : [2 x i32] align 4 readonly = { 0 : i32 97, 4 : i32 0 }
+                global internal @.str.H : [2 x u16] align 2 readonly = { 0 : u16 98, 2 : u16 0 }
+                global @w : ptr align 8 = { 0 : addr @.str.H }
+                global @s : ptr align 8 = { 0 : addr @.str.H }
+                """.replace("H :", "H :"), normalizeStrings(unit("typedef int wchar_t; wchar_t *w = L\"a\"; unsigned short *s = u\"b\";")).replaceAll("@\\.str\\.H", "@.str.H"));
+    }
+
+    @Test
+    void staticLocalsAndFileScopeLiterals() {
+        assertEquals("""
+                global internal @count.static : i32 align 4 = { 0 : i32 0 }
+                global internal @count.static.2 : i32 align 4 = { 0 : i32 7 }
+                define @f() -> void {
+                  ptr %t0
+                  i32 %t1
+                  i32 %t2
+                  i32 %t3
+                .entry:
+                  %t0 = addrof @count.static
+                  %t1 = load.s32 %t0
+                  mov %t2, 1
+                  %t3 = add %t1, %t2
+                  store.32 %t0, %t3
+                  ret
+                }
+                define @g() -> i32 {
+                  ptr %t0
+                  i32 %t1
+                .entry:
+                  %t0 = addrof @count.static.2
+                  %t1 = load.s32 %t0
+                  ret %t1
+                }
+                """, unit("void f(void) { static int count = 0; count++; } int g(void) { static int count = 7; return count; }"));
+        assertEquals("""
+                global internal @.lit.1 : [2 x i32] align 4 = { 0 : i32 1, 4 : i32 2 }
+                global @p : ptr align 8 = { 0 : addr @.lit.1 }
+                """, unit("int *p = (int[]){1, 2};"));
+    }
 }

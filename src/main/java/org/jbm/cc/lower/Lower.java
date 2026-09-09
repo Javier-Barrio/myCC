@@ -13,6 +13,7 @@ import org.jbm.cc.tac.Operand;
 import org.jbm.cc.tac.TargetDesc;
 import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
+import org.jbm.cc.tast.StringData;
 import org.jbm.cc.tast.TExpr;
 import org.jbm.cc.tast.TFunction;
 import org.jbm.cc.tast.TInit;
@@ -49,6 +50,7 @@ public final class Lower {
 
     public static Module lower(@NonNull TUnit unit, @NonNull Types types) {
         var lower = new Lower(types, unit);
+        for (StringData s : unit.strings()) lower.string(s);
         for (TUnit.Global g : unit.globals()) lower.global(g);
         for (TFunction f : unit.functions()) lower.defined.add(f.symbol());
         for (TFunction f : unit.functions()) lower.function(f);
@@ -62,6 +64,28 @@ public final class Lower {
 
     void referenced(@NonNull Symbol function) {
         referenced.add(function);
+    }
+
+    private final Set<String> emittedStrings = new HashSet<>();
+
+    // A string literal is a read-only internal global named by its
+    // contents; two literals with the same units share one.
+    private void string(StringData s) {
+        String name = names.of(s.symbol());
+        if (!emittedStrings.add(name)) return;
+        CType.Array array = (CType.Array) s.symbol().type();
+        Type type = typeMap.of(array);
+        var items = new ArrayList<Global.Item>();
+        Type.Int element = typeMap.integer(array.element());
+        if (element.width() == 8) {
+            var bytes = new byte[s.units().length];
+            for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) s.units()[i];
+            items.add(new Global.BytesItem(0, bytes));
+        } else {
+            long size = element.width() / 8;
+            for (int i = 0; i < s.units().length; i++) items.add(new Global.IntItem(i * size, element, s.units()[i]));
+        }
+        module.globals.add(new Global(name, Linkage.INTERNAL, type, types.align(array), true, items));
     }
 
     private void global(TUnit.Global g) {
