@@ -1,12 +1,4 @@
-# TAC, target-specific variant: architecture and plan
-
-One of two alternative designs for the three-address code. This one
-carries the **target's widths, sizes, offsets and alignments** as
-constants; `tac-agnostic-plan.md` is the other, in which the TAC is
-flattened typed C and every consumer computes layout from its own
-`Target`. The two share the register-style, non-SSA shape, the block
-structure, the calling model and the lowering steps; they differ in what
-a type is and who computes layout. Choose one.
+# TAC: architecture and plan
 
 The three-address code is the compiler's output and the boundary between
 the front end (`Lower` produces it from the typed tree) and everything
