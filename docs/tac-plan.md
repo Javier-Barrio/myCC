@@ -6,171 +6,226 @@ that consumes a program: the VM of `cshell-plan.md`, the x86-64 code
 generator, and any other code generator later. It is **target-specified**:
 a module is compiled for one named target and carries that target's
 widths, sizes, member offsets and alignments as constants, so no consumer
-computes a layout. It is a **load/store register machine** in the manner
-of ARM: values live in registers of a few classes, only `load` and
-`store` touch memory, every instruction is one a RISC machine has, and
-what a wider instruction set would do with a special instruction
-(extend, select, negate) is done with shifts, masks and branches. It
-stays neutral on the two things a target fixes only at the very end: the
-calling convention and the byte order. This document is the contract;
-`org.jbm.cc.tac` implements it.
+computes a layout. It is a **load/store machine over typed variables**:
+a function declares its variables with their types; `mov` writes a
+variable and any other instruction reads variables and writes one;
+`load` and `store`, each with its width, go through a pointer and are
+the only instructions that touch memory; `addrof` is the only way a
+variable's storage is observed. Where a variable lives, in a register or in the
+frame, is the consumer's decision. Everything a wider instruction set
+would do with a special instruction (extend, select, negate) is done
+with shifts, masks and branches. The IR stays neutral on the two things
+a target fixes only at the very end: the calling convention and the byte
+order. This document is the contract; `org.jbm.cc.tac` implements it.
 
 ```
-target x86_64-sysv                       ; w 32, l 64, ptr l, little, long double x87
-type %P = { i32, i32 }                   ; size 8, align 4
-global @counter : i32 align 4 = i32 0
-global @greeting : [6 x i8] align 1 readonly = bytes "hello\00"
+target x86_64-sysv                       ; w 32, l 64, ptr in l, little, long double x87
+type %P = { i32 @0, i32 @4 }             ; size 8, align 4
+global @counter : i32 align 4 = { 0 : i32 0 }
+global @greeting : [6 x i8] align 1 readonly = { 0 : bytes "hello\00" }
 declare @printf(ptr, ...) -> i32
 
-define @sq(i32 %x) -> i32 {
-  slot $x : i32 align 4
-  wtemp %x, %t0, %t1
-  ltemp %a
+define @sq(i32 %x) -> i32 {              ; int sq(int x) { return x * x; }
+  i32 %t0
 .entry:
-  %a = addr $x                           ; the parameter is an object; the typer gave it an address
-  store.32 %x, [%a]
-  %t0 = load.s32 [%a]
-  %t1 = mul %t0, %t0
-  ret i32 %t1
+  %t0 = mul %x, %x
+  ret %t0
+}
+
+define @f(i32 %c) -> i32 {               ; int f(int c) { int x = 1; int *p = &c; *p = 5; return x; }
+  i32 %x
+  ptr %p
+.entry:
+  mov %x, 1
+  %p = addrof %c
+  store.32 %p, 5
+  ret %x
 }
 ```
 
-## Decision: a load/store register machine, not a typed-value IR
+## Decision: typed variables, storage decided by the consumer
 
-Alternatives considered: (a) an IR whose temporaries carry integer widths
-from `i8` to `i64` and whose conversions are instructions that name both
-types, the shape of LLVM IR; (b) a stack bytecode; (c) a register machine
-with a few register classes, memory reached only through loads and
-stores, and extension done by shifts and masks. We chose (c):
+Alternatives considered: (a) an IR with virtual registers and explicit
+frame slots, where the compiler decides which C objects live in memory
+and inserts the loads and stores, the shape of LLVM IR before `mem2reg`;
+(b) an IR whose only notion is a typed variable, read as an operand,
+written by `mov` or by being an instruction's result, and given an
+address only by `addrof`. We chose (b):
 
-1. [ ] **The instruction set is the smallest that is complete**, and every
-   instruction is one a RISC machine has. There is no family of
-   conversions: sign extension is a shift left and a shift right, zero
-   extension is a mask, truncation is a store of the narrow width, and a
-   move between register classes is one instruction. No instruction's
-   meaning depends on a pair of types.
-2. [ ] **Register classes match C's widths.** `w` registers are the width
-   of `int`, `l` registers the width of `long long`, so `int` arithmetic
-   wraps in `w` without a mask and `long` arithmetic has registers of its
-   own. Narrower C types (`char`, `short`, `bool`) are kept **canonical**
-   in `w`, sign- or zero-extended per their type, so a `w` operation gives
-   the result the narrower C operation would.
-3. [ ] **An interpreter is a loop over instructions** with one array per
-   register class per frame and no per-width dispatch inside an
-   instruction: `add` on `w` is an `int` add, on `l` a `long` add;
-   `load.s16` is a `short` read.
-4. [ ] **A code generator gets a form close to its own.** Register classes,
-   widths only on memory access, comparisons that produce 0 or 1, and
-   explicit extensions map onto ARM directly and onto x86-64 with a
-   peephole for the forms it has.
+1. [ ] **The compiler makes no storage decision.** Whether `x` needs memory
+   depends on whether `addrof %x` appears anywhere in the function, which
+   is a property of the whole body. In (a) `Lower` would have to know it
+   before lowering the first use; in (b) it emits `mov %x, 1` and `addrof
+   %x` where the tree says so and is done.
+2. [ ] **Each consumer places variables as it can.** A code generator
+   promotes every variable that is never under `addrof` to a virtual
+   register and gives the rest frame slots, which is the `mem2reg` every
+   backend has. A VM may put every variable in its frame region of
+   simulated memory, or keep them in arrays and place only the
+   address-taken ones in memory after one look at the function at load
+   time. Both are correct; neither is the compiler's concern.
+3. [ ] **The common case costs nothing.** A scalar local or parameter
+   whose address is never taken is used directly, so `sq` above is one
+   instruction. In (a) it would be a store at entry and a load per use
+   until a later pass removed them.
+4. [ ] **Aliasing has one rule.** After `addrof %x`, a `store` through the
+   pointer is visible in `%x` and a `mov %x` is visible through the
+   pointer. A consumer that keeps address-taken variables in memory gets
+   this for free; a code generator's promotion excludes them.
+
+## Decision: the width is on the memory instruction
+
+`load.s8`, `load.u16`, `load.f64`, `store.32`: a memory instruction says
+how many bytes it moves and, for a load, how it extends them. Pointers
+have one type, `ptr`: an address of the target's pointer width, held in
+the integer class of that width and operated on by the integer
+instructions, so that a pointer can be copied, compared, converted and
+added to like an integer while a signature still says "pointer" to a
+code generator's ABI classifier. Alternatives: typed pointers (`i32*`)
+from which a consumer derives the width, which puts the information on
+the variable rather than on the instruction that uses it; an address
+form `[%p, 4]`, which is an addressing mode the IR does not need since
+`p->m` is `%q = wadd %p, 4` then `load.s32 %q`, and a code generator
+folds that into its addressing mode with one peephole. A consumer reads
+the width off the instruction and nothing else.
+
+## Decision: a load/store machine with register classes
+
+Values in variables are held in **classes** that match C's widths: `w`
+is the width of `int`, `l` the width of `long long`, `s` and `d` single
+and double precision, `x` the x87 extended format where the target has
+it. A variable's class follows from its type. An integer instruction
+operates in the class of its variables, so `int` arithmetic wraps in `w`
+without a mask and `long` has a class of its own; a floating instruction
+likewise. Narrower types (`i8`, `u16`, ...) are kept **canonical** in `w`,
+sign- or zero-extended per their signedness, so a `w` operation gives
+the result the narrower C operation would, and extension is shifts and
+masks rather than instructions. There is no instruction a RISC machine
+does not have.
 
 ## Decision: not SSA; there is no `phi`
 
-Every temporary may be assigned more than once. Control flow is blocks
-and branches; a value that differs by path is a temporary assigned on
-each path before the join, or a slot. `Lower` stays a direct walk of the
-typed tree. The VM evaluates a condition, jumps, and interprets the block
-it lands in; there is nothing to do at a join. A code generator that
-wants SSA builds it in its own IR.
-
-## Decision: memory is typed and structural, registers have classes
-
-Memory has types: slots, globals, loads and stores, struct definitions,
-signatures, copies. Those types carry the target's widths, sizes, member
-offsets and alignments as constants. Registers have a class, because
-that is what a machine register has. Structure types are first class in
-memory and in signatures because a calling convention classifies a
-by-value aggregate by its member types, and the code generator, where
-the C ABI lives, must see what C saw. Initializers are typed values
-rather than bytes, which keeps the IR independent of byte order.
+A variable may be written any number of times. Control flow is blocks
+and branches; a value that differs by path is a variable written on each
+path before the join. `Lower` is a direct walk of the typed tree. The VM
+evaluates a condition, jumps, and interprets the block it lands in; there
+is nothing to do at a join. A code generator that wants SSA builds it in
+its own IR.
 
 ## Decision: layout-explicit, ABI-neutral, endianness-neutral
 
 - **Layout is fixed.** Widths, sizes, alignments, member offsets and
   bit-field placements come from the `Target` the typer used and are
   constants in the IR. A `Module` names its target; a consumer refuses a
-  module for a target whose layout it does not implement.
+  module for a target whose layout it does not implement. Structure
+  types are first class because a calling convention classifies a
+  by-value aggregate by its member types, and the code generator, where
+  the C ABI lives, must see what C saw.
 - **The calling convention is not fixed.** `call` carries every argument
-  with its memory type and the callee's signature; `ret` carries the
-  value with its type; a function's parameters are typed values it
-  receives. Where an argument goes, how a structure is returned, what a
-  variadic call must set: each consumer decides, and the IR never
-  mentions a physical register or a stack.
+  with its type and the callee's signature; `ret` carries the value; a
+  function's parameters are typed variables it receives. Where an
+  argument goes, how a structure is returned, what a variadic call must
+  set: each consumer decides, and the IR never mentions a physical
+  register or a stack.
 - **Endianness is not fixed.** Values are values; memory operations are
-  typed; initializers are typed values, and only a consumer turns them
-  into bytes.
+  typed; initializers are typed items at offsets, and only a consumer
+  turns them into bytes.
 
 ## Decision: names are strings, bound by the consumer
 
 Globals and functions are referred to by name. There is no symbol object
 shared with `sema`; the IR is self-contained and serializable, and a
 consumer binds names when it loads a module (the VM) or leaves them to
-the linker (a code generator). Temporaries, slots and blocks are named
-locally, and the text form reproduces them exactly, so a round trip
-through `TacWriter` and `TacReader` is the identity.
+the linker (a code generator). Variables and blocks are named locally,
+and the text form reproduces them exactly, so a round trip through
+`TacWriter` and `TacReader` is the identity.
 
-## Registers
-
-A temporary is a virtual register of one class, declared once per
-function:
+## Types
 
 ```
-wtemp %name ...     w: the width of int (W bits, 32 on every current target)
-ltemp %name ...     l: the width of long long (L bits, 64)
-stemp %name ...     s: single precision floating (float)
-dtemp %name ...     d: double precision floating (double, and long double where it is double)
-xtemp %name ...     x: extended precision, only on targets whose long double is the x87 format
+type    ::= int | float | ptr | array | struct | func | void
+int     ::= i8 | i16 | i32 | i64                 signed, of that storage width
+          | u8 | u16 | u32 | u64                 unsigned
+ptr     ::= ptr                                  an address, of the target's pointer width
+float   ::= f32 | f64 | f80 | f128               IEEE binary32/64/128 and the x87 extended format
+array   ::= [ N x type ]
+struct  ::= { type @offset, ... }                members with their byte offsets; size and alignment given
+func    ::= ( type, ... [, ...] ) -> type        parameter types, variadic flag, return type or void
 ```
 
-The target descriptor says which integer class holds a pointer (`ptr l`
-on x86-64, `ptr w` on an ILP32 target). Every integer instruction takes
-operands of one class and produces that class; every floating
-instruction likewise. A comparison result is a `w` holding 0 or 1.
+A C `bool`, `char`, enum or `_BitInt` up to 64 bits is the `int` of its
+storage width and signedness (`bool` is `u8`; plain `char` is `i8` or
+`u8` as the target says). Signedness in the type says a variable's canonical form; the
+operations stay explicit about it (`sdiv`/`udiv`, `wadd`/`add`, `slt`/
+`ult`, `load.s8`/`load.u8`) so that no instruction's meaning depends on
+looking a type up.
+`f80` is x86's `long double`; a consumer without the format may execute
+it as `f64` and must say so. Structures are named in the module (`type
+%P = { ... }`); a union is a structure whose members all have offset
+zero; a bit-field member has the type of its storage unit.
 
-**Canonical form.** A C value narrower than its register is kept in the
-extension its type implies: `char` and `short` sign-extended in `w`,
-their unsigned forms and `bool` zero-extended. `int` and `unsigned` fill
-`w` exactly; `long` and `unsigned long` fill `l`. `Lower` maintains this,
-so that `w` operations give the narrower C results and a value can be
-stored with the narrow width without adjustment.
+**Classes.** The 8-, 16- and 32-bit integers are `w`; the 64-bit ones
+are `l`; `ptr` is the integer class of the pointer width (`l` on x86-64,
+`w` on ILP32) and the integer instructions apply to it; `f32` is `s`,
+`f64` is `d`, `f80` is `x`. On a target where
+`long` is 32 bits it is `i32` and so `w`. An aggregate has no class: a
+variable of aggregate type is storage, and the only thing an
+instruction can do with it is `addrof`.
 
-## Operands
+**Canonical form.** A variable narrower than its class holds its value
+in the extension its type implies: an `i8` or `i16` sign-extended in
+`w`, a `u8` or `u16` zero-extended. An `i32` or `u32` fills `w` exactly;
+the 64-bit types fill `l`. `Lower` maintains this, so that `w`
+operations give the narrower C results, a `load.s8` or `load.u8` into an
+`i8` or `u8` produces it, and a `store.8` needs no adjustment. A comparison result is a `w` holding 0 or 1.
+
+## Variables and operands
 
 ```
-operand ::= %name            a register; the instruction's class is the class of its registers
-          | N                an integer immediate, in the class of the instruction
-          | N.N              a floating immediate
-[address] ::= [ %reg ]       a register holding an address, of the pointer class
-            | [ %reg, N ]    plus a constant byte offset
+declaration ::= [volatile] type %name          in the function's header; parameters in the signature
+operand     ::= %name                          a variable, read
+              | N | N.N                        an integer or floating immediate, in the class of the instruction
 ```
 
 Immediates are allowed as the second operand of an arithmetic, logic or
-comparison instruction and as the source of `mov`. Nothing else names a
-constant, and nothing but `addr`, `call` and initializers names a global
-or a slot.
+comparison instruction, as the source of `mov`, and as the value of
+`store`. A `volatile` variable's reads and writes happen as written; a
+consumer gives it storage.
 
 ## Instructions
 
-Every instruction is `%t = op operands` or `op operands`. The width of an
-integer instruction is its class; the precision of a floating one is
-its class; memory instructions carry the width in memory. Semantics are
-a two's complement machine's, made explicit: nothing is undefined in the
-IR's own terms except where marked `UB`, and a consumer may then do
+Every instruction is `%t = op operands` or `op operands`. The class of an
+integer or floating instruction is the class of its variables. Semantics
+are a two's complement machine's, made explicit: nothing is undefined in
+the IR's own terms except where marked `UB`, and a consumer may then do
 anything.
 
 The set is what a RISC has and no more. There is no negate (`wsub 0,
 x`), no bitwise not (`xor x, -1`), no greater-than (swap the operands of
-a less-than), no select (a branch), no sign or zero extension inside a
-class (shifts and masks), no pointer arithmetic apart from integer
-arithmetic, no reinterpretation (store and load), and no `unreachable`
-apart from `trap`.
+a less-than), no select (a branch), no sign or zero extension at all
+(`mov` across classes, shifts and masks), no pointer arithmetic apart
+from integer arithmetic, no reinterpretation (store and load), no
+addressing mode, and no `unreachable` apart from `trap`.
 
-**Moves**:
+**Variables and addresses**:
 
 ```
-%t = mov %s | N                 a register of the same class, or an immediate
-%l = widen %w                   w to l, zero-extending; a sign extension is widen then shl, ashr by L-W
-%w = narrow %l                  the low W bits
+mov %x, %y | N                 write a variable: a copy, or an immediate
+%p = addrof %x | @name         the address of a variable or a global, into a ptr variable
+```
+
+`mov` copies between any two integer variables, of one class or not:
+from `w` to `l` the value is zero-extended, from `l` to `w` the low `W`
+bits are taken; between floating variables of one class it is a copy.
+That is every integer conversion the machine needs, since the sign
+extensions are shifts:
+
+```
+sign-extend from N bits       %t = shl %x, width-N  then  %t = ashr %t, width-N
+zero-extend from N bits       %t = and %x, 2^N - 1
+int to long                   mov %l, %w  then  shl %l, 32  then  ashr %l, 32
+unsigned to unsigned long     mov %l, %w
+long to int                   mov %w, %l
 ```
 
 **Integer arithmetic and logic** (one class in, the same class out):
@@ -180,7 +235,7 @@ wadd wsub wmul                 wrap modulo 2^width of the class
 add sub mul                    overflow beyond the class is UB
 sdiv udiv srem urem            truncate toward zero; division by zero and the most negative value / -1 are UB
 and or xor
-shl lshr ashr                  the amount is a register or immediate of the same class; amounts >= width are UB
+shl lshr ashr                  the amount is an operand of the same class; amounts >= width are UB
 ```
 
 Both forms of the first two rows exist so that `Lower` can say what C
@@ -190,35 +245,23 @@ addition is `wadd` in `w` and needs nothing more; `unsigned char`
 addition is `wadd` in `w` then `and 0xff` to restore canonical form;
 `int` addition is `add` alone. Pointer arithmetic is `wadd` in the
 pointer class with the offset already scaled by `Lower`: `p[i]` is `wmul
-%i, 8` then `wadd %p, %o`; `s.m` is usually no instruction at all, since
-the member's offset goes into the load or store.
+%i, 8` then `wadd %p, %o`; `p->m` is `wadd %p, 4`.
 
-**Extension** is two sequences, listed because `Lower` emits them and a
-code generator pattern-matches them:
+**Between integer and floating**, the only conversions that are
+instructions, because no boolean algebra crosses that line:
 
 ```
-sign-extend from N bits       %t = shl %x, width-N  then  %t = ashr %t, width-N
-zero-extend from N bits       %t = and %x, 2^N - 1
+%f = i2f %x                    signed integer to floating; the classes are those of the variables
+%f = u2f %x                    unsigned integer to floating
+%x = f2i %f                    floating to signed integer, truncating toward zero; out of range UB
+%x = f2u %f                    floating to unsigned integer; out of range UB
+%f = fcvt %g                   between floating classes, rounding or exact
 ```
 
 **Floating arithmetic** (one class in, the same class out): `fadd fsub
 fmul fdiv`, IEEE round-to-nearest at the class's precision. Negation is
 `fsub -0.0, x`, exact under IEEE. There is no `frem`; C's `fmod` is a
 library call.
-
-**Class conversions** are the only conversions, because the classes are
-different registers:
-
-```
-%f = i2f %x                    signed integer register to a floating register; the classes are those of the registers
-%f = u2f %x                    unsigned integer register to floating
-%x = f2i %f                    floating to signed integer, truncating toward zero; out of range UB
-%x = f2u %f                    floating to unsigned integer; out of range UB
-%f = fcvt %g                   between floating classes, rounding or exact
-```
-
-A narrower C integer result of `f2i` is made canonical by the extension
-sequences.
 
 **Comparisons** (a `w` holding 0 or 1; the operands one integer or one
 floating class):
@@ -234,34 +277,37 @@ fne                            unordered or not equal: 1 if either operand is Na
 `a > b` is `slt b, a`; `a >= b` is `sle b, a`. A test for zero is `ne x,
 0`. Canonical values make a `w` comparison the narrower C comparison.
 
-**Memory**, the only instructions that touch it; the address is a
-register of the pointer class plus a constant offset:
+**Memory**, the only instructions that touch it, always through a `ptr`
+variable, each saying its width:
 
 ```
-%x = load.s8  [addr]           sign-extended into the destination's class; also .s16 .s32 .s64
-%x = load.u8  [addr]           zero-extended; also .u16 .u32 .u64
-%f = load.f32 [addr]           into an s register; .f64 into d; .f80 into x
-store.8 %x, [addr]             the low 8 bits of the register; also .16 .32 .64 .f32 .f64 .f80
-copy %P [dst], [src]           the bytes of the named aggregate type, non-overlapping
-zero %P [addr]                 all bytes of the aggregate type to zero
-%a = addr $slot | @name        the address of a slot or a global into a pointer-class register
+%x = load.s8  %p               one byte, sign-extended into %x's class; also .s16 .s32 .s64
+%x = load.u8  %p               zero-extended; also .u16 .u32 .u64
+%f = load.f32 %p               into an s variable; .f64 into d; .f80 into x
+store.8 %p, %x | N             the low 8 bits of the variable or immediate; also .16 .32 .64 .f32 .f64 .f80
+copy %P %q, %p                 the bytes of the named aggregate type, from %p to %q, non-overlapping
+zero %P %p                     all bytes of the aggregate type to zero
 ```
 
-`align N` and `volatile` may follow a load or store. `load.s64` and
-`load.u64` are the same into `l`; a `load.s32` into `l` is how a `long`
-is read from an `int` object. Bit-fields are a load of the storage unit,
-`and`/`or`/`shl`/`lshr`, and a store, with the masks and shifts computed
-by `Lower` from the typer's placement. A struct assignment is `copy`; the
-zero part of an initializer is `zero` followed by stores.
+`align N` and `volatile` may follow a `load` or `store`. `Lower` loads a
+variable of type `i8` with `load.s8` and one of type `u16` with
+`load.u16`, so the result is canonical; a `load.s8` into an `i32` is
+legal and simply sign-extends a byte into an `int`. Bit-fields are a
+`load` of the storage unit, `and`/`or`/`shl`/`lshr`, and a `store`, with
+the masks and shifts computed by `Lower` from the typer's placement. A
+struct assignment is `copy`; the zero part of an initializer is `zero`
+followed by stores.
 
 **Control** (each block ends with exactly one of these):
 
 ```
 br .block
 condbr %w, .then, .else                         nonzero takes .then
-switch %x, .default, [ N -> .block, ... ]       distinct constants, in the register's class
+switch %x, .default, [ N -> .block, ... ]       distinct constants, in the variable's class
 ret                                             from a void function
-ret type %x                                     the value with its memory type; an aggregate by its address
+ret %x                                          the function's return type says how; for an aggregate, %x is a
+                                                ptr to the bytes, which may be this frame's: the consumer copies
+                                                them before releasing it
 trap "message"                                  stops the program; also where control cannot arrive
 ```
 
@@ -271,106 +317,79 @@ comparison chain ahead of it.
 **Calls**, direct and indirect:
 
 ```
-%r = call sig @name ( type %arg, ... )          a named function: the callee is known statically
-%r = icall sig %f ( type %arg, ... )            a pointer to function in a register: the callee is a run-time value
+%r = call sig @name ( operand, ... )            a named function: the callee is known statically
+%r = icall sig %f ( operand, ... )              a pointer to function in a variable: the callee is a run-time value
      call / icall ...                           void result
-     call / icall ... into %P [addr]            aggregate result, written to the address
+     call / icall ... into %p                   aggregate result, written through %p
 ```
 
 The two are distinct instructions, as `DirectCall` and `IndirectCall`
 are distinct nodes in the typed tree, so a consumer dispatches on the
 instruction and never inspects an operand to learn which it has. For the
 VM, `call` is a lookup of the name in the loader's table, bound late, and
-`icall` a lookup of the register's value in the code segment; for a code
+`icall` a lookup of the variable's value in the code segment; for a code
 generator, `call` is a call to a symbol and `icall` a call through a
 register. `sig` is the callee's function type as the caller sees it: the
-prototype for `call`, the pointer's type for `icall`. Each argument is a
-register with its memory type, which is what the calling convention
-classifies by, or for an aggregate parameter the aggregate type and a
-register holding its address; the callee receives its own copy, made by
-the consumer. For a variadic call `sig` ends in `...` and the arguments
-past the fixed ones are already promoted by the typer. A consumer applies
-its target's calling convention to exactly this information and nothing
-else.
+prototype for `call`, the pointer's type for `icall`; it gives every
+argument's type, which is what the calling convention classifies by. An
+aggregate argument is passed as a pointer to its bytes, and the callee
+receives its own copy, made by the consumer. For a variadic call `sig`
+ends in `...` and the arguments past the fixed ones are already promoted
+by the typer. A consumer applies its target's calling convention to
+exactly this information and nothing else.
 
 **Variadic functions** are defined with `...` in their signature and use
-two instructions on a `va_list` object, whose type `%va_list` the target
-descriptor gives as an aggregate:
+two instructions on a pointer to a `va_list` object, whose type
+`%va_list` the target descriptor gives as an aggregate:
 
 ```
-va_start [addr]
-%x = va_arg.s32 [addr]                          the widths and extensions of load; an aggregate type into [addr]
+va_start %ap
+%x = va_arg.s32 %ap                             the widths and extensions of load; for an aggregate, va_arg %P %ap into %p
 ```
 
-`va_end` is nothing and `va_copy` is `copy %va_list`.
+`va_end` is nothing and `va_copy` is `copy`.
 
 ## Functions
 
 ```
 define [linkage] @name ( type %param, ... [, ...] ) -> type {
-  slot $name : type align N ...        the frame: one per parameter, local, compound literal, temporary object
-  wtemp / ltemp / stemp / dtemp / xtemp %name ...
+  [volatile] type %name ...            every other variable the body uses, with its type
 .block:                                the first block is the entry; every block has a name
   instruction ...
 }
 declare [linkage] @name sig            a function defined elsewhere or by the consumer (the VM's builtins)
 ```
 
-Parameters are values received in registers of the class their memory
-type implies, canonical. Because C treats a parameter as an object with
-an address, `Lower` gives each one a slot and stores the incoming value
-at entry, as in the example. An aggregate parameter's slot is
-initialized by the consumer at entry with the argument's bytes, and its
-register holds the slot's address. A consumer that promotes slots to
-registers may, and the code generator will.
-
-Slots are named, never addressed by a frame offset: a code generator lays
-the frame out and a VM allocates slots as it likes. Their lifetime is the
-call. `linkage` is `external` (the default) or `internal` (`static`). A
-`static` local is a global with `internal` linkage named
-`function.variable[.ordinal]`, so the same source gives the same name
-every time.
+Parameters are variables received canonical for their type; an
+aggregate parameter is storage the consumer fills at entry. A variable's
+lifetime is the call. `linkage` is `external` (the default) or
+`internal` (`static`). A `static` local is a global with `internal`
+linkage named `function.variable[.ordinal]`, so the same source gives the
+same name every time.
 
 ## Globals
 
 ```
-global [linkage] @name : type align N [readonly] [= initializer]
-initializer ::= scalar-const | addr @name [+ N] | bytes "..." | zero type
-              | { initializer, ... }               a struct or array, one item per member or element
+global [linkage] @name : type align N [readonly] [= { item, ... }]
+item ::= offset : scalar-const                    i32 7, f64 1.5, written with the type
+       | offset : addr @name [+ N]                a relocation
+       | offset : bit/width : int-const           a bit-field: width bits at bit from the offset's byte
+       | offset : bytes "..."                     a run of bytes, for string literals
 ```
 
-A scalar constant in an initializer is written with its memory type
-(`i32 0`, `f64 1.5`), since bytes are what it becomes. A global without an
-initializer is zero; an `extern` not defined in the module is `declare
-@name : type`. `addr @name + N` is a relocation. `bytes` is for string
-literals and is the one initializer that is already bytes. A consumer
-turns the initializer into memory in its own byte order.
+An initializer is a list of typed items at byte offsets, applied in
+order into an object that starts as all zero, a later item overriding an
+earlier one where they overlap. That is the typer's own model of an
+initializer (`TInit`) and it needs no structure of its own: a union is
+whatever items were written, a designated array element is an item at
+its offset, a string is one `bytes` item. A consumer writes each item at
+its offset in its own byte order and performs the read-modify-write for
+a bit-field item. A global without an initializer is zero; an `extern`
+not defined in the module is `declare @name : type`.
 
 String literals are globals named `@.str.<hash>` with `internal` linkage
 and `readonly`, so a loader can share one copy across modules compiled
 from the same text.
-
-## Types
-
-Types describe memory and interfaces, never registers:
-
-```
-type    ::= int | float | ptr | array | struct | func
-int     ::= i8 | i16 | i32 | i64                 storage widths
-float   ::= f32 | f64 | f80 | f128               IEEE binary32/64/128 and the x87 extended format
-ptr     ::= ptr                                  the target's pointer width
-array   ::= [ N x type ]
-struct  ::= { member, ... }                      each member: type, byte offset; size and alignment given
-func    ::= ( type, ... [, ...] ) -> type        parameter types, variadic flag, return type or void
-```
-
-A C `bool`, `char`, enum or `_BitInt` up to 64 bits is the `int` of its
-storage width. Each scalar memory type has a register class: `i8`, `i16`
-and `i32` load into `w` or `l` as the instruction says, `i64` into `l`,
-`ptr` into the pointer class, `f32` into `s`, `f64` into `d`, `f80` into
-`x`. Structures are named in the module (`type %P = { ... }`); a union is
-a structure whose members all have offset zero; a bit-field member has
-the type of its storage unit.
 
 ## Module
 
@@ -387,122 +406,92 @@ except through names.
 
 ## Well-formedness (`TacInvariants`)
 
-- every register is declared once in one class, and every instruction's
-  registers are of the classes it requires, all operands of an arithmetic,
-  logic or comparison instruction in one class;
-- an address register is of the pointer class; a `widen` goes from `w` to
-  `l` and a `narrow` from `l` to `w`; `fcvt` joins two different floating
-  classes; `i2f`/`f2i` join an integer and a floating class;
+- every variable is declared once with a type, and every instruction's
+  variables are of the classes it requires, all operands of an
+  arithmetic, logic or comparison instruction in one class; an aggregate
+  variable appears only under `addrof`;
+- `load` and `store` go through a `ptr` variable; a load's class is the
+  loaded variable's and its width is at most the class's; a store's
+  width is at most the stored variable's class; `copy`, `zero`, `into`
+  and an aggregate `ret` take `ptr` variables; `mov` joins two integer
+  variables or two floating variables of one class; `fcvt` joins two
+  different floating classes; `i2f`/`f2i` join an integer and a floating
+  class;
 - every block ends with exactly one terminator (`br`, `condbr`, `switch`,
   `ret`, `trap`) and has none elsewhere; every branch target is a block of
   the same function; the entry block has no predecessors;
-- every `@name` in `addr`, `call` or an initializer is defined or
-  declared in the module; every `$name` is a slot of the function; every
-  named type is defined before use;
+- every `@name` in `addrof`, `call` or an initializer is defined or
+  declared in the module; every named type is defined before use;
 - a `call`'s name is a defined or declared function and an `icall`'s
-  callee is a pointer-class register; the arguments match `sig` in count
-  and memory type, and each register's class matches its memory type;
-  `into` is present exactly when the result is an aggregate; `ret` carries
-  the function's return type in a register of the matching class;
-- memory widths and classes are ones the target has; `switch` values are
+  callee is a `ptr` variable; the arguments match `sig` in
+  count and type, an aggregate one being a pointer to it; `into` is
+  present exactly when the result is an aggregate; `ret` matches the
+  function's return type;
+- widths and classes are ones the target has; `switch` values are
   distinct;
-- a `readonly` global has an initializer; `bytes` initializers are only
-  for `[N x i8]`.
+- a `readonly` global has an initializer; `bytes` items are only within
+  `i8`/`u8` arrays, and every item lies within the object.
 
 Canonical form is not an invariant the checker can see; it is `Lower`'s
 obligation, tested by running programs.
 
 ## What makes it easy to interpret
 
-- A frame is an `int[]` for `w`, a `long[]` for `l`, a `float[]` and a
-  `double[]` (and a `double[]` standing in for `x`), indexed by register
-  number, plus the slot addresses computed once at entry. Every integer
-  instruction is the Java operation of its class; there is no width
-  logic inside an instruction.
-- Memory is touched by `load`, `store`, `copy` and `zero` only, each with a
-  fixed width, so bounds and alignment checks live in four places.
-- `addr` resolves a slot at entry and a global at load; nothing else
-  names either.
+- A frame is one array per class (`int[]`, `long[]`, `float[]`,
+  `double[]`), indexed by variable number, for the variables the VM keeps
+  out of memory, plus a region of simulated memory for those it gives
+  storage: aggregates, `volatile` ones, and the ones under `addrof`, which
+  it finds by one look at the function when it loads it. The simplest VM
+  gives every variable storage and skips the look.
+- Every integer instruction is the Java operation of its class; there is
+  no width logic inside an instruction. `load.s16` is a `short` read,
+  `store.8` writes one byte; the width is on the instruction.
+- Memory is touched by `load`, `store`, `copy` and `zero` only, so bounds
+  and alignment checks live in four places.
+- `addrof` of a variable is its storage address, computed at entry; of a
+  global, resolved at load; nothing else names either.
 - Every instruction is a record with resolved operand references, so
   dispatch is a `TacVisitor` call per instruction and blocks are arrays
   with a program counter; `switch` is a lookup; `call` is a name looked up
-  in the loader's table and `icall` a register looked up in the code
+  in the loader's table and `icall` a variable looked up in the code
   segment, then a new frame and a copy of arguments.
 - A join needs nothing. Nothing requires analysis.
 
 ## What makes it easy to generate code from
 
 - Basic blocks with explicit terminators are the control-flow graph.
-- Virtual registers in classes that correspond to physical register
-  files (`w`/`l` to the integer file, `s`/`d` to the vector file), with
-  computable liveness; SSA construction is the code generator's to do in
-  its own IR.
-- Widths only on memory access, addresses as register plus constant,
-  which is the addressing mode every machine has; `addr` of a slot is a
-  frame-pointer offset and of a global a symbol.
-- Comparisons produce 0 or 1 and `condbr` tests a register, which fuse
+- Variables in classes that correspond to physical register files
+  (`w`/`l` to the integer file, `s`/`d` to the vector file); the ones
+  never under `addrof` are virtual registers with computable liveness,
+  the rest are frame slots, which is the promotion every backend does
+  first; SSA construction is the code generator's to do in its own IR.
+- A `wadd %p, N` feeding a `load` or `store` is a register-plus-offset
+  addressing mode, and `addrof` of a slot is a frame-pointer offset; both
+  are one peephole.
+- Comparisons produce 0 or 1 and `condbr` tests a variable, which fuse
   into flags and a conditional branch, or a compare-and-branch.
 - The extension sequences are recognizable patterns: `shl`/`ashr` by the
-  same constant is `movsx`, `and` with `2^N - 1` is `movzx`, `widen` is a
-  32-bit move on x86-64 and `narrow` is free.
+  same constant is `movsx`, `and` with `2^N - 1` is `movzx`, a `mov` from
+  `w` to `l` is a 32-bit move on x86-64 and from `l` to `w` is free.
 - Calls carry the full signature and by-value aggregates with their
   member types, so a code generator has everything an ABI classifier
   needs, and nothing has been pre-lowered for one ABI.
-
-## Lowering from the typed tree
-
-The mapping is direct; the table is the specification of `Lower`:
-
-| Typed tree | TAC |
-|---|---|
-| `IntConst`, `FloatConst`, `NullptrConst` | `mov` of an immediate in the class of the C type; null is `0` |
-| `AddrConst(symbol, offset)` | `addr @name`, then `wadd` of the offset |
-| `VarRef` of a local or parameter | `addr $name`; of a global, `addr @name`; folded into the load's or store's offset where possible |
-| `LvalueToRvalue` | `load.sN` or `load.uN` into the class of the C type; a bit-field: load the unit, `lshr`, `and`, or `shl` then `ashr` for a signed one |
-| `ArrayDecay`, `FunctionDecay` | the address itself |
-| `Deref` | the pointer register is the address |
-| `Member` | the member's offset in the address operand of the load or store, or `wadd` when the address escapes |
-| `Materialize`, compound literal | a slot |
-| `IntToInt` | nothing within a class when the value is canonical for the destination; the extension or mask sequence otherwise; `widen` then, for a signed source, `shl`/`ashr`; `narrow` |
-| `IntToFloat`, `FloatToInt` | `i2f`/`u2f`, `f2i`/`f2u` by the integer type's signedness, then the canonical sequence for a narrow integer |
-| `FloatToFloat` | `fcvt` |
-| pointer conversions | nothing, or `widen`/`narrow` and the mask sequence |
-| `ToBool` | `ne x, 0` or `fne` |
-| `Arithmetic`, `Shift` | `wadd`/`wsub`/`wmul` for unsigned types, then the mask for types narrower than `w`; `add`/`sub`/`mul` for signed; `sdiv`/`udiv`/`srem`/`urem`; `shl`, `lshr` or `ashr` by signedness, then the canonical sequence for narrow types; the `f` forms in the class of the C type |
-| `Unary` | negation `wsub 0, x` or `sub 0, x` or `fsub -0.0, x`; bitwise not `xor x, -1` then the mask for unsigned narrow types; logical not `eq x, 0` |
-| `Comparison` | `eq ne slt sle ult ule feq fne flt fle`, operands swapped for `>` and `>=`; the result is already a canonical `int` |
-| `Logical` | blocks with short circuit |
-| `Cond` | blocks |
-| `PtrAdd`, `PtrDiff` | `wmul` by the element size then `wadd`; `wsub` then `sdiv` by the element size |
-| `Assign`, `CompoundAssign`, `PostfixAssign`, `TargetValue` | address evaluated once into a register, `load`/`store`; aggregates `copy` |
-| `DirectCall`, `IndirectCall` | `call @name` and `icall %p` respectively; aggregate arguments by address; `into` for aggregate results |
-| `Comma` | in order |
-| `Block`, `ExprStmt`, `LocalDecl` | instructions; `LocalDecl` with `TInit` is `zero` then stores |
-| `If`, `While`, `DoWhile`, `For` | blocks; `JumpTarget` is a block |
-| `Switch`, `Case`, `CaseRange` | `switch` on single values, each label a block; a range is a comparison chain ahead of the `switch` |
-| `Labeled`, `Goto`, `Break`, `Continue` | `br` to the target's block |
-| `Return` | `ret`, aggregates by address |
-| `TUnit.Global` with `TInit` | `global` with a structured initializer built from the items, `zero` for the rest |
-| `StringData` | `@.str.<hash>` with `bytes` |
-| `TFunction` | `define` with slots from `parameters` and `locals`, registers as allocated |
 
 ## Packages and classes
 
 ```
 org.jbm.cc.tac
-  Type                        sealed: Int(width), Float(format), Ptr, Array(element, count), Struct(name, members), Func(params, variadic, ret)
-  RegClass                    W, L, S, D, X
-  Operand                     sealed: Reg(class, number), IntImm, FloatImm; Address(reg, offset)
+  Type                        sealed: Int(width, signed), Float(format), Ptr, Array(element, count),
+                              Struct(name, members), Func(params, variadic, ret), Void
+  RegClass                    W, L, S, D, X, and NONE for aggregates
+  Var                         a declared variable: name, type, volatile, class
+  Operand                     sealed: Var, IntImm, FloatImm
   Instr                       sealed, one record per instruction above, each carrying the C token it came from
   Block, Function, Global, Module, Target descriptor
   TacVisitor<R>               one visit per instruction kind; the VM's and the code generator's dispatch
   TacWriter, TacReader        the text form, round-trip exact
   TacInvariants               the rules above; run in tests and optionally on load
-org.jbm.cc.lower
-  Lower                       TUnit to Module
-  ExprLower                   expressions to registers, with canonical form; lvalues to addresses
-  StmtLower                   statements to blocks; JumpTarget to Block; switch tables
-  DataLower                   TInit to structured initializers; strings; statics
+org.jbm.cc.lower              see lower-plan.md
 ```
 
 `tac` depends on nothing in `sema` or `tast`; `lower` depends on both and
@@ -514,41 +503,27 @@ on `tac`. The VM depends on `tac` only.
   `TacInvariants`, `TacWriter` and `TacReader`, including each rejection
   the invariants make.
 - **Lowering corpus**: `src/test/resources/tac/*.c` with a `.tac` golden
-  beside each, like the typed corpus, on both targets where the source is
-  target-neutral; `TacInvariants` on every module; the round trip.
-- **Canonical form**: programs whose results depend on it (narrow
-  unsigned wrap, the sign of `char`, mixed-width comparisons, `int` to
-  `long` widening, shifts of narrow types) in the run corpus, checked
-  against `gcc`'s output by the VM's suite (`cshell-plan.md`).
-- **Coverage**: every `Instr` kind and every row of the mapping table
-  appears in the corpus.
+  beside each (`lower-plan.md`).
+- **Canonical form and aliasing**: programs whose results depend on them
+  (narrow unsigned wrap, the sign of `char`, mixed-width comparisons,
+  `int` to `long` widening, a variable modified through a pointer while
+  also used directly) in the run corpus, checked against `gcc`'s output
+  by the VM's suite (`cshell-plan.md`).
+- **Coverage**: every `Instr` kind appears in the corpus.
 
 ## Steps
 
 Each step is one commit with the suite green and `Main` still running.
 
-1. [ ] **The model**: `Type`, `RegClass`, `Operand`, `Instr`, `Block`,
+1. [ ] **The model**: `Type`, `RegClass`, `Var`, `Operand`, `Instr`, `Block`,
    `Function`, `Global`, `Module`, the target descriptor, `TacVisitor`;
    hand-built module tests.
 2. [ ] **`TacWriter`** and **`TacInvariants`**; the text form fixed by tests.
-3. [ ] **`ExprLower`, scalars**: constants, arithmetic with canonical form,
-   comparisons, the extension sequences, `widen`/`narrow`, the class
-   conversions, `Logical`, `Cond`, `Comma`; the lowering corpus starts.
-4. [ ] **Objects and addresses**: slots and globals through `addr`, offsets
-   folded into loads and stores, `VarRef`, `Deref`, `AddrOf`, `Member`,
-   bit-fields, decay, `PtrAdd`, `PtrDiff`, the assignments, `Materialize`
-   and compound literals.
-5. [ ] **Calls and functions**: `call` and `icall` in every form, by-value
-   aggregates, variadic arguments, `Return`, `define` with its frame;
-   `va_*` for variadic definitions.
-6. [ ] **Statements**: blocks, `If`, loops, `Break`, `Continue`, `Goto`,
-   labels, `Switch`, `LocalDecl` initialization.
-7. [ ] **Data**: `DataLower`, string literals, statics, tentatives; `Module`;
-   `Lower.lower(TUnit)`; `Main` prints the TAC.
-8. [ ] **`TacReader`** and the round trip on the whole corpus.
+3. [ ] **`Lower`**, by the steps of `lower-plan.md`.
+4. [ ] **`TacReader`** and the round trip on the whole corpus.
 
 ### Deferred
-- `i128` and `_BitInt` above 64 bits (two `l` registers)
+- `i128` and `_BitInt` above 64 bits (two `l` variables)
 - atomics and memory ordering
 - dynamic `alloca` for variable-length arrays
 - thread-local globals

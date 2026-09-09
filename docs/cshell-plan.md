@@ -301,7 +301,7 @@ org.jbm.cc.tac                Module, Function, Block, Data, Reloc, Slot, Temp, 
                               TacInvariants (temps typed and assigned before use, branch targets in the
                               function, names defined or external, widths consistent)
 org.jbm.cc.lower              Lower (the pass), ExprLower, StmtLower (JumpTarget to Block, switch tables),
-                              DataLower (TInit to bytes and relocations)
+                              the global items straight from TInit
 org.jbm.cc.Compiler           compile(source, headers) -> Compiled(typed, tac); the one entry; Main uses it
 org.jbm.cc.cpp.HeaderProvider headers by name; the bundled ones as resources
 org.jbm.vm                    Engine, Value, ExecutionException (the contract);
@@ -373,7 +373,7 @@ the shell and needs all three; E and F follow D.
    `Return`; `Function` with its frame and signature.
 5. [ ] **Statements.** Blocks, `If`, loops, `Break`, `Continue`, `Goto` and
    labels as blocks, `Switch` with ranges; `LocalDecl` through `TInit`.
-6. [ ] **Data.** `DataLower`: `TInit` to bytes and relocations, strings by
+6. [ ] **Data.** Global items straight from `TInit`, strings by
    hash, statics by the naming scheme, tentatives; `Module`;
    `Lower.lower(TUnit)`; `Main` prints the TAC.
 7. [ ] **`TacReader`** and the round trip.
