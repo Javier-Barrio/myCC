@@ -872,4 +872,176 @@ class LowerTest {
                   br .while.cond
                 .while.done:""", instrs("int n, c, d;", "while (n) { if (c) continue; if (d) break; n--; }"));
     }
+
+    // ---- 22: labels and goto ---------------------------------------------------------------------
+
+    @Test
+    void forwardAndBackwardGoto() {
+        assertEquals("""
+                  br .again
+                .again:
+                  mov %t0, 1
+                  %t1 = sub %n, %t0
+                  mov %n, %t1
+                  %t2 = ne %n, 0
+                  condbr %t2, .then, .if.done
+                .then:
+                  br .again
+                .if.done:
+                  br .out
+                .out:""", instrs("int n;", "again: n--; if (n) goto again; goto out; out: ;"));
+    }
+
+    @Test
+    void deadCodeAfterAJumpIsDropped() {
+        assertEquals("""
+                define @f(i32 %n) -> i32 {
+                  i32 %t1
+                .entry:
+                  ret %n
+                .after:
+                  mov %t1, 1
+                  ret %t1
+                }
+                """, function("int f(int n) { return n; n = 2; after: return 1; }"));
+        assertEquals("""
+                define @g(i32 %n) -> i32 {
+                .entry:
+                  br .out
+                .out:
+                  ret %n
+                }
+                """, function("int g(int n) { goto out; n = 2; out: return n; }"));
+    }
+
+    @Test
+    void gotoIntoALoopBody() {
+        assertEquals("""
+                  br .in
+                .while.cond:
+                  %t0 = ne %n, 0
+                  condbr %t0, .while.body, .while.done
+                .while.body:
+                  br .in
+                .in:
+                  mov %t1, 1
+                  %t2 = sub %n, %t1
+                  mov %n, %t2
+                  br .while.cond
+                .while.done:""", instrs("int n;", "goto in; while (n) { in: n--; }"));
+    }
+
+    // ---- 23: switch ------------------------------------------------------------------------------
+
+    @Test
+    void switchWithCasesAndDefault() {
+        assertEquals("""
+                  switch %c, .default, [ 1 -> .case.1, 2 -> .case.2 ]
+                .case.1:
+                  mov %t0, 10
+                  mov %x, %t0
+                  br .switch.done
+                .case.2:
+                  mov %t1, 20
+                  mov %x, %t1
+                  br .default
+                .default:
+                  mov %t2, 0
+                  mov %x, %t2
+                  br .switch.done
+                .switch.done:""", instrs("int c, x;", "switch (c) { case 1: x = 10; break; case 2: x = 20; default: x = 0; }"));
+    }
+
+    @Test
+    void switchWithoutDefaultAndWithDeadCodeBeforeTheFirstCase() {
+        assertEquals("""
+                  switch %c, .switch.done, [ 1 -> .case.1 ]
+                .case.1:
+                  mov %t1, 1
+                  mov %x, %t1
+                  br .switch.done
+                .switch.done:""", instrs("int c, x;", "switch (c) { x = 5; case 1: x = 1; }"));
+    }
+
+    @Test
+    void switchWithARangeIsAComparisonChain() {
+        assertEquals("""
+                  %t0 = wsub %c, 97
+                  %t1 = ule %t0, 5
+                  condbr %t1, .case.97.102, .case.next
+                .case.next:
+                  switch %c, .switch.done, [ 120 -> .case.120 ]
+                .case.97.102:
+                  mov %t2, 1
+                  mov %x, %t2
+                  br .switch.done
+                .case.120:
+                  mov %t3, 2
+                  mov %x, %t3
+                  br .switch.done
+                .switch.done:""", instrs("int c, x;", "switch (c) { case 'a' ... 'f': x = 1; break; case 'x': x = 2; }"));
+    }
+
+    @Test
+    void switchOnALongAndNested() {
+        assertEquals("""
+                  switch %l, .switch.done, [ 5 -> .case.5 ]
+                .case.5:
+                  switch %c, .switch.done.2, [ 1 -> .case.1 ]
+                .case.1:
+                  mov %t0, 1
+                  mov %x, %t0
+                  br .switch.done.2
+                .switch.done.2:
+                  br .switch.done
+                .switch.done:""", instrs("long l; int c, x;", "switch (l) { case 5: switch (c) { case 1: x = 1; } }"));
+    }
+
+    // ---- 24: return ----------------------------------------------------------------------------
+
+    @Test
+    void returns() {
+        assertEquals("""
+                define @f(i32 %n) -> i32 {
+                  i32 %t0
+                .entry:
+                  mov %t0, 1
+                  %t1 = add %n, %t0
+                  ret %t1
+                }
+                """.replace("  i32 %t0\n.entry", "  i32 %t0\n  i32 %t1\n.entry"), function("int f(int n) { return n + 1; }"));
+        assertEquals("""
+                define @g(%P %p) -> %P {
+                  ptr %t0
+                .entry:
+                  %t0 = addrof %p
+                  ret %t0
+                }
+                """, function("struct P { int x, y; }; struct P g(struct P p) { return p; }"));
+        assertEquals("""
+                define @h(i32 %n) -> void {
+                  u8 %t0
+                .entry:
+                  %t0 = ne %n, 0
+                  condbr %t0, .then, .if.done
+                .then:
+                  ret
+                .if.done:
+                  ret
+                }
+                """, function("void h(int n) { if (n) return; }"));
+        assertEquals("""
+                define @main() -> i32 {
+                .entry:
+                  br .while.cond
+                .while.cond:
+                  %t0 = ne %n, 0
+                  condbr %t0, .while.body, .while.done
+                .while.body:
+                  ret %n
+                .while.done:
+                  ret 0
+                }
+                """.replace(".entry:\n  br", "  i32 %n\n  u8 %t0\n.entry:\n  br"), function("int main(void) { int n; while (n) return n; }"));
+    }
 }
