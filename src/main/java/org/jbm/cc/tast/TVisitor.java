@@ -70,7 +70,8 @@ public interface TVisitor<R> {
     R visit(TExpr.Not e);
 
     // ---- calls ----
-    R visit(TExpr.Call e);
+    R visit(TExpr.DirectCall e);
+    R visit(TExpr.IndirectCall e);
 
     // ---- assignment ----
     R visit(TExpr.Assign e);

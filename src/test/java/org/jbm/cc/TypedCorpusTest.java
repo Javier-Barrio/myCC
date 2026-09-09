@@ -89,7 +89,7 @@ class TypedCorpusTest {
         for (String name : List.of("rv:", "decay:", "fdecay:", "int-to-int:", "int-to-float:", "float-to-int:", "float-to-float:",
                 "to-bool:", "to-void:", "ptr-to-ptr:", "int-to-ptr:", "ptr-to-int:", "null:", "add:", "sub:", "mul:", "div:", "rem:",
                 "bitand:", "bitor:", "bitxor:", "shl:", "shr:", "eq:", "ne:", "lt:", "le:", "gt:", "ge:", "and:", "or:", "neg:",
-                "bitnot:", "not:", "deref:", "member:", "materialize:", "lit:", "addr:", "ptradd:", "ptrdiff:", "call:",
+                "bitnot:", "not:", "deref:", "member:", "materialize:", "lit:", "addr:", "ptradd:", "ptrdiff:", "(call:", "(icall:",
                 "assign:", "compound-assign:", "postfix-assign:", "(target:", "cond:", "comma:", "nullptr:", "&", "(local ",
                 "(global ", "(extern ", "(string ", "(function ", "(if ", "(while ", "(do ", "(for ", "(switch ", "(cases ",
                 "...", "default", "(label ", "(goto ", "(break ", "(continue ", "(return", "(init", "(block")) {

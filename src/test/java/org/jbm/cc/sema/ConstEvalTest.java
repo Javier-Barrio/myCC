@@ -140,7 +140,7 @@ class ConstEvalTest {
     @Test
     void nonConstantsDoNotFold() {
         var symbol = types.int_(); // any non-constant leaf: a call has no constant value
-        Rvalue call = new TExpr.Call(new TExpr.IntToPtr(i(0), types.pointer(types.function(types.int_(), java.util.List.of(), false)), AT),
+        Rvalue call = new TExpr.IndirectCall(new TExpr.IntToPtr(i(0), types.pointer(types.function(types.int_(), java.util.List.of(), false)), AT),
                 java.util.List.of(), types.int_(), AT);
         assertEquals("-", fold(call));
         assertEquals("-", fold(new TExpr.Add(i(1), call, types.int_(), AT)));

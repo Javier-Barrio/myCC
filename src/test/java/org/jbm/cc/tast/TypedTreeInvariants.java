@@ -503,10 +503,25 @@ public final class TypedTreeInvariants implements TVisitor<Void>, TStmtVisitor<V
     // ---- calls and assignment -------------------------------------------------------------------
 
     @Override
-    public Void visit(TExpr.Call e) {
-        node(e);
+    public Void visit(TExpr.DirectCall e) {
+        assertTrue(e.callee() instanceof Symbol.Function);
+        assertTrue(e.callee().type().isFunction());
+        call(e);
+        return null;
+    }
+
+    @Override
+    public Void visit(TExpr.IndirectCall e) {
         assertTrue(e.callee().type() instanceof CType.Pointer p && p.target() instanceof CType.Function);
-        var f = (CType.Function) ((CType.Pointer) e.callee().type()).target();
+        assertTrue(!(e.callee() instanceof TExpr.FunctionDecay fd && fd.operand() instanceof TExpr.FuncRef),
+                "a call of a named function is a DirectCall");
+        call(e);
+        return rvalue(e.callee());
+    }
+
+    private void call(TExpr.Call e) {
+        node(e);
+        CType.Function f = e.signature();
         assertSame(f.returnType(), e.type());
         assertTrue(e.arguments().size() >= f.parameters().size());
         assertTrue(f.isVariadic() || e.arguments().size() == f.parameters().size());
@@ -516,7 +531,6 @@ public final class TypedTreeInvariants implements TVisitor<Void>, TStmtVisitor<V
             else assertSame(types.defaultArgumentPromote(arg.type()), arg.type(), "variadic argument " + (i + 1) + " is promoted");
             rvalue(arg);
         }
-        return rvalue(e.callee());
     }
 
     @Override

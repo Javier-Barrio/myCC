@@ -499,7 +499,12 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     // ---- the rest ------------------------------------------------------------------------------------
 
     @Override
-    public Constant visit(TExpr.Call e) {
+    public Constant visit(TExpr.DirectCall e) {
+        return null;
+    }
+
+    @Override
+    public Constant visit(TExpr.IndirectCall e) {
         return null;
     }
 

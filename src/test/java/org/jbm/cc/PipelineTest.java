@@ -194,7 +194,7 @@ class PipelineTest {
         assertEquals("(function get_count:int (void) (params) (locals) (block (return 8:int)))", lines.get(3));
         String main = lines.get(4);
         assertTrue(main.startsWith("(function main:int (void) (params) (locals total:int i:int) (block (local total:int 0:int) (local i:int 0:int) "
-                + "(while (to-bool:bool (lt:int (rv:int i:int) (call:int (fdecay:int (*)(void) get_count:int (void))))) (block "
+                + "(while (to-bool:bool (lt:int (rv:int i:int) (call:int get_count:int (void)))) (block "
                 + "(expr (assign:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int)))) (mul:int (rv:int i:int) (rv:int i:int)))) "), main);
         assertTrue(main.contains("(expr (assign:int total:int (cond:int (to-bool:bool (gt:int (rv:int total:int) (rv:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int))))))) (rv:int total:int) (rv:int (deref:int (ptradd:int * (decay:int * values:int [8]) (int-to-int:long (rv:int i:int))))))))"), main);
         assertTrue(main.endsWith("(if (to-bool:bool (gt:int (rv:int total:int) 8:int)) (block (return (rv:int total:int)))) (return 0:int)))"), main);

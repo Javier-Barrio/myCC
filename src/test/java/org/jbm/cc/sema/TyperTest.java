@@ -529,32 +529,36 @@ class TyperTest {
 
     @Test
     void callsConvertArgumentsAsIfByAssignment() {
-        assertEquals("(call:int (fdecay:int (*)(void) f:int (void)))", expr("int f(void);", "f()"));
-        assertEquals("(call:int (fdecay:int (*)(char) f:int (char)) (rv:char a:char))", expr("int f(char); char a;", "f(a)"));
-        assertEquals("(call:int (fdecay:int (*)(int) f:int (int)) (int-to-int:int (rv:char a:char)))",
+        assertEquals("(call:int f:int (void))", expr("int f(void);", "f()"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "f(a)"));
+        assertEquals("(call:int f:int (int) (int-to-int:int (rv:char a:char)))",
                 expr("int f(int); char a;", "f(a)"));
-        assertEquals("(call:void (fdecay:void (*)(double, int *) g:void (double, int *)) (int-to-float:double 1:int) (null:int * 0:int))",
+        assertEquals("(call:void g:void (double, int *) (int-to-float:double 1:int) (null:int * 0:int))",
                 expr("void g(double, int *);", "g(1, 0)"));
-        assertEquals("(call:int (fdecay:int (*)(const char *) f:int (const char *)) (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))",
+        assertEquals("(call:int f:int (const char *) (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))",
                 expr("int f(const char *);", "f(\"x\")"));
-        assertEquals("(call:int (fdecay:int (*)(int *) f:int (int *)) (decay:int * a:int [3]))", expr("int f(int a[]); int a[3];", "f(a)"));
-        assertEquals("(call:int (fdecay:int (*)(int (*)(void)) f:int (int (*)(void))) (fdecay:int (*)(void) g:int (void)))",
+        assertEquals("(call:int f:int (int *) (decay:int * a:int [3]))", expr("int f(int a[]); int a[3];", "f(a)"));
+        assertEquals("(call:int f:int (int (*)(void)) (fdecay:int (*)(void) g:int (void)))",
                 expr("int f(int g(void)); int g(void);", "f(g)"));
-        assertEquals("(assign:int z:int (call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char)))",
+        assertEquals("(assign:int z:int (icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char)))",
                 expr("int (*fp)(char); char a; int z;", "z = fp(a)"));
-        assertEquals("(call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(*fp)(a)"));
-        assertEquals("(call:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(***fp)(a)"));
-        assertEquals("(add:int (call:int (fdecay:int (*)(char) f:int (char)) (rv:char a:char)) (rv:int b:int))",
+        assertEquals("(icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(*fp)(a)"));
+        assertEquals("(icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(***fp)(a)"));
+        assertEquals("(add:int (call:int f:int (char) (rv:char a:char)) (rv:int b:int))",
                 expr("int f(char); char a; int b;", "f(a) + b"));
-        assertEquals("(call:int (rv:int (*)(void) (deref:int (*)(void) (ptradd:int (* *)(void) (decay:int (* *)(void) t:int (*[2])(void)) (int-to-int:long 1:int)))))",
+        // A named function stays a direct call however it is spelled (6.5.3.3).
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(*f)(a)"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(&f)(a)"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(**&f)(a)"));
+        assertEquals("(icall:int (rv:int (*)(void) (deref:int (*)(void) (ptradd:int (* *)(void) (decay:int (* *)(void) t:int (*[2])(void)) (int-to-int:long 1:int)))))",
                 expr("int (*t[2])(void);", "t[1]()"));
     }
 
     @Test
     void variadicArgumentsGetDefaultPromotions() {
-        assertEquals("(call:int (fdecay:int (*)(const char *, ...) printf:int (const char *, ...)) (ptr-to-ptr:const char * (decay:char * \"%d\":char [3])) (int-to-int:int (rv:char c:char)) (float-to-float:double (rv:float f:float)) (rv:int * p:int *))",
+        assertEquals("(call:int printf:int (const char *, ...) (ptr-to-ptr:const char * (decay:char * \"%d\":char [3])) (int-to-int:int (rv:char c:char)) (float-to-float:double (rv:float f:float)) (rv:int * p:int *))",
                 expr("int printf(const char *, ...); char c; float f; int *p;", "printf(\"%d\", c, f, p)"));
-        assertEquals("(call:int (fdecay:int (*)(int, ...) v:int (int, ...)) 1:int)", expr("int v(int, ...);", "v(1)"));
+        assertEquals("(call:int v:int (int, ...) 1:int)", expr("int v(int, ...);", "v(1)"));
     }
 
     @Test
@@ -698,7 +702,7 @@ class TyperTest {
 
     @Test
     void expressionStatementsAndNullStatements() {
-        assertEquals("(block (expr (assign:int a:int 1:int)) (block) (expr (rv:int a:int)) (expr (call:void (fdecay:void (*)(void) g:void (void)))))",
+        assertEquals("(block (expr (assign:int a:int 1:int)) (block) (expr (rv:int a:int)) (expr (call:void g:void (void))))",
                 body("int a; void g(void);", "a = 1; ; a; g();"));
     }
 
@@ -773,7 +777,7 @@ class TyperTest {
         assertEquals("(function p:const char *(void) (params) (locals) (block (return (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))))",
                 function("const char *p(void) { return \"x\"; }"));
         assertEquals("(function v:void (void) (params) (locals) (block (return)))", function("void v(void) { return; }"));
-        assertEquals("(function w:void (void) (params) (locals) (block (return (call:void (fdecay:void (*)(void) g:void (void))))))",
+        assertEquals("(function w:void (void) (params) (locals) (block (return (call:void g:void (void)))))",
                 function("void g(void); void w(void) { return g(); }"));
         assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
         assertTrue(fails("void f(void) { return 1; }").getMessage().contains("should not return a value"));
@@ -990,11 +994,11 @@ class TyperTest {
     @Test
     void recordValuesAssignAndPass() {
         assertEquals("(assign:struct S s:struct S (rv:struct S t:struct S))", expr("struct S { int a; } s, t;", "s = t"));
-        assertEquals("(call:struct S (fdecay:struct S (*)(struct S) f:struct S (struct S)) (rv:struct S s:struct S))",
+        assertEquals("(call:struct S f:struct S (struct S) (rv:struct S s:struct S))",
                 expr("struct S { int a; } s; struct S f(struct S);", "f(s)"));
         assertEquals("(function g:struct S (struct S) (params x:struct S) (locals) (block (return (rv:struct S x:struct S))))",
                 function("struct S { int a; }; struct S g(struct S x) { return x; }"));
-        assertEquals("(assign:struct S s:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void))))",
+        assertEquals("(assign:struct S s:struct S (call:struct S f:struct S (void)))",
                 expr("struct S { int a; } s; struct S f(void);", "s = f()"));
         assertEquals("(cond:struct S (to-bool:bool (rv:int c:int)) (rv:struct S s:struct S) (rv:struct S t:struct S))",
                 expr("struct S { int a; } s, t; int c;", "c ? s : t"));
@@ -1033,7 +1037,7 @@ class TyperTest {
     @Test
     void structRvaluesAreMaterializedForMemberAccess() {
         String decls = "struct S { int i; char c; } s; struct S f(void);";
-        assertEquals("(member:int (materialize:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void)))) i)",
+        assertEquals("(member:int (materialize:struct S (call:struct S f:struct S (void))) i)",
                 expr(decls, "f().i"));
         assertEquals("(member:char (materialize:struct S (assign:struct S s:struct S (rv:struct S s:struct S))) c)",
                 expr(decls, "(s = s).c"));
@@ -1043,7 +1047,7 @@ class TyperTest {
         assertEquals(2, g.locals().size(), "one temporary per evaluated materialization");
         assertEquals("struct S", g.locals().get(0).type().spelling());
         assertTrue(g.locals().get(0) instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.AUTOMATIC);
-        assertEquals("(assign:int (member:int (materialize:struct S (call:struct S (fdecay:struct S (*)(void) f:struct S (void)))) i) 1:int)",
+        assertEquals("(assign:int (member:int (materialize:struct S (call:struct S f:struct S (void))) i) 1:int)",
                 expr(decls, "f().i = 1"), "a temporary is a modifiable lvalue");
         assertTrue(exprFails("struct S { int i; } f(void);", "&f()").getMessage().contains("address of an rvalue"));
     }
@@ -1209,7 +1213,7 @@ class TyperTest {
     @Test
     void localInitializersAndSizeCompletion() {
         assertEquals("(block (local a:int [2] (init (0 1:int) (4 (rv:int x:int)))) (local s:char [3] (init (0 104:char) (1 105:char))) "
-                        + "(local v:struct S (init (0 (rv:int x:int)) (4 (call:int (fdecay:int (*)(void) g:int (void)))))))",
+                        + "(local v:struct S (init (0 (rv:int x:int)) (4 (call:int g:int (void))))))",
                 body("struct S { int a, b; }; int x; int g(void);", "int a[] = {1, x}; char s[] = \"hi\"; struct S v = {x, g()};"));
         assertEquals("8:unsigned long", expr("int a[] = {1, 2};", "sizeof a"));
         assertEquals(List.of("a: int [2]"), declaredTypes("int a[] = {1, 2};"));
@@ -1277,7 +1281,7 @@ class TyperTest {
         assertEquals("(lit:int [3] (init (0 1:int) (4 2:int) (8 3:int)))", expr("", "(int[]){1, 2, 3}"));
         assertEquals("(lit:struct S (init (0 (rv:int x:int)) (4 2:int)))", expr("struct S { int a, b; }; int x;", "(struct S){x, 2}"));
         assertEquals("(add:int (rv:int (member:int (lit:struct S (init (0 1:int))) a)) 0:int)", expr("struct S { int a, b; };", "(struct S){1}.a + 0"));
-        assertEquals("(call:int (fdecay:int (*)(int *) f:int (int *)) (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))",
+        assertEquals("(call:int f:int (int *) (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))",
                 expr("int f(int *);", "f((int[2]){1, 2})"));
         assertEquals("(assign:int * p:int * (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))", expr("int *p;", "p = (int[2]){1, 2}"));
         assertEquals("(addr:struct S * (lit:struct S (init)))", expr("struct S { int a; };", "&(struct S){}"));
