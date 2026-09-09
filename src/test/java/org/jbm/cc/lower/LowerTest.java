@@ -244,4 +244,53 @@ class LowerTest {
                 declare @e : i32
                 """, unit("int a; int b = 7; static double c = 2.5; const int k = 1; int *p = &b; int *q = 0; int arr[3] = {1, 2}; extern int e;"));
     }
+
+    // ---- 5: integer conversions ----------------------------------------------------------------
+
+    /** The instructions of {@code body} over locals {@code decls}, without the declarations. */
+    static String instrs(String decls, String body) {
+        return afterEntry(body("", decls + " " + body));
+    }
+
+    static String instrsOn(Types types, String decls, String body) {
+        return afterEntry(bodyOn(types, "", decls + " " + body));
+    }
+
+    private static String afterEntry(String body) {
+        int at = body.indexOf(".entry:");
+        String rest = body.substring(at + ".entry:".length());
+        return rest.startsWith("\n") ? rest.substring(1) : rest;
+    }
+
+    @Test
+    void integerConversionsWithinAClass() {
+        assertEquals("  mov %t0, %s\n  %t0 = and %t0, 65535", instrs("short s;", "(unsigned short) s;"));
+        assertEquals("  mov %t0, %sc\n  %t0 = and %t0, 65535", instrs("signed char sc;", "(unsigned short) sc;"));
+        assertEquals("  mov %t0, %uc", instrs("unsigned char uc;", "(short) uc;"));
+        assertEquals("  mov %t0, %uc", instrs("unsigned char uc;", "(int) uc;"));
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 24\n  %t0 = ashr %t0, 24", instrs("int i;", "(char) i;"));
+        assertEquals("  mov %t0, %i\n  %t0 = and %t0, 255", instrs("int i;", "(unsigned char) i;"));
+        assertEquals("  mov %t0, %i", instrs("int i;", "(unsigned) i;"));
+        assertEquals("  mov %t0, %us\n  %t0 = shl %t0, 16\n  %t0 = ashr %t0, 16", instrs("unsigned short us;", "(short) us;"));
+        assertEquals("  mov %t0, %b", instrs("bool b;", "(int) b;"));
+    }
+
+    @Test
+    void integerConversionsAcrossClasses() {
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", instrs("int i;", "(long) i;"));
+        assertEquals("  mov %t0, %u", instrs("unsigned u;", "(long) u;"));
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", instrs("int i;", "(unsigned long) i;"));
+        assertEquals("  mov %t0, %c\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", instrs("char c;", "(long) c;"));
+        assertEquals("  mov %t0, %l", instrs("long l;", "(int) l;"));
+        assertEquals("  mov %t0, %l", instrs("long l;", "(unsigned) l;"));
+        assertEquals("  mov %t0, %l\n  %t0 = shl %t0, 24\n  %t0 = ashr %t0, 24", instrs("long l;", "(char) l;"));
+        assertEquals("  mov %t0, %l\n  %t0 = and %t0, 255", instrs("long l;", "(unsigned char) l;"));
+    }
+
+    @Test
+    void integerConversionsOnTheOtherTarget() {
+        assertEquals("", instrsOn(ILP32, "int i;", "(long) i;"));
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32", instrsOn(ILP32, "int i;", "(long long) i;"));
+        assertEquals("  mov %t0, %ll", instrsOn(ILP32, "long long ll;", "(long) ll;"));
+    }
 }
