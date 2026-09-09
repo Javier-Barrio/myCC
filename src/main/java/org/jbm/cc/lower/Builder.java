@@ -55,6 +55,14 @@ final class Builder {
         current = b;
     }
 
+    /** Closes the current block without a terminator, for a block that turned out empty. */
+    void dropIfEmpty() {
+        if (current != null && current.instrs.isEmpty()) {
+            fn.blocks.remove(current);
+            current = null;
+        }
+    }
+
     boolean isOpen() {
         return current != null;
     }

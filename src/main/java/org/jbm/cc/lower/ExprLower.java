@@ -410,9 +410,14 @@ final class ExprLower implements TVisitor<Val> {
         return new Val(r, e.type());
     }
 
+    // A comparison, a logical operator or ! already yields 0 or 1, which
+    // is canonical for bool, so ToBool of one is the value itself.
     @Override
     public Val visit(TExpr.ToBool e) {
         Val v = value(e.operand());
+        if (e.operand() instanceof TExpr.Comparison || e.operand() instanceof TExpr.Logical || e.operand() instanceof TExpr.Not) {
+            return new Val(v.var(), e.type());
+        }
         Var r = temp(e.type());
         if (v.type().isFloating()) b.emit(new Instr.Cmp(Instr.CmpOp.FNE, r, v.var(), new Operand.FloatImm(0.0), e.token()));
         else b.emit(new Instr.Cmp(Instr.CmpOp.NE, r, v.var(), new Operand.IntImm(0), e.token()));

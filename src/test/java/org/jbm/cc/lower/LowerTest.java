@@ -413,6 +413,8 @@ class LowerTest {
         assertEquals("  %t0 = xor %i, -1", instrs("int i;", "~i;"));
         assertEquals("  %t0 = xor %b, -1\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b;", "~b;"));
         assertEquals("  %t0 = ne %i, 0\n  %t1 = eq %t0, 0", instrs("int i;", "!i;"));
+        assertEquals("  %t0 = slt %a, %b\n  %t1 = eq %t0, 0", instrs("int a, b;", "!(a < b);"));
+        assertEquals("  %t0 = slt %a, %b\n  mov %f, %t0", instrs("int a, b; bool f;", "f = a < b;"));
         assertEquals("  mov %t0, %c\n  %t1 = sub 0, %t0", instrs("char c;", "-c;"));
     }
 
@@ -726,5 +728,148 @@ class LowerTest {
     void commaEvaluatesTheLeftForItsEffect() {
         assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %x, %b", instrs("int a, b, x;", "x = (a = 1, b);"));
         assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %t1, 2\n  mov %b, %t1", instrs("int a, b;", "a = 1, b = 2;"));
+    }
+
+    // ---- 20: if -------------------------------------------------------------------------------
+
+    @Test
+    void ifWithoutElse() {
+        assertEquals("""
+                  %t0 = ne %c, 0
+                  condbr %t0, .then, .if.done
+                .then:
+                  mov %t1, 1
+                  mov %x, %t1
+                  br .if.done
+                .if.done:""", instrs("int c, x;", "if (c) x = 1;"));
+    }
+
+    @Test
+    void ifWithElse() {
+        assertEquals("""
+                  %t0 = ne %c, 0
+                  condbr %t0, .then, .else
+                .then:
+                  mov %t1, 1
+                  mov %x, %t1
+                  br .if.done
+                .else:
+                  mov %t2, 2
+                  mov %x, %t2
+                  br .if.done
+                .if.done:""", instrs("int c, x;", "if (c) x = 1; else x = 2;"));
+    }
+
+    @Test
+    void nestedAndEmptyBranches() {
+        assertEquals("""
+                  %t0 = ne %a, 0
+                  condbr %t0, .then, .if.done
+                .then:
+                  %t1 = ne %b, 0
+                  condbr %t1, .then.2, .if.done.2
+                .then.2:
+                  mov %t2, 1
+                  mov %x, %t2
+                  br .if.done.2
+                .if.done.2:
+                  br .if.done
+                .if.done:""", instrs("int a, b, x;", "if (a) { if (b) x = 1; }"));
+        assertEquals("""
+                  %t0 = ne %a, 0
+                  condbr %t0, .then, .if.done
+                .then:
+                  br .if.done
+                .if.done:""", instrs("int a;", "if (a) {}"));
+    }
+
+    // ---- 21: loops -------------------------------------------------------------------------------
+
+    @Test
+    void whileLoop() {
+        assertEquals("""
+                  br .while.cond
+                .while.cond:
+                  %t0 = ne %n, 0
+                  condbr %t0, .while.body, .while.done
+                .while.body:
+                  mov %t1, 1
+                  %t2 = sub %n, %t1
+                  mov %n, %t2
+                  br .while.cond
+                .while.done:""", instrs("int n;", "while (n) n--;"));
+    }
+
+    @Test
+    void doWhileLoop() {
+        assertEquals("""
+                  br .do.body
+                .do.body:
+                  mov %t0, 1
+                  %t1 = sub %n, %t0
+                  mov %n, %t1
+                  br .do.cond
+                .do.cond:
+                  %t2 = ne %n, 0
+                  condbr %t2, .do.body, .do.done
+                .do.done:""", instrs("int n;", "do n--; while (n);"));
+    }
+
+    @Test
+    void forLoopWithADeclaration() {
+        assertEquals("""
+                  mov %t0, 0
+                  mov %i, %t0
+                  br .for.cond
+                .for.cond:
+                  %t1 = slt %i, %n
+                  condbr %t1, .for.body, .for.done
+                .for.body:
+                  mov %t2, 1
+                  %t3 = add %s, %t2
+                  mov %s, %t3
+                  br .for.step
+                .for.step:
+                  mov %t4, 1
+                  %t5 = add %i, %t4
+                  mov %i, %t5
+                  br .for.cond
+                .for.done:""", instrs("int n, s;", "for (int i = 0; i < n; i++) s += 1;"));
+    }
+
+    @Test
+    void forLoopWithoutClauses() {
+        assertEquals("""
+                  br .for.body
+                .for.body:
+                  br .for.done
+                .for.step:
+                  br .for.body
+                .for.done:""", instrs("", "for (;;) break;"));
+    }
+
+    @Test
+    void breakAndContinue() {
+        assertEquals("""
+                  br .while.cond
+                .while.cond:
+                  %t0 = ne %n, 0
+                  condbr %t0, .while.body, .while.done
+                .while.body:
+                  %t1 = ne %c, 0
+                  condbr %t1, .then, .if.done
+                .then:
+                  br .while.cond
+                .if.done:
+                  %t2 = ne %d, 0
+                  condbr %t2, .then.2, .if.done.2
+                .then.2:
+                  br .while.done
+                .if.done.2:
+                  mov %t3, 1
+                  %t4 = sub %n, %t3
+                  mov %n, %t4
+                  br .while.cond
+                .while.done:""", instrs("int n, c, d;", "while (n) { if (c) continue; if (d) break; n--; }"));
     }
 }
