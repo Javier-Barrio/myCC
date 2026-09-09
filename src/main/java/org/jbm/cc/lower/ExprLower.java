@@ -393,14 +393,30 @@ final class ExprLower implements TVisitor<Val> {
         return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.XOR, Instr.BinOp.XOR, Instr.BinOp.XOR);
     }
 
+    // The amount was promoted on its own and is in W; when the left is in
+    // L it is moved into an L first, since a shift's operands share a class.
+    private Val shift(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Instr.BinOp op, Token at) {
+        Val l = value(left);
+        Val r = value(right);
+        Var amount = r.var();
+        if (target.classOf(typeMap.of(t)) != target.classOf(amount.type)) {
+            amount = b.temp(typeMap.of(t));
+            b.emit(new Instr.Mov(amount, r.var(), at));
+        }
+        Var d = temp(t);
+        b.emit(new Instr.Bin(op, d, l.var(), amount, at));
+        if (t instanceof CType.BitInt) canon(d, t, at);
+        return new Val(d, t);
+    }
+
     @Override
     public Val visit(TExpr.Shl e) {
-        throw notYet(e);
+        return shift(e.left(), e.right(), e.type(), Instr.BinOp.SHL, e.token());
     }
 
     @Override
     public Val visit(TExpr.Shr e) {
-        throw notYet(e);
+        return shift(e.left(), e.right(), e.type(), types.isSigned(e.type()) ? Instr.BinOp.ASHR : Instr.BinOp.LSHR, e.token());
     }
 
     @Override

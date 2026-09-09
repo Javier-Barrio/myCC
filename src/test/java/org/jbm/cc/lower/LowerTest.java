@@ -370,4 +370,17 @@ class LowerTest {
         assertEquals("  %t0 = add %a, %b\n  %t0 = shl %t0, 25\n  %t0 = ashr %t0, 25", instrs("_BitInt(7) a, b;", "a + b;"));
         assertEquals("  %t0 = wmul %a, %b\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) a, b;", "a * b;"));
     }
+
+    // ---- 9: shifts ------------------------------------------------------------------------------
+
+    @Test
+    void shifts() {
+        assertEquals("  %t0 = shl %i, %n", instrs("int i, n;", "i << n;"));
+        assertEquals("  %t0 = ashr %i, %n", instrs("int i, n;", "i >> n;"));
+        assertEquals("  %t0 = lshr %u, %n", instrs("unsigned u; int n;", "u >> n;"));
+        assertEquals("  mov %t0, %n\n  %t1 = ashr %l, %t0", instrs("long l; int n;", "l >> n;"));
+        assertEquals("  mov %t0, %l\n  %t1 = shl %i, %t0", instrs("int i; long l;", "i << l;"));
+        assertEquals("  mov %t0, %c\n  mov %t1, 2\n  %t2 = shl %t0, %t1", instrs("char c;", "c << 2;"));
+        assertEquals("  %t0 = lshr %b, %n\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b; int n;", "b >> n;"));
+    }
 }
