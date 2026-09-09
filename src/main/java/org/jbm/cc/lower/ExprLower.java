@@ -72,7 +72,7 @@ final class ExprLower implements TVisitor<Val> {
         CType from = v.type();
         if (typeMap.of(from).equals(dest)) return new Val(v.var(), to);
         int wf = types.width(from), wt = types.width(to);
-        boolean sf = types.isSigned(from), st = types.isSigned(to);
+        boolean sf = from.isInteger() && types.isSigned(from), st = types.isSigned(to);
         Var r = b.temp(dest);
         b.emit(new Instr.Mov(r, v.var(), at));
         int cf = classWidth(from), ct = classWidth(to);
@@ -257,22 +257,37 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.IntToFloat e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        Var r = temp(e.type());
+        b.emit(new Instr.Cvt(types.isSigned(v.type()) ? Instr.CvtOp.I2F : Instr.CvtOp.U2F, r, v.var(), e.token()));
+        return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.FloatToInt e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        Var r = temp(e.type());
+        b.emit(new Instr.Cvt(types.isSigned(e.type()) ? Instr.CvtOp.F2I : Instr.CvtOp.F2U, r, v.var(), e.token()));
+        canon(r, e.type(), e.token());
+        return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.FloatToFloat e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        if (typeMap.of(v.type()).equals(typeMap.of(e.type()))) return new Val(v.var(), e.type());
+        Var r = temp(e.type());
+        b.emit(new Instr.Cvt(Instr.CvtOp.FCVT, r, v.var(), e.token()));
+        return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.ToBool e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        Var r = temp(e.type());
+        if (v.type().isFloating()) b.emit(new Instr.Cmp(Instr.CmpOp.FNE, r, v.var(), new Operand.FloatImm(0.0), e.token()));
+        else b.emit(new Instr.Cmp(Instr.CmpOp.NE, r, v.var(), new Operand.IntImm(0), e.token()));
+        return new Val(r, e.type());
     }
 
     @Override
