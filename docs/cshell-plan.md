@@ -4,9 +4,12 @@ An interactive C shell in the spirit of `jshell`: type a declaration, a
 statement or an expression at a prompt and see it defined, run or evaluated
 against everything typed before. The shell is a loop around two things
 that exist independently of it: the **compiler**, which turns C source into
-a `Module` of TAC, and a **VM**, a separate project, which executes TAC.
-The shell adds no pass and no state to either; it concatenates what has
-been typed, compiles all of it, loads the result into the VM and calls one
+a `Module` of TAC, and a **VM**, which executes TAC. Both live in this
+repository: the compiler under `org.jbm.cc`, the VM under `org.jbm.vm`
+and the shell under `org.jbm.cshell`, so the names say which is a
+consumer of which. The
+shell adds no pass and no state to either; it concatenates what has been
+typed, compiles all of it, loads the result into the VM and calls one
 function. This document says what the compiler has to be for that loop to
 work, what the TAC is, what the VM is asked to do, and how the shell itself
 is built.
@@ -44,10 +47,10 @@ machine. We branch at the TAC because:
    same `Module`, so lowering is tested by running programs long before
    `Codegen` exists, and the two can be compared on the same programs once
    it does.
-3. [ ] **The VM is a project of its own.** The TAC's object model and text
-   form are the boundary. The shell lives with the compiler, because it
-   needs every pass, and reaches the VM through an `Engine` interface the
-   compiler defines and the VM implements.
+3. [ ] **The VM sees only the TAC.** `org.jbm.vm` depends on `org.jbm.cc.tac`
+   and `org.jbm.cc.types` and on nothing in the front end, so it could be
+   lifted out as its own artifact at any time; `org.jbm.cshell` is the
+   only place the compiler and the VM meet.
 
 The cost is that the TAC has to be designed as a public, serializable
 instruction set with a written contract, rather than as whatever `Lower`
@@ -107,19 +110,23 @@ call site sees it. An undefined name faults at the reference, with the
 name, which is how the shell reports a declared-but-undefined function
 without refusing the line.
 
-## Decision: one Gradle build, three modules
+## Decision: one build, packages with one-way dependencies
 
-So that the VM project depends on a small artifact and never sees the
-front end:
+Everything is in this repository and one Gradle module. The layering is
+by package, and it is what would become the module boundaries if the VM
+were ever split out:
 
 ```
-cc-tac      org.jbm.cc.types, org.jbm.cc.tac, org.jbm.cc.engine    what the VM needs
-cc          the front end, org.jbm.cc.lower, later org.jbm.cc.codegen; depends on cc-tac
-cc-shell    org.jbm.cc.shell; depends on cc and on the VM's jar
+org.jbm.cc.types, org.jbm.cc.tac     the compiler's output: model, reader, writer, invariants, Target
+org.jbm.cc.cpp ... org.jbm.cc.lower  the compiler; Compiler.compile is its one entry
+org.jbm.vm                           the VM: loader, interpreter, builtins; depends on cc.tac and cc.types only
+org.jbm.cshell                       the loop; the only package that depends on both the compiler and the VM
 ```
 
 `sema.Symbol` is referenced from the typed tree but not from the TAC,
-which names things by string, so `cc-tac` does not depend on `sema`.
+which names things by string, so `tac` does not depend on `sema`, and the
+VM never sees the front end. The shell uses the typed tree only to learn
+the C type of a result for printing.
 
 ## Pipeline
 
@@ -220,8 +227,8 @@ VM's faults and the shell's messages can point at a source line, and
 
 ## What the shell asks of the VM: `Engine`
 
-One interface, defined in `cc-tac` so the VM implements it and the shell
-can be tested against a fake:
+One interface, in `org.jbm.vm`, that the VM implements and the shell
+consumes; the merge semantics are what make the shell's loop work:
 
 ```
 interface Engine {
@@ -256,8 +263,9 @@ aggregate as an address the VM owns. The VM provides the libc as builtins
 bound to the usual names (`printf`, `malloc`, `strlen`, ...). The compiler
 provides the **headers** that declare them (`stdio.h`, `stdlib.h`,
 `string.h`, `math.h`, `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`)
-through a `HeaderProvider`, so `#include <stdio.h>` works in the shell and
-in the compiler.
+as resources of `cc` served through its `HeaderProvider`, so `#include
+<stdio.h>` means the same in the shell and in the compiler, and the VM's
+builtins are written against those declarations.
 
 ## The shell
 
@@ -350,19 +358,22 @@ editing, history and completion come later through JLine behind a
 ## Packages and classes
 
 ```
-cc-tac
-  org.jbm.cc.tac              Module, Function, Block, Data, Reloc, Slot, Temp, Type; Instr (sealed, one record
+org.jbm.cc.tac                Module, Function, Block, Data, Reloc, Slot, Temp, Type; Instr (sealed, one record
                               per instruction, each with its token); TacVisitor; TacWriter; TacReader;
                               TacInvariants (temps typed and assigned before use, branch targets in the
                               function, names defined or external, widths consistent)
-  org.jbm.cc.engine           Engine, Value, ExecutionException, HeaderProvider
-cc
-  org.jbm.cc.Compiler         compile(source, headers) -> Compiled(typed, tac); the one entry; Main uses it
-  org.jbm.cc.lower            Lower (the pass), ExprLower, StmtLower (JumpTarget to Block, switch tables),
+org.jbm.cc.lower              Lower (the pass), ExprLower, StmtLower (JumpTarget to Block, switch tables),
                               DataLower (TInit to bytes and relocations)
-cc-shell
-  org.jbm.cc.shell            Repl (the loop, the kept lines, the line map, classification, commands),
-                              ValuePrinter, LineReader, CShell (main; the Engine comes from the VM's jar)
+org.jbm.cc.Compiler           compile(source, headers) -> Compiled(typed, tac); the one entry; Main uses it
+org.jbm.cc.cpp.HeaderProvider headers by name; the bundled ones as resources
+org.jbm.vm                    Engine, Value, ExecutionException (the contract);
+                              Memory (segments: unmapped null page, data, stack, heap; typed load/store; faults);
+                              Loader (symbol table, placement, relocations, merge on reload, late binding);
+                              Interpreter (a TacVisitor over Instr with a frame per call);
+                              Builtins, Libc (printf family, malloc family, string and memory functions,
+                              exit and abort, math.h through java.lang.Math)
+org.jbm.cshell                Repl (the loop, the kept lines, the line map, classification, commands),
+                              ValuePrinter, LineReader, CShell (main)
 ```
 
 ## Changes to existing code
@@ -376,21 +387,23 @@ cc-shell
 - **`tast`**: no change. `TFunction.locals` is already the frame,
   `JumpTarget` the block identity, `DirectCall`/`IndirectCall` already
   `call`/`icall`, `Materialize` already a slot, `TInit` already the data.
-- **Build**: split into the three modules; `Main` moves to `cc`.
+- **Build**: a `cshell` Gradle task; no module split.
 
 ## Testing
 
 - **Lowering corpus**: `src/test/resources/tac/*.c` with a `.tac` golden
   beside each, like the typed corpus; `TacInvariants` over every module;
   a round trip through `TacWriter` and `TacReader`.
+- **VM unit tests**: `Memory` (segments, widths, faults), `Interpreter` on
+  hand-built modules (each instruction kind, conversions on both targets,
+  `switch` ranges, by-value aggregates), `Loader` (relocations, merge on
+  reload: a global keeps its contents, a changed function is replaced),
+  `printf` formats, `malloc` reuse.
 - **Run corpus**: `src/test/resources/run/*.c`, programs with `main` and a
   `.out` file with the expected stdout and exit status, produced by `gcc`
-  on the host and checked in. They run on the VM through `Engine` in the
-  `cc-shell` suite when the VM's jar is present, and in the VM project's
-  own suite. `Main.SOURCE` is the first entry (exit status 49). Until the
-  VM exists the lowering goldens are the test of `Lower`; a stand-in
-  `Engine` in the test tree is an option if that gap lasts, and is not
-  otherwise planned.
+  on the host and checked in, compiled through `Compiler.compile` and run
+  on the VM. `Main.SOURCE` is the first entry (exit status 49). Programs
+  are chosen to cover every `tast` node kind and every `Instr`.
 - **Shell transcripts**: `src/test/resources/shell/*.cshell`, a script of
   input lines and the exact expected output, through `Repl` with the VM
   and a fake `LineReader`: each line kind, continuation, every command,
@@ -404,8 +417,8 @@ cc-shell
 
 Each step is one commit with the suite green and `Main` still running.
 A is the TAC and lowering, needed by the compiler regardless of the shell.
-B is what the shell needs from the build and the front end. C and D are
-the shell; C needs A and B and a VM.
+B is the compiler entry and headers. C is the VM and needs only A. D is
+the shell and needs all three; E and F follow D.
 
 ### A - the TAC and lowering
 1. [ ] **The TAC model** in `org.jbm.cc.tac`: the records, `TacVisitor`,
@@ -427,24 +440,37 @@ the shell; C needs A and B and a VM.
    `Lower.lower(TUnit)`; `Main` prints the TAC.
 7. [ ] **`TacReader`** and the round trip.
 
-### B - the build and the front end
+### B - the compiler entry and headers
 1. [ ] **`Compiler.compile`** as the one entry; `Main` and the pipeline tests
    use it.
-2. [ ] **Three modules**: `cc-tac`, `cc`, `cc-shell`; `engine` interfaces in
-   `cc-tac`.
-3. [ ] **`#include`** in `cpp` with `HeaderProvider`; the bundled headers as
-   resources in `cc-tac` so the VM's tests can use them too.
+2. [ ] **`#include`** in `cpp` with `HeaderProvider`; the bundled headers as
+   resources.
 
-### C - the loop
+### C - the VM
+1. [ ] **`Memory` and `Value`**: segments, aligned allocation, typed load
+   and store, faults; unit tests on both targets.
+2. [ ] **`Interpreter`** over `Instr`: temporaries and slots in a frame,
+   arithmetic, comparisons, conversions, addresses, `load`/`store`/`copy`/
+   `zero`, branches and `switch`, `call` and `icall` with by-value
+   aggregates, `ret`; hand-built module tests.
+3. [ ] **`Loader`**: data items with relocations, strings by name, function
+   addresses, late binding of names, merge semantics on reload; `Engine`.
+4. [ ] **Builtins**: `Libc` with the string and memory functions, `exit` and
+   `abort`, the `malloc` family on the heap; then the `printf` family
+   (`%d %i %u %x %o %c %s %p %f %g %e %ld %lu %lld %zu %%`, width,
+   precision, flags); then `math.h`.
+5. [ ] **Run corpus**; milestone: `Main.SOURCE` exits with 49.
+
+### D - the loop
 1. [ ] **`Repl` core**: kept lines, line map, compile, `load`, `call`;
    declarations only; the first transcripts with the VM.
 2. [ ] **Statements and expressions**: the statement wrap, the `typeof_unqual`
    wrap, `$N`, `ValuePrinter`, continuation on `EOF`.
 3. [ ] **Redefinition and `/drop`**: replacing a kept line, restoring it on
    failure, the refusal when a drop breaks dependents.
-4. [ ] **Run corpus** in `cc-shell` through `Engine`.
+4. [ ] **Transcripts** for everything above.
 
-### D - the terminal
+### E - the terminal
 1. [ ] **`LineReader`**, prompts, the pre-scan, error display with the caret,
    `CShell` main and a `cshell` Gradle task.
 2. [ ] **Commands**: `/help /list /vars /funcs /types /macros /tac /reset
@@ -452,7 +478,7 @@ the shell; C needs A and B and a VM.
 3. [ ] **`/load` and `/save`**; a file given on the command line is loaded
    first.
 
-### E - closing
+### F - closing
 1. [ ] **Non-constant initializers at file scope** (`int v[3] = { sq(1), ...
    }`, accepted as `jshell` accepts them): the shell rewrites the line as
    the declaration plus an initializer function using a compound literal
