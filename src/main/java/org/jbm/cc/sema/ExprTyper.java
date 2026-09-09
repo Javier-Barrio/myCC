@@ -378,6 +378,7 @@ final class ExprTyper {
      */
     Lvalue modifiable(TExpr x, Token at) {
         Lvalue lv = lvalue(x, at);
+        if (isTemporaryMember(lv)) throw new SemaException("cannot modify a member of a temporary object", at);
         CType t = lv.type();
         if (t.isArray()) throw new SemaException("cannot assign to an array", at);
         if (!t.isComplete()) throw new SemaException("cannot assign to an incomplete type '" + t.spelling() + "'", at);
@@ -613,6 +614,7 @@ final class ExprTyper {
     // &f on a function is its decay.
     private TExpr addressOf(Token op, TExpr x) {
         if (isBitField(x)) throw new SemaException("cannot take the address of a bit-field", op);
+        if (isTemporaryMember(x)) throw new SemaException("cannot take the address of a member of a temporary object", op);
         if (x instanceof TExpr.Deref d) return d.pointer();
         if (x instanceof TExpr.FunctionDesignator fd) return rvalue(fd);
         if (x instanceof TExpr.Lvalue lv) return new TExpr.AddrOf(lv, types.pointer(lv.type()), op);
@@ -769,6 +771,15 @@ final class ExprTyper {
 
     private static boolean isBitField(TExpr x) {
         return x instanceof TExpr.Member m && m.member().bits().isPresent();
+    }
+
+    // s.m on a struct rvalue is not an lvalue (6.5.3.4p3): the member of
+    // the temporary the value was stored in may be read, but a store into
+    // it or its address would outlive nothing (6.2.4p8). The tree gives
+    // Member an Lvalue base regardless, so the rvalue-ness is checked here.
+    private static boolean isTemporaryMember(TExpr x) {
+        while (x instanceof TExpr.Member m) x = m.base();
+        return x instanceof TExpr.Materialize;
     }
 
     Rvalue toBool(Rvalue x) {

@@ -1047,8 +1047,15 @@ class TyperTest {
         assertEquals(2, g.locals().size(), "one temporary per evaluated materialization");
         assertEquals("struct S", g.locals().get(0).type().spelling());
         assertTrue(g.locals().get(0) instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.AUTOMATIC);
-        assertEquals("(assign:int (member:int (materialize:struct S (call:struct S f:struct S (void))) i) 1:int)",
-                expr(decls, "f().i = 1"), "a temporary is a modifiable lvalue");
+        // s.m on a non-lvalue is not an lvalue (6.5.3.4p3): readable, but not writable or addressable.
+        assertTrue(exprFails(decls, "f().i = 1").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "f().i += 1").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "f().i++").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "++f().i").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "&f().i").getMessage().contains("address of a member of a temporary"));
+        assertTrue(exprFails("struct T { struct S { int i; } s; } g(void);", "g().s.i = 1").getMessage().contains("member of a temporary"));
+        assertEquals("(add:int (rv:int (member:int (materialize:struct S (call:struct S f:struct S (void))) i)) 1:int)",
+                expr(decls, "f().i + 1"), "reading a member of a temporary is fine");
         assertTrue(exprFails("struct S { int i; } f(void);", "&f()").getMessage().contains("address of an rvalue"));
     }
 
