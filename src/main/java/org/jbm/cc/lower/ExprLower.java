@@ -15,6 +15,7 @@ import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Layout;
 import org.jbm.cc.types.Types;
 
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,6 +33,10 @@ final class ExprLower implements TVisitor<Val> {
     private final TargetDesc target;
     private final Builder b;
     private final Map<Symbol, Var> vars;
+    // The value a compound or postfix assignment's target held, keyed by
+    // the target node the tree shares between the assignment and its
+    // TargetValue.
+    private final Map<TExpr.Lvalue, Val> targetValues = new IdentityHashMap<>();
 
     ExprLower(@NonNull Lower lower, @NonNull Builder b, @NonNull Map<Symbol, Var> vars) {
         this.types = lower.types;
@@ -95,6 +100,23 @@ final class ExprLower implements TVisitor<Val> {
 
     Val value(@NonNull TExpr.Rvalue e) {
         return e.accept(this);
+    }
+
+    // Set for the top node of an expression statement: an assignment then
+    // skips computing the value it would yield.
+    private boolean discard;
+
+    /** Lowers an expression whose value is not used. */
+    void effect(@NonNull TExpr.Rvalue e) {
+        discard = true;
+        e.accept(this);
+        discard = false;
+    }
+
+    private boolean discarded() {
+        boolean d = discard;
+        discard = false;
+        return d;
     }
 
     private Var temp(CType t) {
@@ -617,25 +639,61 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.Assign e) {
+        boolean unused = discarded();
         Place target = place(e.target());
         Val v = value(e.value());
         write(target, v, e.token());
+        return unused ? v : stored(target, v, e.token());
+    }
+
+    // What the target holds after a store: the value, the value clipped to
+    // a bit-field's width, or the aggregate's pointer.
+    private Val stored(Place target, Val v, Token at) {
+        if (target instanceof Place.Memory m) {
+            if (m.type().isArray() || m.type().isRecord()) return new Val(m.ptr(), m.type());
+            if (m.bits().isPresent()) {
+                Var r = temp(m.type());
+                b.emit(new Instr.Mov(r, v.var(), at));
+                canon(r, types.isSigned(m.type()), m.bits().get().width(), classWidth(m.type()), at);
+                return new Val(r, m.type());
+            }
+        }
         return v;
+    }
+
+    // The target place is computed once; its old value is what TargetValue
+    // yields inside newValue; then the new value is stored.
+    private Val compound(TExpr.Lvalue target, TExpr.Rvalue newValue, Token at, boolean yieldOld) {
+        boolean unused = discarded();
+        Place a = place(target);
+        Val old = read(a, at);
+        if (yieldOld && a instanceof Place.Variable) {
+            Var copy = temp(old.type());
+            b.emit(new Instr.Mov(copy, old.var(), at));
+            old = new Val(copy, old.type());
+        }
+        targetValues.put(target, old);
+        Val n = value(newValue);
+        targetValues.remove(target);
+        write(a, n, at);
+        return yieldOld ? old : unused ? n : stored(a, n, at);
     }
 
     @Override
     public Val visit(TExpr.CompoundAssign e) {
-        throw notYet(e);
+        return compound(e.target(), e.newValue(), e.token(), false);
     }
 
     @Override
     public Val visit(TExpr.PostfixAssign e) {
-        throw notYet(e);
+        return compound(e.target(), e.newValue(), e.token(), true);
     }
 
     @Override
     public Val visit(TExpr.TargetValue e) {
-        throw notYet(e);
+        Val old = targetValues.get(e.target());
+        if (old == null) throw new IllegalStateException("TargetValue outside its assignment");
+        return old;
     }
 
     @Override
