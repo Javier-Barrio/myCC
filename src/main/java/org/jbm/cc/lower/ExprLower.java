@@ -298,22 +298,26 @@ final class ExprLower implements TVisitor<Val> {
 
     @Override
     public Val visit(TExpr.PtrToPtr e) {
-        throw notYet(e);
+        return new Val(value(e.operand()).var(), e.type());
     }
 
+    // An integer to a pointer is the conversion to an unsigned integer of
+    // the pointer width, into a ptr variable.
     @Override
     public Val visit(TExpr.IntToPtr e) {
-        throw notYet(e);
+        return new Val(convertInt(value(e.operand()), types.sizeT(), Type.PTR, e.token()).var(), e.type());
     }
 
     @Override
     public Val visit(TExpr.PtrToInt e) {
-        throw notYet(e);
+        return convertInt(value(e.operand()), e.type(), typeMap.of(e.type()), e.token());
     }
 
     @Override
     public Val visit(TExpr.NullToPtr e) {
-        throw notYet(e);
+        Var r = b.temp(Type.PTR);
+        b.emit(new Instr.Mov(r, new Operand.IntImm(0), e.token()));
+        return new Val(r, e.type());
     }
 
     // ---- operators --------------------------------------------------------------------------------
