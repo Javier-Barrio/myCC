@@ -1,7 +1,8 @@
-package org.jbm.cc.types;
+package org.jbm.cc.arch;
 
 import org.jbm.cc.types.CType.Float;
 import org.jbm.cc.types.CType.Int.Rank;
+import org.jbm.cc.types.Target;
 
 /**
  * A test-only 32-bit target (ILP32, unsigned plain char, 4-byte

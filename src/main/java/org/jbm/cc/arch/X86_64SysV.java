@@ -1,7 +1,8 @@
-package org.jbm.cc.types;
+package org.jbm.cc.arch;
 
 import org.jbm.cc.types.CType.Float;
 import org.jbm.cc.types.CType.Int.Rank;
+import org.jbm.cc.types.Target;
 
 /**
  * The System V AMD64 ABI: LP64, plain {@code char} signed, natural

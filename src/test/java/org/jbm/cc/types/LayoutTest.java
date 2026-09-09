@@ -1,5 +1,7 @@
 package org.jbm.cc.types;
 
+import org.jbm.cc.arch.Ilp32;
+import org.jbm.cc.arch.X86_64SysV;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

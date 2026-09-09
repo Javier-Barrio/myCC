@@ -1,5 +1,7 @@
 package org.jbm.cc.types;
 
+import org.jbm.cc.arch.Ilp32;
+import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.types.CType.Int.Rank;
 import org.jbm.cc.types.CType.Int.Sign;
 import org.junit.jupiter.api.Test;

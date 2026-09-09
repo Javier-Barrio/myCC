@@ -1,5 +1,7 @@
 package org.jbm.cc;
 
+import org.jbm.cc.arch.Ilp32;
+import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
@@ -11,9 +13,7 @@ import org.jbm.cc.sema.Typer;
 import org.jbm.cc.tast.TUnit;
 import org.jbm.cc.tast.TypedPrinter;
 import org.jbm.cc.tast.TypedTreeInvariants;
-import org.jbm.cc.types.Ilp32;
 import org.jbm.cc.types.Types;
-import org.jbm.cc.types.X86_64SysV;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;

@@ -1,11 +1,11 @@
 package org.jbm.cc.sema;
 
+import org.jbm.cc.arch.Ilp32;
+import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.types.Ilp32;
 import org.jbm.cc.types.Types;
-import org.jbm.cc.types.X86_64SysV;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
