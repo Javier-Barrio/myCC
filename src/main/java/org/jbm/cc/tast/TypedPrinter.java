@@ -50,7 +50,11 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
     private String init(TInit i, org.jbm.cc.types.CType type) {
         if (type.isScalar() && i.items().size() == 1) return i.items().get(0).value().accept(this);
         var sb = new StringBuilder("(init");
-        for (var item : i.items()) sb.append(" (").append(item.offset()).append(' ').append(item.value().accept(this)).append(')');
+        for (var item : i.items()) {
+            sb.append(" (").append(item.offset());
+            item.bits().ifPresent(b -> sb.append(':').append(b.bitOffset()).append('/').append(b.width()));
+            sb.append(' ').append(item.value().accept(this)).append(')');
+        }
         return sb.append(')').toString();
     }
 

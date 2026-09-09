@@ -1044,4 +1044,18 @@ class LowerTest {
                 }
                 """.replace(".entry:\n  br", "  i32 %n\n  u8 %t0\n.entry:\n  br"), function("int main(void) { int n; while (n) return n; }"));
     }
+
+    // ---- 25: bit-field initializer items -------------------------------------------------------
+
+    @Test
+    void bitFieldInitializersAtRunTime() {
+        assertEquals("  %t0 = addrof %b\n  zero %B %t0\n  mov %t1, 3\n  mov %t2, %t1\n  %t3 = load.u32 %t0\n  %t3 = and %t3, -241\n  %t4 = and %t2, 15\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.32 %t0, %t3",
+                instrs("struct B { unsigned lo : 4; unsigned hi : 4; };", "struct B b = {.hi = 3};"));
+    }
+
+    @Test
+    void bitFieldInitializersInGlobals() {
+        assertEquals("global @g : %B align 4 = { 0 : 4/4 : 3, 3 : 4/1 : 1 }\n",
+                unit("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; }; struct B g = {.hi = 3, .flag = 1};").replaceFirst("(?s)^type[^\\n]*\\n", ""));
+    }
 }

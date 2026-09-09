@@ -14,6 +14,7 @@ import org.jbm.cc.types.Types;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Initialization (C2y 6.7.11): turns an initializer for an object of a
@@ -54,6 +55,11 @@ final class Initializers {
     // Initializes an object of type t at baseOffset from a whole
     // initializer; returns t, or the completed array type.
     private CType initObject(CType t, Initializer init, long baseOffset, Token at, List<TInit.Item> out) {
+        return initObject(t, init, baseOffset, at, out, Optional.empty());
+    }
+
+    private CType initObject(CType t, Initializer init, long baseOffset, Token at, List<TInit.Item> out,
+                             Optional<Layout.BitField> bits) {
         if (init instanceof Initializer.Expression e) {
             TExpr typed = exprs.type(e.expr());
             if (t.isArray()) {
@@ -63,11 +69,11 @@ final class Initializers {
                         ? " or a string literal of matching character type" : ""), at);
             }
             Rvalue value = exprs.assignConvert(exprs.rvalue(typed), types.unqualified(t), at, "initializing");
-            out.add(new TInit.Item(baseOffset, value));
+            out.add(new TInit.Item(baseOffset, value, bits));
             return t;
         }
         var braced = (Initializer.Braced) init;
-        if (t.isScalar()) return initScalarBraced(t, braced, baseOffset, out);
+        if (t.isScalar()) return initScalarBraced(t, braced, baseOffset, out, bits);
         if (!t.isArray() && !t.isRecord()) {
             throw new SemaException("cannot initialize a value of type '" + t.spelling() + "'", braced.brace());
         }
@@ -90,12 +96,13 @@ final class Initializers {
     }
 
     // A scalar in braces (6.7.11p11): one initializer, itself possibly braced.
-    private CType initScalarBraced(CType t, Initializer.Braced braced, long baseOffset, List<TInit.Item> out) {
+    private CType initScalarBraced(CType t, Initializer.Braced braced, long baseOffset, List<TInit.Item> out,
+                                   Optional<Layout.BitField> bits) {
         if (braced.items().isEmpty()) return t;
         if (braced.items().size() > 1) throw excess(braced.items().get(1), braced.brace());
         var item = braced.items().get(0);
         if (!item.designators().isEmpty()) throw new SemaException("designator in initializer for a scalar", braced.brace());
-        return initObject(t, item.initializer(), baseOffset, braced.brace(), out);
+        return initObject(t, item.initializer(), baseOffset, braced.brace(), out, bits);
     }
 
     private static SemaException excess(Initializer.Item item, Token brace) {
@@ -283,10 +290,12 @@ final class Initializers {
         private int subobject(long index, Initializer.Item item, int pos, List<Initializer.Designator> rest) {
             CType subType;
             long subOffset;
+            Optional<Layout.BitField> bits = Optional.empty();
             if (layout != null) {
                 Layout.Member s = layout.slots().get((int) index);
                 subType = s.type();
                 subOffset = base + s.offset();
+                bits = s.bits();
             } else {
                 subType = element;
                 subOffset = base + index * elementSize;
@@ -311,7 +320,7 @@ final class Initializers {
             }
             Initializer init = item.initializer();
             if (init instanceof Initializer.Braced || subType.isScalar()) {
-                initObject(subType, init, subOffset, ExprTyper.tokenOf(firstExpr(init)), out);
+                initObject(subType, init, subOffset, ExprTyper.tokenOf(firstExpr(init)), out, bits);
                 return pos + 1;
             }
             // An expression for an aggregate subobject: its own value if it

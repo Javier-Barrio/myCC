@@ -244,7 +244,7 @@ public final class Typer {
         var items = new ArrayList<TInit.Item>(init.items().size());
         for (var item : init.items()) {
             TExpr.Constant c = constEval.require(item.value(), item.value().token(), "initializer element");
-            items.add(new TInit.Item(item.offset(), c));
+            items.add(new TInit.Item(item.offset(), c, item.bits()));
         }
         return new TInit(items);
     }

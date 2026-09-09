@@ -1060,6 +1060,15 @@ class TyperTest {
     }
 
     @Test
+    void bitFieldInitializerItemsCarryTheirPlacement() {
+        assertEquals("(local b:struct B (init (0:4/4 (int-to-int:unsigned int 3:int)) (0:0/4 (int-to-int:unsigned int 1:int)) (3:4/1 (to-bool:bool 1:int))))",
+                body("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; };", "struct B b = {.hi = 3, .lo = 1, .flag = 1};")
+                        .replaceAll("^\\(block |\\)$", ""));
+        assertEquals("(global g:struct B (init (0:4/4 3:unsigned int) (3:4/1 1:bool)))",
+                unit("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; }; struct B g = {.hi = 3, .flag = 1};"));
+    }
+
+    @Test
     void bitFields() {
         String s = "struct B { unsigned u : 3; int i : 5; unsigned w : 32; bool f : 1; char c : 2; long l : 40; } b;";
         assertEquals("4:unsigned long", expr("struct B { unsigned u : 3; int i : 5; };", "sizeof(struct B)"));
@@ -1188,7 +1197,7 @@ class TyperTest {
         assertEquals("a:struct A (init (8 3:int) (4 2:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {.y = 3, .x = 2};"), "anonymous members are designatable");
         assertEquals("a:struct A (init (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, 3};"));
         assertEquals("a:struct A (init (4 2:int) (12 9:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, .z = 9};"));
-        assertEquals("b:struct B (init (0 5:int) (0 2:unsigned int))", init("struct B { int f : 3; unsigned g : 4; }; struct B b = {5, 2};"),
+        assertEquals("b:struct B (init (0:0/3 5:int) (0:3/4 2:unsigned int))", init("struct B { int f : 3; unsigned g : 4; }; struct B b = {5, 2};"),
                 "two bit-fields in one storage unit");
         assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (16 3:char))", init(s + " struct S arr[2] = {{1, 2}, {3}};"));
         assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (8 3.0:double) (16 4:char))", init(s + " struct S arr[] = {1, 2, 3, 4};"));
