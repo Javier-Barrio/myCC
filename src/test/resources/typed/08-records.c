@@ -10,7 +10,7 @@ void f(void) {
     pp->f = 1.5;
     q = p;
     p.pair.b = pp->pair.a;
-    make().i = 3;
+    p.i = make().i + 3;
     b.lo = 15;
     b.hi = b.lo + 1;
     b.wide = -b.wide;

@@ -220,7 +220,10 @@ makes the category depend on the operand (`.` on an lvalue struct is an
 lvalue, on a function result it is not) the tree removes the dependency
 instead: a non-lvalue struct value is first stored in a temporary by a
 `Materialize(Rvalue)` node, which is an `Lvalue`, so `Member` always has an
-`Lvalue` base. Lowering has to allocate that temporary anyway.
+`Lvalue` base. Lowering has to allocate that temporary anyway. The one
+thing lost is that `f().m` is not an lvalue in C (6.5.3.4p3): the typer
+restores that by rejecting a store into, or the address of, a `Member`
+chain rooted in a `Materialize`; reads are fine.
 
 ### Node kinds
 
