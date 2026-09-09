@@ -243,7 +243,7 @@ final class ExprTyper {
         if (isStatic) {
             var items = new ArrayList<TInit.Item>(init.items().size());
             for (var item : init.items()) {
-                items.add(new TInit.Item(item.offset(), constEval.require(item.value(), item.value().token(), "initializer element")));
+                items.add(new TInit.Item(item.offset(), constEval.require(item.value(), item.value().token(), "initializer element"), item.bits()));
             }
             init = new TInit(items);
         }

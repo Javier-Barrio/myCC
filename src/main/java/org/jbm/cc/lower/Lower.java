@@ -81,7 +81,10 @@ public final class Lower {
         var out = new ArrayList<Global.Item>(init.items().size());
         for (TInit.Item item : init.items()) {
             TExpr.Rvalue v = item.value();
-            if (v instanceof TExpr.IntConst c) out.add(new Global.IntItem(item.offset(), typeMap.integer(c.type()), c.value()));
+            if (item.bits().isPresent() && v instanceof TExpr.IntConst c) {
+                var bits = item.bits().get();
+                out.add(new Global.BitItem(item.offset(), bits.bitOffset(), bits.width(), c.value()));
+            } else if (v instanceof TExpr.IntConst c) out.add(new Global.IntItem(item.offset(), typeMap.integer(c.type()), c.value()));
             else if (v instanceof TExpr.FloatConst c) out.add(new Global.FloatItem(item.offset(), (Type.Float) typeMap.of(c.type()), c.value()));
             else if (v instanceof TExpr.NullptrConst) out.add(new Global.IntItem(item.offset(), typeMap.integer(types.sizeT()), 0));
             else if (v instanceof TExpr.AddrConst a) {

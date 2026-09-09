@@ -840,7 +840,8 @@ final class ExprLower implements TVisitor<Val> {
                 b.emit(new Instr.Bin(Instr.BinOp.WADD, q, ptr, new Operand.IntImm(item.offset()), at));
             }
             Val v = value(item.value());
-            write(memory(q, types.unqualified(v.type())), v, at);
+            CType t = types.unqualified(v.type());
+            write(new Place.Memory(q, t, item.bits(), t.quals().isVolatile()), v, at);
         }
     }
 }

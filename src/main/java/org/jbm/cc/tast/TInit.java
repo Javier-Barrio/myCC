@@ -1,8 +1,10 @@
 package org.jbm.cc.tast;
 
 import lombok.NonNull;
+import org.jbm.cc.types.Layout;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A normalized initializer (6.7.11): the values to store, each at its
@@ -22,6 +24,14 @@ public record TInit(@NonNull List<Item> items) {
         return new TInit(List.of(new Item(0, value)));
     }
 
-    public record Item(long offset, @NonNull TExpr.Rvalue value) {
+    /**
+     * One value to store at a byte offset; for a bit-field member the
+     * placement of its bits within the storage unit at that offset, since
+     * two bit-fields can share the offset.
+     */
+    public record Item(long offset, @NonNull TExpr.Rvalue value, @NonNull Optional<Layout.BitField> bits) {
+        public Item(long offset, @NonNull TExpr.Rvalue value) {
+            this(offset, value, Optional.empty());
+        }
     }
 }
