@@ -402,4 +402,61 @@ class LowerTest {
     void swappedOperandsAreStillEvaluatedLeftToRight() {
         assertEquals("  %t0 = load.s32 %p\n  %t1 = load.s32 %q\n  %t2 = slt %t1, %t0", instrs("int *p, *q;", "*p > *q;"));
     }
+
+    // ---- 11: unary and logical ------------------------------------------------------------------
+
+    @Test
+    void unary() {
+        assertEquals("  %t0 = sub 0, %i", instrs("int i;", "-i;"));
+        assertEquals("  %t0 = wsub 0, %u", instrs("unsigned u;", "-u;"));
+        assertEquals("  %t0 = fsub -0.0, %d", instrs("double d;", "-d;"));
+        assertEquals("  %t0 = xor %i, -1", instrs("int i;", "~i;"));
+        assertEquals("  %t0 = xor %b, -1\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b;", "~b;"));
+        assertEquals("  %t0 = ne %i, 0\n  %t1 = eq %t0, 0", instrs("int i;", "!i;"));
+        assertEquals("  mov %t0, %c\n  %t1 = sub 0, %t0", instrs("char c;", "-c;"));
+    }
+
+    @Test
+    void logicalAndIsTwoBlocks() {
+        assertEquals("""
+                  i32 %a
+                  i32 %b
+                  i32 %t0
+                  u8 %t1
+                  u8 %t2
+                .entry:
+                  mov %t0, 0
+                  %t1 = ne %a, 0
+                  condbr %t1, .and, .and.done
+                .and:
+                  %t2 = ne %b, 0
+                  mov %t0, %t2
+                  br .and.done
+                .and.done:""", body("", "int a, b; a && b;"));
+    }
+
+    @Test
+    void logicalOrIsTwoBlocks() {
+        assertEquals("""
+                  i32 %a
+                  i32 %b
+                  i32 %t0
+                  u8 %t1
+                  u8 %t2
+                .entry:
+                  mov %t0, 1
+                  %t1 = ne %a, 0
+                  condbr %t1, .or.done, .or
+                .or:
+                  %t2 = ne %b, 0
+                  mov %t0, %t2
+                  br .or.done
+                .or.done:""", body("", "int a, b; a || b;"));
+    }
+
+    @Test
+    void nestedLogicalBlocksAreNamedUniquely() {
+        String text = body("", "int a, b, c; a && b && c;");
+        assertTrue(text.contains(".and:") && text.contains(".and.2:") && text.contains(".and.done.2:"), text);
+    }
 }

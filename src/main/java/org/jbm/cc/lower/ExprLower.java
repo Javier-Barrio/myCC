@@ -466,29 +466,59 @@ final class ExprLower implements TVisitor<Val> {
         return compare(e.left(), e.right(), e.type(), e.token(), true, Instr.CmpOp.SLE, Instr.CmpOp.ULE, Instr.CmpOp.FLE);
     }
 
+    // a && b: the result starts as 0 and becomes b when a is true; a || b
+    // starts as 1 and becomes b when a is false. Both operands are bool.
+    private Val logical(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Token at, boolean isAnd) {
+        Var r = temp(t);
+        b.emit(new Instr.Mov(r, new Operand.IntImm(isAnd ? 0 : 1), at));
+        Val l = value(left);
+        var rhs = b.block(isAnd ? "and" : "or");
+        var done = b.block(isAnd ? "and.done" : "or.done");
+        b.emit(isAnd ? new Instr.CondBr(l.var(), rhs, done, at) : new Instr.CondBr(l.var(), done, rhs, at));
+        b.open(rhs);
+        Val rv = value(right);
+        b.emit(new Instr.Mov(r, rv.var(), at));
+        b.emit(new Instr.Br(done, at));
+        b.open(done);
+        return new Val(r, t);
+    }
+
     @Override
     public Val visit(TExpr.And e) {
-        throw notYet(e);
+        return logical(e.left(), e.right(), e.type(), e.token(), true);
     }
 
     @Override
     public Val visit(TExpr.Or e) {
-        throw notYet(e);
+        return logical(e.left(), e.right(), e.type(), e.token(), false);
     }
 
     @Override
     public Val visit(TExpr.Neg e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        CType t = e.type();
+        Var d = temp(t);
+        if (t.isFloating()) b.emit(new Instr.Bin(Instr.BinOp.FSUB, d, new Operand.FloatImm(-0.0), v.var(), e.token()));
+        else b.emit(new Instr.Bin(types.isSigned(t) ? Instr.BinOp.SUB : Instr.BinOp.WSUB, d, new Operand.IntImm(0), v.var(), e.token()));
+        if (t instanceof CType.BitInt) canon(d, t, e.token());
+        return new Val(d, t);
     }
 
     @Override
     public Val visit(TExpr.BitNot e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        Var d = temp(e.type());
+        b.emit(new Instr.Bin(Instr.BinOp.XOR, d, v.var(), new Operand.IntImm(-1), e.token()));
+        if (e.type() instanceof CType.BitInt) canon(d, e.type(), e.token());
+        return new Val(d, e.type());
     }
 
     @Override
     public Val visit(TExpr.Not e) {
-        throw notYet(e);
+        Val v = value(e.operand());
+        Var d = temp(e.type());
+        b.emit(new Instr.Cmp(Instr.CmpOp.EQ, d, v.var(), new Operand.IntImm(0), e.token()));
+        return new Val(d, e.type());
     }
 
     @Override
