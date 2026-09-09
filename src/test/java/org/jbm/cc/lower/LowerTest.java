@@ -459,4 +459,38 @@ class LowerTest {
         String text = body("", "int a, b, c; a && b && c;");
         assertTrue(text.contains(".and:") && text.contains(".and.2:") && text.contains(".and.done.2:"), text);
     }
+
+    // ---- 12: pointers and members --------------------------------------------------------------
+
+    @Test
+    void pointerArithmetic() {
+        assertEquals("  mov %t0, %i\n  %t0 = shl %t0, 32\n  %t0 = ashr %t0, 32\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1\n  %t3 = load.s32 %t2", instrs("int *p; int i;", "p[i];"));
+        assertEquals("  mov %t0, 3\n  mov %t1, %t0\n  %t1 = shl %t1, 32\n  %t1 = ashr %t1, 32\n  %t2 = wmul %t1, 4\n  %t3 = wadd %p, %t2", instrs("int *p;", "p + 3;"));
+        assertEquals("  mov %t0, 1\n  mov %t1, %t0\n  %t1 = shl %t1, 32\n  %t1 = ashr %t1, 32\n  %t2 = wadd %c, %t1", instrs("char *c;", "c + 1;"));
+        assertEquals("  %t0 = wsub %p, %q\n  %t0 = sdiv %t0, 4", instrs("int *p, *q;", "p - q;"));
+        assertEquals("  %t0 = wsub %p, %q", instrs("char *p, *q;", "p - q;"));
+        assertEquals("  i32 %i\n  ptr %p\n  i32 %t0\n  i32 %t1\n  ptr %t2\n  i32 %t3\n.entry:\n  mov %t0, 2\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1\n  %t3 = load.s32 %t2", bodyOn(ILP32, "", "int i; int *p; p[2];"));
+    }
+
+    @Test
+    void membersFoldIntoTheAddress() {
+        String decls = "struct In { int x, y; }; struct Out { struct In in; char name[8]; long tail; };";
+        assertEquals("  %t0 = load.s32 %p", instrs(decls + " struct In *p;", "p->x;"));
+        assertEquals("  %t0 = wadd %p, 4\n  %t1 = load.s32 %t0", instrs(decls + " struct In *p;", "p->y;"));
+        assertEquals("  %t0 = wadd %o, 4\n  %t1 = load.s32 %t0", instrs(decls + " struct Out *o;", "o->in.y;"));
+        assertEquals("  %t0 = wadd %o, 16\n  %t1 = load.s64 %t0", instrs(decls + " struct Out *o;", "o->tail;"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4\n  %t2 = load.s32 %t1", instrs(decls + " struct In s;", "s.y;"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = load.s32 %t0", instrs(decls + " struct In s;", "s.x;"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4\n  mov %t2, 1\n  store.32 %t1, %t2", instrs(decls + " struct In s;", "s.y = 1;"));
+    }
+
+    @Test
+    void addressesOfPlaces() {
+        assertEquals("  %t0 = addrof %x", instrs("int x;", "&x;"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4", instrs("struct In { int x, y; }; struct In s;", "&s.y;"));
+        assertEquals("  %t0 = addrof %a\n  mov %t1, 2\n  mov %t2, %t1\n  %t2 = shl %t2, 32\n  %t2 = ashr %t2, 32\n  %t3 = wmul %t2, 4\n  %t4 = wadd %t0, %t3", instrs("int a[4];", "&a[2];"));
+        assertEquals("  %t0 = addrof %a\n  mov %p, %t0", instrs("int a[4]; int *p;", "p = a;"));
+        assertEquals("  %t0 = wadd %p, 4", instrs("struct In { int x, y; }; struct In *p;", "&p->y;"));
+        assertEquals("  ptr %t0\n  ptr %t1\n.entry:\n  %t0 = addrof @g\n  %t1 = wadd %t0, 4", expr("struct In { int x, y; }; struct In g;", "&g.y"));
+    }
 }
