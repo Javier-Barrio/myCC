@@ -493,4 +493,30 @@ class LowerTest {
         assertEquals("  %t0 = wadd %p, 4", instrs("struct In { int x, y; }; struct In *p;", "&p->y;"));
         assertEquals("  ptr %t0\n  ptr %t1\n.entry:\n  %t0 = addrof @g\n  %t1 = wadd %t0, 4", expr("struct In { int x, y; }; struct In g;", "&g.y"));
     }
+
+    // ---- 13: bit-fields --------------------------------------------------------------------------
+
+    static final String BITS = "struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; }; struct B *p;";
+
+    @Test
+    void bitFieldLoads() {
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = and %t0, 15", instrs(BITS, "p->lo;"));
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = lshr %t0, 4\n  %t1 = and %t1, 15", instrs(BITS, "p->hi;"));
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = shl %t0, 4\n  %t1 = ashr %t1, 12", instrs(BITS, "p->wide;"));
+        assertEquals("  %t0 = wadd %p, 3\n  %t1 = load.u8 %t0\n  %t2 = lshr %t1, 4\n  %t2 = and %t2, 1", instrs(BITS, "p->flag;"));
+        assertTrue(body("", BITS + " p->lo;").contains("  u32 %t0\n  u32 %t1\n.entry:"));
+    }
+
+    @Test
+    void bitFieldStores() {
+        assertEquals("  mov %t0, 3\n  mov %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -241\n  %t3 = and %t1, 15\n  %t3 = shl %t3, 4\n  %t2 = or %t2, %t3\n  store.32 %p, %t2", instrs(BITS, "p->hi = 3;"));
+        assertEquals("  %t0 = load.u32 %p\n  %t0 = and %t0, -16\n  %t1 = and %u, 15\n  %t0 = or %t0, %t1\n  store.32 %p, %t0", instrs(BITS + " unsigned u;", "p->lo = u;"));
+        assertEquals("  %t0 = load.u32 %p\n  %t0 = and %t0, -268435201\n  %t1 = and %i, 1048575\n  %t1 = shl %t1, 8\n  %t0 = or %t0, %t1\n  store.32 %p, %t0", instrs(BITS + " int i;", "p->wide = i;"));
+        assertEquals("  %t0 = wadd %p, 3\n  mov %t1, 1\n  %t2 = ne %t1, 0\n  %t3 = load.u8 %t0\n  %t3 = and %t3, -17\n  %t4 = and %t2, 1\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.8 %t0, %t3", instrs(BITS, "p->flag = 1;"));
+    }
+
+    @Test
+    void bitFieldsOnTheOtherTarget() {
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = shl %t0, 4\n  %t1 = ashr %t1, 12", instrsOn(ILP32, BITS, "p->wide;"));
+    }
 }
