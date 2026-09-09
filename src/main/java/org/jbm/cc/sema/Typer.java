@@ -1,11 +1,11 @@
 package org.jbm.cc.sema;
 
 import lombok.NonNull;
+import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.BlockItem;
 import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Stmt;
-import org.jbm.cc.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.tast.JumpTarget;
 import org.jbm.cc.tast.TExpr;
@@ -16,7 +16,6 @@ import org.jbm.cc.tast.TStmt;
 import org.jbm.cc.tast.TUnit;
 import org.jbm.cc.types.CType;
 import org.jbm.cc.types.Types;
-import org.jbm.cc.types.X86_64SysV;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;

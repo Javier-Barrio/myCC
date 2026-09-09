@@ -83,8 +83,9 @@ org.jbm.cc.types              semantic types, shared by sema, tast and lowering
                               compatibility 6.2.7, composite type), parameterized by a Target
   Target                      interface: what the standard leaves to the implementation (widths, alignments,
                               char signedness, size_t/ptrdiff_t/wchar_t, bit-field packing policy)
-  X86_64SysV                  the first Target; the only file that knows a real ABI's numbers
   Layout                      size, alignment, member offsets, bit-field placement, per TagSymbol, from a Target
+org.jbm.cc.arch               concrete Targets, one per ABI
+  X86_64SysV                  the first Target; the only file that knows a real ABI's numbers
 org.jbm.cc.tast               the typed tree (sealed interfaces + records), lowering's input
   TExpr                       sealed into Lvalue, Rvalue, FunctionDesignator; every node has type() and token()
   TStmt                       statements; jumps hold JumpTarget references
