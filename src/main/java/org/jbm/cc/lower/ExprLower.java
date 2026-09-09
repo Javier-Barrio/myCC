@@ -40,6 +40,7 @@ final class ExprLower implements TVisitor<Val> {
     // the target node the tree shares between the assignment and its
     // TargetValue.
     private final Map<TExpr.Lvalue, Val> targetValues = new IdentityHashMap<>();
+    private int condTemps;
 
     ExprLower(@NonNull Lower lower, @NonNull Builder b, @NonNull Map<Symbol, Var> vars) {
         this.lower = lower;
@@ -112,8 +113,9 @@ final class ExprLower implements TVisitor<Val> {
 
     /** Lowers an expression whose value is not used. */
     void effect(@NonNull TExpr.Rvalue e) {
-        discard = e instanceof TExpr.Assign || e instanceof TExpr.CompoundAssign || e instanceof TExpr.PostfixAssign;
-        e.accept(this);
+        TExpr.Rvalue top = e instanceof TExpr.ToVoid v ? v.operand() : e;
+        discard = top instanceof TExpr.Assign || top instanceof TExpr.CompoundAssign || top instanceof TExpr.PostfixAssign;
+        top.accept(this);
         discard = false;
     }
 
@@ -770,14 +772,45 @@ final class ExprLower implements TVisitor<Val> {
         return old;
     }
 
+    // c ? t : e: a result variable each arm writes, or for an aggregate a
+    // temporary object each arm copies into, or nothing for void.
     @Override
     public Val visit(TExpr.Cond e) {
-        throw notYet(e);
+        CType t = e.type();
+        boolean aggregate = t.isArray() || t.isRecord();
+        Var r = null;
+        if (aggregate) {
+            Var object = b.local("cond." + ++condTemps, typeMap.of(t), false);
+            r = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfVar(r, object, e.token()));
+        } else if (!t.isVoid()) {
+            r = temp(t);
+        }
+        Val c = value(e.condition());
+        var then = b.block("then");
+        var otherwise = b.block("else");
+        var done = b.block("cond.done");
+        b.emit(new Instr.CondBr(c.var(), then, otherwise, e.token()));
+        b.open(then);
+        arm(e.thenValue(), r, aggregate, t, e.token());
+        b.emit(new Instr.Br(done, e.token()));
+        b.open(otherwise);
+        arm(e.elseValue(), r, aggregate, t, e.token());
+        b.emit(new Instr.Br(done, e.token()));
+        b.open(done);
+        return new Val(r, t);
+    }
+
+    private void arm(TExpr.Rvalue arm, Var r, boolean aggregate, CType t, Token at) {
+        Val v = value(arm);
+        if (aggregate) b.emit(new Instr.Copy(typeMap.of(t), r, v.var(), at));
+        else if (r != null) b.emit(new Instr.Mov(r, v.var(), at));
     }
 
     @Override
     public Val visit(TExpr.Comma e) {
-        throw notYet(e);
+        effect(e.left());
+        return value(e.right());
     }
 
     // ---- initialization ----------------------------------------------------------------------------
