@@ -151,79 +151,17 @@ print(value, type from compiled.typed())
 
 ## The TAC
 
-This is the contract. `Lower` produces it, `TacWriter` and `TacReader`
-serialize it, the VM executes it, `Codegen` compiles it, and `/tac` shows
-it. It is designed for the VM to be simple and for the code generator to
-have what it needs, in that order.
-
-**Module.** The `Target` name; the functions; the data items; the string
-literals as data items; the external names the module references but does
-not define, each with its type, so a loader can check a binding.
-
-**Function.** Its name, linkage and signature (parameter types, return
-type, variadic); its **frame**: the list of slots, one per parameter,
-local, compound literal and materialized temporary, each with size and
-alignment (straight from `TFunction.locals` through `Types`); its
-**temporaries**, each with a scalar type; its basic blocks. Slots are
-named, never addressed by a computed frame offset, so a code generator is
-free to lay the frame out and a VM to allocate slots as it likes.
-Temporaries are not SSA: a temporary may be assigned more than once and
-`phi` does not exist; a code generator that wants SSA builds it. This keeps
-`Lower` a direct walk of the typed tree and the VM a loop.
-
-**Scalar types.** `i8 i16 i32 i64` with the operation carrying the
-signedness where it matters, `f32 f64`, the target's `long double` as
-`f80` stored in 16 bytes (which a VM may execute as `f64`), and `ptr`.
-`bool`, `char`, enums and `_BitInt` up to 64 bits are integers of their
-width. Aggregates are never in temporaries; they live in slots and memory
-and move by `copy`.
-
-**Instructions**, all of the form `t = op operands` or `op operands`:
-
-- arithmetic and logic on a type: `add sub mul sdiv udiv srem urem shl lshr
-  ashr and or xor neg not`, and `fadd fsub fmul fdiv fneg`;
-- comparisons yielding `i32` 0 or 1, as C does: `eq ne slt sle sgt sge ult
-  ule ugt uge`, and `feq fne flt fle fgt fge` (unordered is false);
-- conversions, one per typed-tree conversion node: `trunc sext zext sitofp
-  uitofp fptosi fptoui fpext fptrunc ptrtoint inttoptr tobool`;
-- addresses: `slot name`, `global name`, `func name`, `ptradd base, offset`
-  with the offset in bytes already scaled by `Lower` (a member is `ptradd
-  base, 4`; `p[i]` is `ptradd p, (mul i, 8)`);
-- memory: `load type, address`, `store type, address, value`, `copy dst,
-  src, size` for struct assignment and by-value aggregates, `zero address,
-  size` for the zero part of initializers; bit-fields are lowered to
-  `load`, `and`, `or`, `shl`, `store` of the storage unit;
-- control: `br block`, `condbr value, then, else`, `switch value, default,
-  [(low, high, block)...]` with ranges so `case 1 ... 5:` is one entry,
-  `ret` and `ret value`, `unreachable`;
-- calls: `call name(args) -> type` and `icall pointer, signature (args) ->
-  type`, arguments and result typed; aggregates are passed as the address
-  of a copy the caller made and returned into an address the caller
-  passes, both made explicit by `Lower` so no consumer has to know C's
-  by-value rule; variadic calls carry the fixed count and the promoted
-  types of the extras;
-- `trap message` for what the typer proved unreachable.
-
-**Data.** A data item is a name, linkage, alignment, size and an
-initializer: a byte string plus **relocations**, each "at this offset, the
-address of that name plus this addend", which is how a global pointer to
-another global or to a string literal is expressed. `Lower` computes the
-bytes from `TInit` with the `Target`'s widths and endianness; a tentative
-definition and an item without an initializer are zero. A `static` local
-is a data item named `function.variable` with a per-function ordinal for
-shadowed names, so its name is the same every time the same text is
-compiled. String literals are data items named by content hash, so the
-loader can keep one copy across recompiles.
-
-**Text form.** One line per instruction, one function or data item per
-block, readable by people and by `TacReader`; it is what `/tac` prints,
-what the lowering tests compare against as golden files, and what the VM
-reads when it runs out of process. The Java object model is what the VM
-uses in process.
-
-**Metadata.** Every instruction carries the C token it came from, so the
-VM's faults and the shell's messages can point at a source line, and
-`Codegen` can emit line tables later. `TacWriter` puts it in a comment.
+The TAC is specified in `tac-plan.md`; it is the contract between `Lower`,
+the VM and any code generator. The properties the shell and the VM rely on:
+typed virtual registers and explicit memory, not SSA and no `phi`;
+layout fixed by the compiler as constants; calls that carry their full
+signature and by-value aggregates with their member types, so the calling
+convention is the consumer's; initializers as typed values, so the byte
+order is the consumer's; every file-scope name a string bound by the
+consumer; a `static` local named `function.variable` so the same source
+gives the same name every time; string literals named by content so a
+loader can share them; a text form that round-trips, which is what `/tac`
+prints and what the lowering tests compare.
 
 ## What the shell asks of the VM: `Engine`
 
