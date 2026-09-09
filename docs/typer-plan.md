@@ -64,14 +64,23 @@ pass only cares about one family.
 ## Pipeline
 
 ```
-tokens ──Parser──> AST ──Desugar──> AST ──Resolver──> Bindings ──Typer──> typed tree ──Lower──> TAC
-                                                       (side tables,        (self-contained:
-                                                        AST-identity keyed)  symbols, types, casts)
+tokens ──Parser──> AST ──Desugar──> AST ──Resolver──> Bindings ──Typer──> typed tree ──Lower──> TAC (Module)
+                                                       (side tables,        (self-contained:            ├──Codegen──> .s
+                                                        AST-identity keyed)  symbols, types, casts)     └──VM (runs it)
 ```
 
 `Typer` is the **only** consumer of `Bindings`. Its output references
 `Symbol`, `TagSymbol` and `CType` objects directly; nothing downstream needs
 the AST, which becomes garbage once typing finishes.
+
+`Lower` is the only consumer of the typed tree, and the TAC it produces is
+a public contract with two consumers: the x86-64 code generator, and the
+VM of `cshell-plan.md`, a separate project that executes it. The TAC is
+layout-explicit (the numbers the typer fixed for the `Target` appear as
+constants) and ABI-neutral (a `call` carries typed arguments; each
+consumer applies its own convention). The shell recompiles everything
+typed so far on every line through the same whole-unit entry, so no pass
+needs an incremental form.
 
 ## Packages and classes
 
