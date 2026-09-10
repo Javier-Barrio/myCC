@@ -1,9 +1,9 @@
 package org.jbm.cc.lower;
 
 import lombok.NonNull;
-import org.jbm.cc.tac.Var;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Layout;
+import org.jbm.cc.lower.tac.Var;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Layout;
 
 import java.util.Optional;
 

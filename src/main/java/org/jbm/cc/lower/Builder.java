@@ -1,12 +1,12 @@
 package org.jbm.cc.lower;
 
 import lombok.NonNull;
-import org.jbm.cc.tac.Block;
-import org.jbm.cc.tac.Function;
-import org.jbm.cc.tac.Instr;
-import org.jbm.cc.tac.Operand;
-import org.jbm.cc.tac.Type;
-import org.jbm.cc.tac.Var;
+import org.jbm.cc.lower.tac.Block;
+import org.jbm.cc.lower.tac.Function;
+import org.jbm.cc.lower.tac.Instr;
+import org.jbm.cc.lower.tac.Operand;
+import org.jbm.cc.lower.tac.Type;
+import org.jbm.cc.lower.tac.Var;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;

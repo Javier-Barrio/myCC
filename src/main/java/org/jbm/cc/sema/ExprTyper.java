@@ -1,18 +1,18 @@
 package org.jbm.cc.sema;
 
 import lombok.NonNull;
-import org.jbm.cc.ast.Expr;
+import org.jbm.cc.parse.ast.Expr;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
-import org.jbm.cc.tast.StringData;
-import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.tast.TExpr.Lvalue;
-import org.jbm.cc.tast.TExpr.Rvalue;
-import org.jbm.cc.tast.TInit;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Layout;
-import org.jbm.cc.types.Quals;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.sema.tast.StringData;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.tast.TExpr.Lvalue;
+import org.jbm.cc.sema.tast.TExpr.Rvalue;
+import org.jbm.cc.sema.tast.TInit;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Layout;
+import org.jbm.cc.sema.types.Quals;
+import org.jbm.cc.sema.types.Types;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;

@@ -1,7 +1,7 @@
 package org.jbm.cc.parse;
 
 import lombok.NonNull;
-import org.jbm.cc.ast.Type;
+import org.jbm.cc.parse.ast.Type;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

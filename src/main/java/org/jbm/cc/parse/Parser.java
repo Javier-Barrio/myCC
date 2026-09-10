@@ -1,15 +1,15 @@
 package org.jbm.cc.parse;
 
 import lombok.NonNull;
-import org.jbm.cc.ast.Attribute;
-import org.jbm.cc.ast.BlockItem;
-import org.jbm.cc.ast.Decl;
-import org.jbm.cc.ast.Expr;
-import org.jbm.cc.ast.Initializer;
-import org.jbm.cc.ast.Specifiers;
-import org.jbm.cc.ast.Stmt;
-import org.jbm.cc.ast.Type;
-import org.jbm.cc.ast.Type.Quals;
+import org.jbm.cc.parse.ast.Attribute;
+import org.jbm.cc.parse.ast.BlockItem;
+import org.jbm.cc.parse.ast.Decl;
+import org.jbm.cc.parse.ast.Expr;
+import org.jbm.cc.parse.ast.Initializer;
+import org.jbm.cc.parse.ast.Specifiers;
+import org.jbm.cc.parse.ast.Stmt;
+import org.jbm.cc.parse.ast.Type;
+import org.jbm.cc.parse.ast.Type.Quals;
 import org.jbm.cc.cpp.CppToken;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;

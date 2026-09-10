@@ -1,7 +1,7 @@
 package org.jbm.vm;
 
-import org.jbm.cc.arch.Ilp32;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import static org.jbm.vm.VmTest.floating;

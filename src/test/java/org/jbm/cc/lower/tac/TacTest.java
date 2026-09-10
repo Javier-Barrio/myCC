@@ -1,6 +1,6 @@
 package org.jbm.cc.lower.tac;
 
-import org.jbm.cc.arch.X86_64SysV;
+import org.jbm.cc.lower.arch.X86_64SysV;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
 import org.junit.jupiter.api.Test;

@@ -1,14 +1,17 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.arch.Ilp32;
-import org.jbm.cc.arch.X86_64SysV;
-import org.jbm.cc.ast.Decl;
+import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.cc.lower.arch.X86_64SysV;
+import org.jbm.cc.parse.ast.Decl;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
-import org.jbm.cc.tast.TypedPrinter;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.sema.tast.StringData;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.tast.TStmt;
+import org.jbm.cc.sema.tast.TypedPrinter;
+import org.jbm.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
@@ -93,7 +96,7 @@ class TyperTest {
         return TypedPrinter.print(typer.expressionStatements.get(typer.expressionStatements.size() - 1));
     }
 
-    private static org.jbm.cc.tast.TExpr exprTree(String decls, String src) {
+    private static TExpr exprTree(String decls, String src) {
         var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
         var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
         return typer.expressionStatements.get(typer.expressionStatements.size() - 1);
@@ -198,7 +201,7 @@ class TyperTest {
         assertNotSame(strings.get(4).symbol(), strings.get(3).symbol(), "each literal is its own object");
     }
 
-    private static List<Integer> units(org.jbm.cc.tast.StringData s) {
+    private static List<Integer> units(StringData s) {
         return java.util.Arrays.stream(s.units()).boxed().toList();
     }
 
@@ -510,17 +513,17 @@ class TyperTest {
     @Test
     void targetValueSharesTheTargetNode() {
         var tree = exprTree("int a[4]; int k;", "a[k++] += 1");
-        var outer = (org.jbm.cc.tast.TExpr.CompoundAssign) tree;
+        var outer = (TExpr.CompoundAssign) tree;
         assertEquals("(compound-assign:int (deref:int (ptradd:int * (decay:int * a:int [4]) (int-to-int:long (postfix-assign:int k:int (add:int (target:int) 1:int))))) (add:int (target:int) 1:int))",
                 TypedPrinter.print(tree));
-        var outerAdd = (org.jbm.cc.tast.TExpr.Add) outer.newValue();
-        var outerTarget = (org.jbm.cc.tast.TExpr.TargetValue) outerAdd.left();
+        var outerAdd = (TExpr.Add) outer.newValue();
+        var outerTarget = (TExpr.TargetValue) outerAdd.left();
         assertSame(outer.target(), outerTarget.target(), "the TargetValue refers to the assignment's own target node");
-        var deref = (org.jbm.cc.tast.TExpr.Deref) outer.target();
-        var ptradd = (org.jbm.cc.tast.TExpr.PtrAdd) deref.pointer();
-        var conv = (org.jbm.cc.tast.TExpr.IntToInt) ptradd.index();
-        var inner = (org.jbm.cc.tast.TExpr.PostfixAssign) conv.operand();
-        var innerTarget = (org.jbm.cc.tast.TExpr.TargetValue) ((org.jbm.cc.tast.TExpr.Add) inner.newValue()).left();
+        var deref = (TExpr.Deref) outer.target();
+        var ptradd = (TExpr.PtrAdd) deref.pointer();
+        var conv = (TExpr.IntToInt) ptradd.index();
+        var inner = (TExpr.PostfixAssign) conv.operand();
+        var innerTarget = (TExpr.TargetValue) ((TExpr.Add) inner.newValue()).left();
         assertSame(inner.target(), innerTarget.target(), "and the inner one to k, not to the outer target");
         assertNotSame(outer.target(), innerTarget.target());
     }
@@ -761,13 +764,13 @@ class TyperTest {
         var unit = parse("void f(int i) { top: if (i) goto top; while (i) { if (i) break; else continue; } }");
         var typed = Typer.type(unit, Resolver.resolve(unit));
         var items = typed.functions().get(0).body().items();
-        var labeled = (org.jbm.cc.tast.TStmt.Labeled) items.get(0);
-        var ifStmt = (org.jbm.cc.tast.TStmt.If) items.get(1);
-        assertSame(labeled.target(), ((org.jbm.cc.tast.TStmt.Goto) ifStmt.thenBranch()).target());
-        var loop = (org.jbm.cc.tast.TStmt.While) items.get(2);
-        var inner = (org.jbm.cc.tast.TStmt.If) ((org.jbm.cc.tast.TStmt.Block) loop.body()).items().get(0);
-        assertSame(loop.target(), ((org.jbm.cc.tast.TStmt.Break) inner.thenBranch()).target());
-        assertSame(loop.target(), ((org.jbm.cc.tast.TStmt.Continue) inner.elseBranch().orElseThrow()).target());
+        var labeled = (TStmt.Labeled) items.get(0);
+        var ifStmt = (TStmt.If) items.get(1);
+        assertSame(labeled.target(), ((TStmt.Goto) ifStmt.thenBranch()).target());
+        var loop = (TStmt.While) items.get(2);
+        var inner = (TStmt.If) ((TStmt.Block) loop.body()).items().get(0);
+        assertSame(loop.target(), ((TStmt.Break) inner.thenBranch()).target());
+        assertSame(loop.target(), ((TStmt.Continue) inner.elseBranch().orElseThrow()).target());
     }
 
     @Test

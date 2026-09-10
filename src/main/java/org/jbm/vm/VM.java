@@ -1,18 +1,18 @@
 package org.jbm.vm;
 
-import org.jbm.cc.tac.Block;
-import org.jbm.cc.tac.Function;
-import org.jbm.cc.tac.Global;
-import org.jbm.cc.tac.Instr;
-import org.jbm.cc.tac.Module;
-import org.jbm.cc.tac.Operand;
-import org.jbm.cc.tac.RegClass;
-import org.jbm.cc.tac.StructDef;
-import org.jbm.cc.tac.Symbol;
-import org.jbm.cc.tac.TacVisitor;
-import org.jbm.cc.tac.TargetDesc;
-import org.jbm.cc.tac.Type;
-import org.jbm.cc.tac.Var;
+import org.jbm.cc.lower.tac.Block;
+import org.jbm.cc.lower.tac.Function;
+import org.jbm.cc.lower.tac.Global;
+import org.jbm.cc.lower.tac.Instr;
+import org.jbm.cc.lower.tac.Module;
+import org.jbm.cc.lower.tac.Operand;
+import org.jbm.cc.lower.tac.RegClass;
+import org.jbm.cc.lower.tac.StructDef;
+import org.jbm.cc.lower.tac.Symbol;
+import org.jbm.cc.lower.tac.TacVisitor;
+import org.jbm.cc.lower.tac.TargetDesc;
+import org.jbm.cc.lower.tac.Type;
+import org.jbm.cc.lower.tac.Var;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
