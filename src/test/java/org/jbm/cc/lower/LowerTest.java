@@ -1167,4 +1167,71 @@ class LowerTest {
                 global @p : ptr align 8 = { 0 : addr @.lit.1 }
                 """, unit("int *p = (int[]){1, 2};"));
     }
+
+    // ---- a small program end to end ---------------------------------------------------------------
+
+    @Test
+    void aStructPointerProgram() {
+        assertEquals("""
+                type %bar = { i32 @0 } size 4 align 4
+                define @foo(ptr %p) -> i32 {
+                  ptr %t0
+                  i32 %t1
+                  i32 %t2
+                  i32 %t3
+                  ptr %t4
+                  i32 %t5
+                  ptr %t6
+                  i32 %t7
+                .entry:
+                  %t0 = wadd.u64 %p, 0
+                  %t1 = load.s32 %t0
+                  mov.s32 %t2, 5
+                  %t3 = slt %t2, %t1
+                  condbr %t3, .then, .if.done
+                .then:
+                  %t4 = wadd.u64 %p, 0
+                  mov.s32 %t5, 120
+                  store.32 %t4, %t5
+                  br .if.done
+                .if.done:
+                  %t6 = wadd.u64 %p, 0
+                  %t7 = load.s32 %t6
+                  ret %t7
+                }
+                define @other() -> i32 {
+                  %bar %b
+                  ptr %t0
+                  ptr %t1
+                  i32 %t2
+                  ptr %t3
+                  i32 %t4
+                .entry:
+                  %t0 = addrof %b
+                  %t1 = wadd.u64 %t0, 0
+                  mov.s32 %t2, 5
+                  store.32 %t1, %t2
+                  %t3 = addrof %b
+                  %t4 = call (ptr) -> i32 @foo(%t3)
+                  ret %t4
+                }
+                """, unit("""
+                struct bar {
+                  int a;
+                };
+
+                int foo(struct bar *p) {
+                  if (p->a > 5) {
+                    p->a = 120;
+                  }
+                  return p->a;
+                }
+
+                int other() {
+                  struct bar b;
+                  b.a = 5;
+                  return foo(&b);
+                }
+                """));
+    }
 }
