@@ -352,7 +352,17 @@ public class VM implements TacVisitor<Void> {
     }
 
     @Override
+    // The case whose value matches takes its block; none, the default.
+    // Cases are distinct, so the first match is the only one.
     public Void visit(Instr.Switch i) {
+        long value = integer(i.value());
+        for (Instr.Case c : i.cases()) {
+            if (c.value() == value) {
+                jump(c.target());
+                return null;
+            }
+        }
+        jump(i.dflt());
         return null;
     }
 
