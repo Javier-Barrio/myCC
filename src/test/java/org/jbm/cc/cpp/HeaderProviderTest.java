@@ -35,7 +35,7 @@ class HeaderProviderTest {
 
     @Test
     void tokensCarryTheirFile() {
-        TokenSet set = CppTokenizer.tokenSet("#define X 1\nX + 2", "main.c");
+        TokenSet set = CppTokenizer.tokenSet("#define X 1\nX + 2", null, "main.c");
         for (CppToken t : set.tokens) {
             assertEquals("main.c", t.token.file, t.token.toString());
         }
