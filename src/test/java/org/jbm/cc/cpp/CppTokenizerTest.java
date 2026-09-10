@@ -510,9 +510,9 @@ class CppTokenizerTest {
 
     @Test
     void nonDefineDirectiveDoesNotReclassifyFollowingIdentifiers() {
-        assertTokens("#include foo",
+        assertTokens("#pragma foo",
                 TokenType.PUNCTUATOR, "#",
-                TokenType.IDENTIFIER, "include",
+                TokenType.IDENTIFIER, "pragma",
                 TokenType.IDENTIFIER, "foo");
     }
 

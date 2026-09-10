@@ -232,14 +232,30 @@ public class CppTokenizer {
 
     private final ArrayDeque<Group> groups = new ArrayDeque<>();
 
+    // `#include` (6.10.3): the header is lexed by a nested tokenizer that
+    // shares the macro table, and its tokens are queued to be handed out
+    // before this file's next token. Without a provider there are no
+    // headers to include.
+    private static final int MAX_INCLUDE_DEPTH = 200;
+    private final @Nullable HeaderProvider headers;
+    private final int depth;
+    private final ArrayDeque<Token> pending = new ArrayDeque<>();
+
     public CppTokenizer(@NonNull String source) {
-        this(source, "<source>");
+        this(source, null, "<source>");
     }
 
-    public CppTokenizer(@NonNull String source, @NonNull String file) {
-        this.src = splice(source);
+    public CppTokenizer(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
+        this(splice(source), file, headers, new LinkedHashMap<>(), 0);
+    }
+
+    private CppTokenizer(String splicedSource, String file, @Nullable HeaderProvider headers,
+                         Map<String, Token> macroTable, int depth) {
+        this.src = splicedSource;
         this.file = file;
-        this.macroTable = new LinkedHashMap<>();
+        this.headers = headers;
+        this.macroTable = macroTable;
+        this.depth = depth;
     }
 
     // Used to lex a lookahead slice (the rest of a directive line) without
@@ -248,12 +264,10 @@ public class CppTokenizer {
     // against an empty table, so its macro names stay unresolved until
     // expansion; an `#if` condition shares this tokenizer's table.
     private CppTokenizer(String source, String file, int startLine, int startCol, Map<String, Token> macroTable) {
-        this.src = source;
-        this.file = file;
+        this(source, file, null, macroTable, 0);
         this.line = startLine;
         this.col = startCol;
         this.atLineStart = false;
-        this.macroTable = macroTable;
     }
 
     private static String splice(String source) {
@@ -276,11 +290,11 @@ public class CppTokenizer {
     }
 
     public static TokenSet tokenSet(@NonNull String source) {
-        return tokenSet(source, "<source>");
+        return tokenSet(source, null, "<source>");
     }
 
-    public static TokenSet tokenSet(@NonNull String source, @NonNull String file) {
-        CppTokenizer tokenizer = new CppTokenizer(source, file);
+    public static TokenSet tokenSet(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
+        CppTokenizer tokenizer = new CppTokenizer(source, headers, file);
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
         set.macros = tokenizer.macroTable();
         return set;
@@ -344,6 +358,9 @@ public class CppTokenizer {
 
     private Token next() {
         while (true) {
+            if (!pending.isEmpty()) {
+                return pending.poll();
+            }
             if (!active()) {
                 skipGroup();
             }
@@ -380,8 +397,13 @@ public class CppTokenizer {
         if (c == '#' && isLineStart && peek(1) != '#') {
             advance();
             Token hash = new Token(TokenType.PUNCTUATOR, "#", startLine, startCol);
-            if (CONDITIONALS.contains(directiveNameAhead(pos))) {
+            String directive = directiveNameAhead(pos);
+            if (CONDITIONALS.contains(directive)) {
                 conditional(hash);
+                return null;
+            }
+            if (directive.equals("include")) {
+                include(hash);
                 return null;
             }
             directiveState = DirectiveState.HASH;
@@ -484,6 +506,63 @@ public class CppTokenizer {
             advance();
         }
         throw new LexException("Unterminated block comment", startLine, startCol);
+    }
+
+    // ---- #include ---------------------------------------------------------------------------------
+
+    // Executes `#include "name"` or `#include <name>` whose `#` was just
+    // consumed, leaving the position at the end of its line.
+    private void include(Token hash) {
+        while (isBlank(peek())) {
+            advance();
+        }
+        scanIdentifier(line, col);
+        while (isBlank(peek())) {
+            advance();
+        }
+        char open = peek();
+        char close = open == '"' ? '"' : '>';
+        boolean quoted = open == '"';
+        if (open != '"' && open != '<') {
+            throw new LexException("expected \"file\" or <file> after #include", hash.line, hash.column);
+        }
+        advance();
+        int start = pos;
+        while (pos < src.length() && peek() != close && peek() != '\n') {
+            advance();
+        }
+        if (peek() != close) {
+            throw new LexException("expected \"file\" or <file> after #include", hash.line, hash.column);
+        }
+        String name = src.substring(start, pos);
+        advance();
+        while (pos < src.length() && peek() != '\n') {
+            advance();
+        }
+        String spelled = open + name + close;
+        if (headers == null) {
+            throw new LexException("no headers are available to #include " + spelled, hash.line, hash.column);
+        }
+        if (depth >= MAX_INCLUDE_DEPTH) {
+            throw new LexException("#include nested too deeply at " + spelled, hash.line, hash.column);
+        }
+        Optional<Header> header = headers.find(name, quoted, file);
+        if (header.isEmpty()) {
+            throw new LexException("header not found: " + spelled, hash.line, hash.column);
+        }
+        String text = splice(header.get().text());
+        CppTokenizer nested = new CppTokenizer(text, header.get().name(), headers, macroTable, depth + 1);
+        boolean first = true;
+        for (Token t : nested.scan()) {
+            if (t.type == TokenType.EOF) {
+                continue;
+            }
+            if (first) {
+                t.spaceBefore = true;
+                first = false;
+            }
+            pending.add(t);
+        }
     }
 
     // ---- conditional directives -------------------------------------------------------------------
