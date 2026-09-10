@@ -151,6 +151,13 @@ public final class TacInvariants implements TacVisitor<Void> {
         require(mod instanceof Type.Int i && i.width() <= module.target.registerWidth(), "an integer instruction needs .sN or .uN");
     }
 
+    // An instruction never writes wider than its destination holds, so a
+    // value is always what its variable's type says it is.
+    private void fitsDestination(Type mod, Var dst) {
+        int width = dst.type instanceof Type.Int i ? i.width() : module.target.pointerWidth();
+        require(((Type.Int) mod).width() <= width, "." + mod.spelling() + " into " + dst + " : " + dst.type.spelling());
+    }
+
     // A floating modifier is a precision the target computes in.
     private void precision(Type mod) {
         require(mod instanceof Type.Float f && module.target.hasPrecision(f.width()), "a floating instruction needs a precision the target has");
@@ -176,6 +183,7 @@ public final class TacInvariants implements TacVisitor<Void> {
         }
         if (c.isInteger()) {
             integerModifier(i.mod());
+            fitsDestination(i.mod(), i.dst());
         } else {
             precision(i.mod());
         }
@@ -206,6 +214,7 @@ public final class TacInvariants implements TacVisitor<Void> {
             precision(i.mod());
         } else {
             integerModifier(i.mod());
+            fitsDestination(i.mod(), i.dst());
         }
         return null;
     }

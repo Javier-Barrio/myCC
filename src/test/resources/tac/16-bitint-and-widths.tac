@@ -9,25 +9,28 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   ptr %t3
   i8 %t4
   i8 %t5
-  ptr %t6
-  i8 %t7
-  i32 %t8
-  ptr %t9
+  i64 %t6
+  ptr %t7
+  i8 %t8
+  i32 %t9
   ptr %t10
-  i64 %t11
+  ptr %t11
   i64 %t12
-  ptr %t13
+  i64 %t13
   i64 %t14
-  i64 %t15
-  ptr %t16
-  ptr %t17
-  u8 %t18
-  i32 %t19
+  ptr %t15
+  i64 %t16
+  i64 %t17
+  ptr %t18
+  ptr %t19
   u8 %t20
-  ptr %t21
-  ptr %t22
-  i8 %t23
-  i8 %t24
+  i32 %t21
+  u8 %t22
+  ptr %t23
+  ptr %t24
+  i8 %t25
+  i8 %t26
+  i64 %t27
 .entry:
   %t0 = addrof @b7
   %t1 = addrof @b7
@@ -35,37 +38,40 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   %t3 = addrof @b7
   %t4 = load.s8 %t3
   %t5 = add.s8 %t2, %t4
-  %t5 = shl.s64 %t5, 57
-  %t5 = ashr.s64 %t5, 57
+  %t6 = shl.s64 %t5, 57
+  %t6 = ashr.s64 %t6, 57
+  mov.s8 %t5, %t6
   store.8 %t0, %t5
-  %t6 = addrof @b7
-  %t7 = load.s8 %t6
-  %t8 = add.s32 %t7, %i
-  mov.s32 %i, %t8
-  %t9 = addrof @b40
+  %t7 = addrof @b7
+  %t8 = load.s8 %t7
+  %t9 = add.s32 %t8, %i
+  mov.s32 %i, %t9
   %t10 = addrof @b40
-  %t11 = load.s64 %t10
-  %t12 = add.s64 %t11, %u
-  %t12 = shl.s64 %t12, 24
-  %t12 = ashr.s64 %t12, 24
-  store.64 %t9, %t12
-  %t13 = addrof @b40
-  %t14 = load.s64 %t13
-  %t15 = mul.s64 %t14, %l
-  mov.s64 %l, %t15
-  %t16 = addrof @u3
-  %t17 = addrof @u3
-  %t18 = load.u8 %t17
-  mov.s32 %t19, 1
-  %t20 = shl.u8 %t18, %t19
-  %t20 = and.u64 %t20, 7
-  store.8 %t16, %t20
-  %t21 = addrof @b7
-  %t22 = addrof @b7
-  %t23 = load.s8 %t22
-  %t24 = sub.s8 0, %t23
-  %t24 = shl.s64 %t24, 57
-  %t24 = ashr.s64 %t24, 57
-  store.8 %t21, %t24
+  %t11 = addrof @b40
+  %t12 = load.s64 %t11
+  %t13 = add.s64 %t12, %u
+  %t14 = shl.s64 %t13, 24
+  %t14 = ashr.s64 %t14, 24
+  mov.s64 %t13, %t14
+  store.64 %t10, %t13
+  %t15 = addrof @b40
+  %t16 = load.s64 %t15
+  %t17 = mul.s64 %t16, %l
+  mov.s64 %l, %t17
+  %t18 = addrof @u3
+  %t19 = addrof @u3
+  %t20 = load.u8 %t19
+  mov.s32 %t21, 1
+  %t22 = shl.u8 %t20, %t21
+  %t22 = and.u8 %t22, 7
+  store.8 %t18, %t22
+  %t23 = addrof @b7
+  %t24 = addrof @b7
+  %t25 = load.s8 %t24
+  %t26 = sub.s8 0, %t25
+  %t27 = shl.s64 %t26, 57
+  %t27 = ashr.s64 %t27, 57
+  mov.s8 %t26, %t27
+  store.8 %t23, %t26
   ret
 }
