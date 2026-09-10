@@ -10,6 +10,8 @@ import org.jbm.cc.tac.TacVisitor;
 import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 
 /**
@@ -28,10 +30,15 @@ public class VM implements TacVisitor<Void> {
     private Block block;
     private int pc;
 
-    // The registers of the running function: every integer, pointer and
-    // floating variable that has been written, with its value. Values are
-    // immutable, so a mov may share one between two variables.
-    private final LinkedHashMap<Var, Value> vars = new LinkedHashMap<>();
+    // Per function frame
+    private record Frame(Block block, int pc, LinkedHashMap<Var, Value> vars, Instr.Call caller) {}
+
+    private final Deque<Frame> frames = new ArrayDeque<>();
+
+    private LinkedHashMap<Var, Value> vars() {
+        assert frames.peek() != null;
+        return frames.peek().vars();
+    }
 
     private void load(Module mod) {
         for (var s : mod.symbols()) {
@@ -50,7 +57,7 @@ public class VM implements TacVisitor<Void> {
     }
 
     private Value value(Var v) {
-        Value value = vars.get(v);
+        Value value = vars().get(v);
         if (value == null) {
             throw new IllegalStateException("unbound variable " + v);
         }
@@ -73,19 +80,39 @@ public class VM implements TacVisitor<Void> {
         throw new IllegalStateException(v + " holds an integer value where a floating one is needed");
     }
 
+    private Value operand(Operand o) {
+        if (o instanceof Operand.IntImm imm) {
+            return new IntValue(imm.value());
+        }
+        if (o instanceof Operand.FloatImm imm) {
+            return new FloatValue(imm.value());
+        }
+        return value((Var) o);
+    }
+
+    // What the last `ret` of `.file` returned: null for void.
+    private Value result;
+
     // Runs `.file`: from the entry block, one instruction after another,
-    // each dispatched to its handler below, until `ret`.
-    public void step(Module m) {
+    // each dispatched to its handler below, until `ret`; returns what
+    // that `ret` carried, or null when `.file` is void or absent.
+    public Value step(Module m) {
         load(m);
         Symbol symbol = symbolTable.symbols.get(".file");
-        var file = (Function) symbol;
+        if (!(symbol instanceof Function file)) {
+            return null;
+        }
+        frames.clear();
+        result = null;
         block = file.entry();
         pc = 0;
+        frames.push(new Frame(null, 0, new LinkedHashMap<>(), null));
         while (block != null) {
             Instr inst = block.instrs.get(pc);
             pc++;
             inst.accept(this);
         }
+        return result;
     }
 
     private void jump(Block target) {
@@ -118,15 +145,12 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Mov i) {
-        Operand src = i.src();
-        if (src instanceof Operand.IntImm imm) {
-            vars.put(i.dst(), new IntValue(imm.value()));
-        } else if (src instanceof Operand.FloatImm imm) {
-            vars.put(i.dst(), new FloatValue(imm.value()));
-        } else if (i.mod() instanceof Type.Float precision) {
-            vars.put(i.dst(), new FloatValue(round(floating((Var) src), precision)));
+        if (i.mod() instanceof Type.Int mod) {
+            long v = getInt(i.src());
+            vars().put(i.dst(), new IntValue(extend(v, mod.width(), mod.signed())));
         } else {
-            vars.put(i.dst(), value((Var) src));
+            Type.Float precision = (Type.Float) i.mod();
+            vars().put(i.dst(), new FloatValue(round(getFloat(i.src()), precision)));
         }
         return null;
     }
@@ -148,11 +172,11 @@ public class VM implements TacVisitor<Void> {
         if (i.mod() instanceof Type.Int mod) {
             long a = getInt(i.a());
             long b = getInt(i.b());
-            vars.put(i.dst(), new IntValue(integerOp(i, a, b, mod)));
+            vars().put(i.dst(), new IntValue(integerOp(i, a, b, mod)));
         } else {
             double a = getFloat(i.a());
             double b = getFloat(i.b());
-            vars.put(i.dst(), new FloatValue(floatingOp(i, a, b, (Type.Float) i.mod())));
+            vars().put(i.dst(), new FloatValue(floatingOp(i, a, b, (Type.Float) i.mod())));
         }
         return null;
     }
@@ -240,7 +264,7 @@ public class VM implements TacVisitor<Void> {
         } else {
             holds = integerCompare(i, getInt(i.a()), getInt(i.b()));
         }
-        vars.put(i.dst(), new IntValue(holds ? 1 : 0));
+        vars().put(i.dst(), new IntValue(holds ? 1 : 0));
         return null;
     }
 
@@ -276,19 +300,19 @@ public class VM implements TacVisitor<Void> {
         switch (i.op()) {
             case I2F -> {
                 double d = (double) integer(i.src());
-                vars.put(i.dst(), new FloatValue(round(d, i.precision())));
+                vars().put(i.dst(), new FloatValue(round(d, i.precision())));
             }
             case U2F -> {
                 double d = unsignedToDouble(integer(i.src()));
-                vars.put(i.dst(), new FloatValue(round(d, i.precision())));
+                vars().put(i.dst(), new FloatValue(round(d, i.precision())));
             }
             case F2I -> {
                 long v = (long) floating(i.src());
-                vars.put(i.dst(), new IntValue(extendTo(v, i.dst())));
+                vars().put(i.dst(), new IntValue(extendTo(v, i.dst())));
             }
             case F2U -> {
                 long v = doubleToUnsigned(floating(i.src()));
-                vars.put(i.dst(), new IntValue(extendTo(v, i.dst())));
+                vars().put(i.dst(), new IntValue(extendTo(v, i.dst())));
             }
         }
         return null;
@@ -368,7 +392,22 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Ret i) {
-        block = null;
+        Value retval = null;
+        if (i.value() != null) {
+            retval = operand(i.value());
+        }
+        Frame frame = frames.pop();
+        block = frame.block();
+        pc = frame.pc();
+        Instr.Call caller = frame.caller();
+        if (caller == null) {
+            // .file: the run ends and its value is what step returns
+            result = retval;
+            return null;
+        }
+        if (retval != null && caller.dst() != null) {
+            vars().put(caller.dst(), retval);
+        }
         return null;
     }
 
@@ -380,7 +419,22 @@ public class VM implements TacVisitor<Void> {
     // ---- calls ---------------------------------------------------------------------------------
 
     @Override
-    public Void visit(Instr.Call i) {
+    public Void visit(Instr.Call c) {
+        var callee = symbolTable.symbols.get(c.callee());
+        if (!(callee instanceof Function target)) {
+            throw new IllegalStateException("no definition for @" + c.callee() + " at " + c.token().location());
+        }
+        var entry = target.entry();
+
+        var frameVars = new LinkedHashMap<Var, Value>();
+        // Bind the parameters
+        int i = 0;
+        for (var p : target.params) {
+            frameVars.put(p, operand(c.args().get(i)));
+            i++;
+        }
+        frames.push(new Frame(block, pc, frameVars, c));
+        jump(entry);
         return null;
     }
 
