@@ -2,9 +2,11 @@ package org.jbm.vm;
 
 import org.jbm.cc.tac.Block;
 import org.jbm.cc.tac.Function;
+import org.jbm.cc.tac.Global;
 import org.jbm.cc.tac.Instr;
 import org.jbm.cc.tac.Module;
 import org.jbm.cc.tac.Operand;
+import org.jbm.cc.tac.RegClass;
 import org.jbm.cc.tac.StructDef;
 import org.jbm.cc.tac.Symbol;
 import org.jbm.cc.tac.TacVisitor;
@@ -15,7 +17,9 @@ import org.jbm.cc.tac.Var;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -34,8 +38,12 @@ public class VM implements TacVisitor<Void> {
     private Block block;
     private int pc;
 
-    // Per function frame
-    private record Frame(Block block, int pc, LinkedHashMap<Var, Value> vars, Instr.Call caller) {}
+    // Per function frame: the caller's return point, the callee's
+    // registers, the addresses of its memory-resident variables (every
+    // aggregate, and every scalar named in an addrof), the stack pointer
+    // to restore, and the call being served.
+    private record Frame(Block block, int pc, LinkedHashMap<Var, Value> vars, LinkedHashMap<Var, Long> slots,
+                         long savedSp, Instr.Call caller) {}
 
     private final Deque<Frame> frames = new ArrayDeque<>();
 
@@ -52,6 +60,12 @@ public class VM implements TacVisitor<Void> {
     private TargetDesc target;
     private final LinkedHashMap<String, StructDef> structs = new LinkedHashMap<>();
 
+    // Where each name lives: a global's storage, or a function's code
+    // address, a slot that stands for it so a pointer to function is a
+    // number like any other. Names keep their address across reloads.
+    private final LinkedHashMap<String, Long> addresses = new LinkedHashMap<>();
+    private final LinkedHashMap<Long, String> functionAt = new LinkedHashMap<>();
+
     private void load(Module mod) {
         if (target != null && !target.equals(mod.target)) {
             throw new IllegalStateException("module for " + mod.target.name() + " loaded into a VM running " + target.name());
@@ -60,9 +74,75 @@ public class VM implements TacVisitor<Void> {
         for (var s : mod.structs) {
             structs.put(s.name(), s);
         }
-        for (var s : mod.symbols()) {
+        // A global already bound with the same type keeps its storage and
+        // contents; any other is placed and initialized. Functions are
+        // always rebound; declarations bind nothing.
+        List<Global> placed = new ArrayList<>();
+        for (Symbol s : mod.symbols()) {
+            if (s instanceof Global g) {
+                Symbol previous = symbolTable.symbols.get(g.name());
+                boolean keep = previous instanceof Global old && old.type().equals(g.type());
+                if (!keep) {
+                    addresses.put(g.name(), memory.allocate(size(g.type()), g.align()));
+                    placed.add(g);
+                }
+            } else if (s instanceof Function || s instanceof Module.FuncDecl) {
+                long address = addresses.computeIfAbsent(s.name(), n -> memory.allocate(8, 8));
+                functionAt.put(address, s.name());
+            }
             symbolTable.symbols.put(s.name(), s);
         }
+        for (Global g : placed) {
+            initialize(g, addresses.get(g.name()));
+        }
+    }
+
+    // The initializer items applied in order over zeros.
+    private void initialize(Global g, long address) {
+        memory.fill(address, size(g.type()), (byte) 0);
+        if (g.init() == null) {
+            return;
+        }
+        for (Global.Item item : g.init()) {
+            long at = address + item.offset();
+            if (item instanceof Global.IntItem x) {
+                memory.storeInt(at, x.type().width(), x.value());
+            } else if (item instanceof Global.FloatItem x) {
+                memory.storeFloat(at, x.type().width(), x.value());
+            } else if (item instanceof Global.BytesItem x) {
+                memory.write(at, x.bytes());
+            } else if (item instanceof Global.AddrItem x) {
+                memory.storeInt(at, target.pointerWidth(), addressOf(x.name()) + x.addend());
+            } else if (item instanceof Global.BitItem x) {
+                for (int k = 0; k < x.width(); k++) {
+                    long bitIndex = x.bit() + k;
+                    long byteAt = at + bitIndex / 8;
+                    int bit = (int) (bitIndex % 8);
+                    long b = memory.loadInt(byteAt, 8, false);
+                    b = (b & ~(1L << bit)) | (((x.value() >> k) & 1) << bit);
+                    memory.storeInt(byteAt, 8, b);
+                }
+            }
+        }
+    }
+
+    /** The address of a global or function by name. */
+    public long addressOf(String name) {
+        Long address = addresses.get(name);
+        if (address == null) {
+            throw new IllegalStateException("no definition for @" + name);
+        }
+        return address;
+    }
+
+    private int align(Type t) {
+        if (t instanceof Type.Array a) {
+            return align(a.element());
+        }
+        if (t instanceof Type.Struct st) {
+            return structs.get(st.name()).align();
+        }
+        return (int) Math.min(size(t), 16);
     }
 
     // The size in bytes of a memory type, as the compiler laid it out.
@@ -99,12 +179,52 @@ public class VM implements TacVisitor<Void> {
     record FloatValue(double value) implements Value {
     }
 
+    // A variable's value: from its slot in the arena when it has one,
+    // otherwise from the registers.
     private Value value(Var v) {
+        Long slot = frames.peek().slots().get(v);
+        if (slot != null) {
+            return loadVar(slot, v.type);
+        }
         Value value = vars().get(v);
         if (value == null) {
             throw new IllegalStateException("unbound variable " + v);
         }
         return value;
+    }
+
+    private void set(Var v, Value value) {
+        Long slot = frames.peek().slots().get(v);
+        if (slot != null) {
+            storeVar(slot, v.type, value);
+            return;
+        }
+        vars().put(v, value);
+    }
+
+    private Value loadVar(long address, Type type) {
+        if (type instanceof Type.Int t) {
+            return new IntValue(memory.loadInt(address, t.width(), t.signed()));
+        }
+        if (type instanceof Type.Ptr) {
+            return new IntValue(memory.loadInt(address, target.pointerWidth(), false));
+        }
+        if (type instanceof Type.Float f) {
+            return new FloatValue(memory.loadFloat(address, f.width()));
+        }
+        throw new IllegalStateException("an aggregate has no value; take its address");
+    }
+
+    private void storeVar(long address, Type type, Value value) {
+        if (type instanceof Type.Int t) {
+            memory.storeInt(address, t.width(), ((IntValue) value).value());
+        } else if (type instanceof Type.Ptr) {
+            memory.storeInt(address, target.pointerWidth(), ((IntValue) value).value());
+        } else if (type instanceof Type.Float f) {
+            memory.storeFloat(address, f.width(), ((FloatValue) value).value());
+        } else {
+            throw new IllegalStateException("an aggregate has no value; store through its address");
+        }
     }
 
     private long integer(Var v) {
@@ -160,8 +280,9 @@ public class VM implements TacVisitor<Void> {
             throw new IllegalStateException("@" + name + " takes " + function.params.size() + " arguments, given " + args.size());
         }
         frames.clear();
+        memory.stackPointer(memory.size());
         result = null;
-        frames.push(new Frame(null, 0, bind(function, args), null));
+        frames.push(enter(function, args, null, 0, null));
         jump(function.entry());
         while (block != null) {
             Instr inst = block.instrs.get(pc);
@@ -171,13 +292,68 @@ public class VM implements TacVisitor<Void> {
         return result;
     }
 
-    // A fresh register file for a call, with the parameters bound.
-    private static LinkedHashMap<Var, Value> bind(Function function, List<Value> args) {
-        var vars = new LinkedHashMap<Var, Value>();
-        for (int i = 0; i < function.params.size(); i++) {
-            vars.put(function.params.get(i), args.get(i));
+    // The variables of a function that live in memory: every aggregate,
+    // and every scalar whose address is taken somewhere in it.
+    private final IdentityHashMap<Function, List<Var>> memoryResident = new IdentityHashMap<>();
+
+    private List<Var> memoryResident(Function function) {
+        List<Var> cached = memoryResident.get(function);
+        if (cached != null) {
+            return cached;
         }
-        return vars;
+        LinkedHashSet<Var> resident = new LinkedHashSet<>();
+        for (Var v : function.params) {
+            if (target.classOf(v.type) == RegClass.NONE) {
+                resident.add(v);
+            }
+        }
+        for (Var v : function.locals) {
+            if (target.classOf(v.type) == RegClass.NONE) {
+                resident.add(v);
+            }
+        }
+        for (Block b : function.blocks) {
+            for (Instr instr : b.instrs) {
+                if (instr instanceof Instr.AddrOfVar a) {
+                    resident.add(a.var());
+                }
+            }
+        }
+        List<Var> list = new ArrayList<>(resident);
+        memoryResident.put(function, list);
+        return list;
+    }
+
+    // A frame for a call: slots for the memory-resident variables, zeroed,
+    // and the parameters bound; an aggregate parameter's bytes are copied
+    // from the pointer the caller passed.
+    private static final int MAX_FRAMES = 100_000;
+
+    private Frame enter(Function function, List<Value> args, Block returnBlock, int returnPc, Instr.Call caller) {
+        if (frames.size() >= MAX_FRAMES) {
+            throw new IllegalStateException("stack overflow: " + MAX_FRAMES + " frames deep in @" + function.name);
+        }
+        long savedSp = memory.stackPointer();
+        var slots = new LinkedHashMap<Var, Long>();
+        for (Var v : memoryResident(function)) {
+            long size = size(v.type);
+            long slot = memory.push(size, align(v.type));
+            memory.fill(slot, size, (byte) 0);
+            slots.put(v, slot);
+        }
+        Frame frame = new Frame(returnBlock, returnPc, new LinkedHashMap<>(), slots, savedSp, caller);
+        frames.push(frame);
+        for (int i = 0; i < function.params.size(); i++) {
+            Var p = function.params.get(i);
+            if (target.classOf(p.type) == RegClass.NONE) {
+                long from = ((IntValue) args.get(i)).value();
+                memory.copy(slots.get(p), from, size(p.type));
+            } else {
+                set(p, args.get(i));
+            }
+        }
+        frames.pop();
+        return frame;
     }
 
     private void jump(Block target) {
@@ -212,21 +388,31 @@ public class VM implements TacVisitor<Void> {
     public Void visit(Instr.Mov i) {
         if (i.mod() instanceof Type.Int mod) {
             long v = getInt(i.src());
-            vars().put(i.dst(), new IntValue(extend(v, mod.width(), mod.signed())));
+            set(i.dst(), new IntValue(extend(v, mod.width(), mod.signed())));
         } else {
             Type.Float precision = (Type.Float) i.mod();
-            vars().put(i.dst(), new FloatValue(round(getFloat(i.src()), precision)));
+            set(i.dst(), new FloatValue(round(getFloat(i.src()), precision)));
         }
         return null;
     }
 
     @Override
     public Void visit(Instr.AddrOfVar i) {
+        Long slot = frames.peek().slots().get(i.var());
+        if (slot == null) {
+            throw new IllegalStateException(i.var() + " has no address at " + i.token().location());
+        }
+        set(i.dst(), new IntValue(slot));
         return null;
     }
 
     @Override
     public Void visit(Instr.AddrOfGlobal i) {
+        Long address = addresses.get(i.name());
+        if (address == null) {
+            throw new IllegalStateException("no definition for @" + i.name() + " at " + i.token().location());
+        }
+        set(i.dst(), new IntValue(address));
         return null;
     }
 
@@ -237,11 +423,11 @@ public class VM implements TacVisitor<Void> {
         if (i.mod() instanceof Type.Int mod) {
             long a = getInt(i.a());
             long b = getInt(i.b());
-            vars().put(i.dst(), new IntValue(integerOp(i, a, b, mod)));
+            set(i.dst(), new IntValue(integerOp(i, a, b, mod)));
         } else {
             double a = getFloat(i.a());
             double b = getFloat(i.b());
-            vars().put(i.dst(), new FloatValue(floatingOp(i, a, b, (Type.Float) i.mod())));
+            set(i.dst(), new FloatValue(floatingOp(i, a, b, (Type.Float) i.mod())));
         }
         return null;
     }
@@ -329,7 +515,7 @@ public class VM implements TacVisitor<Void> {
         } else {
             holds = integerCompare(i, getInt(i.a()), getInt(i.b()));
         }
-        vars().put(i.dst(), new IntValue(holds ? 1 : 0));
+        set(i.dst(), new IntValue(holds ? 1 : 0));
         return null;
     }
 
@@ -365,19 +551,19 @@ public class VM implements TacVisitor<Void> {
         switch (i.op()) {
             case I2F -> {
                 double d = (double) integer(i.src());
-                vars().put(i.dst(), new FloatValue(round(d, i.precision())));
+                set(i.dst(), new FloatValue(round(d, i.precision())));
             }
             case U2F -> {
                 double d = unsignedToDouble(integer(i.src()));
-                vars().put(i.dst(), new FloatValue(round(d, i.precision())));
+                set(i.dst(), new FloatValue(round(d, i.precision())));
             }
             case F2I -> {
                 long v = (long) floating(i.src());
-                vars().put(i.dst(), new IntValue(extendTo(v, i.dst())));
+                set(i.dst(), new IntValue(extendTo(v, i.dst())));
             }
             case F2U -> {
                 long v = doubleToUnsigned(floating(i.src()));
-                vars().put(i.dst(), new IntValue(extendTo(v, i.dst())));
+                set(i.dst(), new IntValue(extendTo(v, i.dst())));
             }
         }
         return null;
@@ -416,10 +602,10 @@ public class VM implements TacVisitor<Void> {
     public Void visit(Instr.Load i) {
         long address = integer(i.ptr());
         if (i.ext() == Instr.Ext.FLOAT) {
-            vars().put(i.dst(), new FloatValue(memory.loadFloat(address, i.width())));
+            set(i.dst(), new FloatValue(memory.loadFloat(address, i.width())));
         } else {
             boolean signed = i.ext() == Instr.Ext.SIGNED;
-            vars().put(i.dst(), new IntValue(memory.loadInt(address, i.width(), signed)));
+            set(i.dst(), new IntValue(memory.loadInt(address, i.width(), signed)));
         }
         return null;
     }
@@ -489,13 +675,18 @@ public class VM implements TacVisitor<Void> {
         pc = frame.pc();
         Instr.Call caller = frame.caller();
         if (caller == null) {
-            // .file: the run ends and its value is what step returns
+            // the function `call` started: the run ends and its value is the result
+            memory.stackPointer(frame.savedSp());
             result = retval;
             return null;
         }
-        if (retval != null && caller.dst() != null) {
-            vars().put(caller.dst(), retval);
+        if (caller.into() != null) {
+            // an aggregate result: its bytes, possibly in the callee's frame, copied out before the frame goes
+            memory.copy(integer(caller.into()), ((IntValue) retval).value(), size(caller.sig().ret()));
+        } else if (retval != null && caller.dst() != null) {
+            set(caller.dst(), retval);
         }
+        memory.stackPointer(frame.savedSp());
         return null;
     }
 
@@ -512,17 +703,32 @@ public class VM implements TacVisitor<Void> {
         if (!(callee instanceof Function target)) {
             throw new IllegalStateException("no definition for @" + c.callee() + " at " + c.token().location());
         }
+        invoke(target, c);
+        return null;
+    }
+
+    // Through a pointer to function: the address names the function.
+    @Override
+    public Void visit(Instr.ICall i) {
+        long address = integer(i.callee());
+        String name = functionAt.get(address);
+        if (name == null) {
+            throw new IllegalStateException("call through a bad function pointer 0x" + Long.toHexString(address) + " at " + i.token().location());
+        }
+        Symbol callee = symbolTable.symbols.get(name);
+        if (!(callee instanceof Function target)) {
+            throw new IllegalStateException("no definition for @" + name + " at " + i.token().location());
+        }
+        invoke(target, new Instr.Call(i.dst(), i.sig(), name, i.args(), i.into(), i.token()));
+        return null;
+    }
+
+    private void invoke(Function target, Instr.Call c) {
         List<Value> args = new ArrayList<>();
         for (Operand o : c.args()) {
             args.add(operand(o));
         }
-        frames.push(new Frame(block, pc, bind(target, args), c));
+        frames.push(enter(target, args, block, pc, c));
         jump(target.entry());
-        return null;
-    }
-
-    @Override
-    public Void visit(Instr.ICall i) {
-        return null;
     }
 }

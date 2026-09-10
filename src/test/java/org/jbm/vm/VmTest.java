@@ -220,6 +220,115 @@ class VmTest {
     }
 
     @Test
+    void pointersToLocals() {
+        assertEquals(5, integer("", "int x = 1; int *p = &x; *p = 5;", "x"));
+        assertEquals(12, integer("", "int x = 1; int *p = &x; *p = 5; x = x + 1;", "*p + x"));
+        assertEquals(3, integer("int inc(int *p) { *p += 1; return *p; }", "int x = 1; inc(&x); inc(&x);", "x"));
+        assertEquals(10, integer("int f(int n) { int x = n; int *p = &x; if (n == 0) { return *p; } return *p + f(n - 1); }", "", "f(4)"),
+                "each frame has its own slot");
+        assertEquals(1, integer("", "double d = 0.5; double *p = &d; *p = *p * 2;", "d == 1.0"));
+        assertEquals(-56, integer("", "char c = 0; char *p = &c; *p = 200;", "c"));
+        assertEquals(200, integer("", "unsigned char c = 0; unsigned char *p = &c; *p = 200;", "c"));
+        assertEquals(1, integer("", "int x = 3; int *p = &x; int **pp = &p;", "**pp == 3 && *pp == p"));
+    }
+
+    @Test
+    void arrays() {
+        assertEquals(321, integer("", "int a[3]; a[0] = 1; a[1] = 2; a[2] = 3;", "a[0] + a[1] * 10 + a[2] * 100"));
+        assertEquals(55, integer("", "int a[10]; for (int i = 0; i < 10; i++) { a[i] = i + 1; } int s = 0; for (int i = 0; i < 10; i++) { s += a[i]; }", "s"));
+        assertEquals(9, integer("", "int a[5]; int *p = a + 2; *p = 7;", "a[2] + (p - a)"));
+        assertEquals(1, integer("", "int a[4] = { 1, 2, 3, 4 };", "a[3] == 4 && sizeof a == 16"));
+        assertEquals(-56, integer("", "char buf[4]; buf[0] = 200;", "buf[0]"));
+        assertEquals(3.5, floating("", "double d[2]; d[0] = 1.5; d[1] = 2;", "d[0] + d[1]"));
+        assertEquals(6, integer("", "int m[2][3]; m[1][2] = 6;", "m[1][2]"));
+        assertEquals(15, integer("int sum(int *a, int n) { int s = 0; for (int i = 0; i < n; i++) { s += a[i]; } return s; }",
+                "int a[5] = { 1, 2, 3, 4, 5 };", "sum(a, 5)"));
+        assertEquals(0, integer("", "int a[3] = { 0 };", "a[0] + a[1] + a[2]"));
+    }
+
+    @Test
+    void structs() {
+        String decls = """
+                struct P { int x; int y; };
+                struct L { struct P a; struct P b; char tag; };
+                int area(struct P p) { return p.x * p.y; }
+                struct P mk(int x, int y) { struct P p; p.x = x; p.y = y; return p; }
+                void move(struct P *p, int dx) { p->x += dx; }
+                """;
+        assertEquals(12, integer(decls, "struct P p; p.x = 3; p.y = 4;", "p.x * p.y"));
+        assertEquals(12, integer(decls, "struct P p; p.x = 3; p.y = 4;", "area(p)"), "by value");
+        assertEquals(7, integer(decls, "struct P p = mk(3, 4);", "p.x + p.y"), "returned by value");
+        assertEquals(20, integer(decls, "", "area(mk(4, 5))"));
+        assertEquals(1, integer(decls, "struct P p = mk(1, 2); struct P q = p; q.x = 9;", "p.x == 1 && q.x == 9"), "a copy");
+        assertEquals(13, integer(decls, "struct P p = mk(3, 4); move(&p, 10);", "p.x"));
+        assertEquals(1, integer(decls, "struct L l; l.a = mk(1, 2); l.b = mk(3, 4); l.tag = 'z';", "l.a.y + l.b.x == 5 && l.tag == 'z' && sizeof l == 20"));
+        assertEquals(6, integer(decls, "struct P ps[3]; for (int i = 0; i < 3; i++) { ps[i] = mk(i, i * 2); }", "ps[2].x + ps[2].y"));
+        assertEquals(1, integer(decls, "struct P p = { .y = 7 };", "p.x == 0 && p.y == 7"));
+        assertEquals(1, integer("struct B { unsigned a : 3; unsigned b : 5; int c : 4; };",
+                "struct B b; b.a = 7; b.b = 31; b.c = -3;", "b.a == 7 && b.b == 31 && b.c == -3 && sizeof b == 4"));
+        assertEquals(1, integer("union U { int i; unsigned char c[4]; };", "union U u; u.i = 0x04030201;", "u.c[0] == 1 && u.c[3] == 4"));
+    }
+
+    @Test
+    void globals() {
+        assertEquals(7, integer("int g = 5;", "g += 2;", "g"));
+        assertEquals(1, integer("int a[4] = { 1, 2, 3, 4 }; int *p = a + 1;", "", "*p == 2 && p[2] == 4"), "an address item with an addend");
+        assertEquals('i', integer("const char *s = \"hi\";", "", "s[1]"));
+        assertEquals(1, integer("", "const char *s = \"hi\";", "s[0] == 'h' && s[2] == 0"));
+        assertEquals(3, integer("int next(void) { static int n = 0; return ++n; }", "next(); next();", "next()"), "a static keeps its value");
+        assertEquals(1, integer("struct P { int x; int y; } p = { 1, 2 }; struct P *q = &p;", "", "q->y == 2 && p.x == 1"));
+        assertEquals(1, integer("struct B { unsigned a : 3; unsigned b : 5; } b = { 5, 17 };", "", "b.a == 5 && b.b == 17"));
+        assertEquals(1, integer("double d = 2.5; float f = 0.25f; long long l = -1;", "", "d == 2.5 && f == 0.25 && l == -1"));
+        assertEquals(0, integer("int zeros[100];", "", "zeros[0] + zeros[99]"));
+        assertEquals(1, integer("int g; int *pg = &g;", "*pg = 4;", "g == 4"));
+        assertEquals(1, integer("int add(int a, int b) { return a + b; } int (*fp)(int, int) = add;", "", "fp(2, 3) == 5"), "a function address item");
+    }
+
+    @Test
+    void functionPointers() {
+        String decls = "int add(int a, int b) { return a + b; }\nint mul(int a, int b) { return a * b; }\nint apply(int (*f)(int, int), int x) { return f(x, x); }";
+        assertEquals(5, integer(decls, "int (*f)(int, int) = add;", "f(2, 3)"));
+        assertEquals(1, integer(decls, "int (*f)(int, int) = add; int (*g)(int, int) = mul;", "f(2, 3) == 5 && g(2, 3) == 6 && f != g"));
+        assertEquals(49, integer(decls, "", "apply(mul, 7)"));
+        assertEquals(1, integer(decls, "int (*f)(int, int) = 0;", "f == 0"));
+        String bad = "int main(void) { int (*f)(int) = (int (*)(int)) 4097; return f(1); }";
+        String m = assertThrows(IllegalStateException.class, () -> run(bad)).getMessage();
+        assertTrue(m.startsWith("call through a bad function pointer 0x1001"), m);
+    }
+
+    @Test
+    void runawayRecursionIsAFault() {
+        String m = assertThrows(IllegalStateException.class, () -> run("int f(int n) { return f(n + 1); }\nint main(void) { return f(0); }")).getMessage();
+        assertEquals("stack overflow: 100000 frames deep in @f", m);
+        String m2 = assertThrows(IllegalStateException.class, () -> run("int f(int n) { int a[1000]; a[0] = n; return f(a[0] + 1); }\nint main(void) { return f(0); }")).getMessage();
+        assertEquals("stack overflow", m2, "the arena's stack runs out before the frame limit");
+    }
+
+    @Test
+    void globalsSurviveAReloadOfTheSameType() {
+        VM vm = new VM();
+        vm.step(module("int counter = 0;\nint bump(void) { return ++counter; }"));
+        vm.call("bump", List.of());
+        assertEquals(2, ((VM.IntValue) vm.call("bump", List.of())).value());
+        vm.step(module("int counter = 0;\nint bump(void) { return ++counter; }\nint other = 9;"));
+        assertEquals(3, ((VM.IntValue) vm.call("bump", List.of())).value(), "the same type keeps storage and contents");
+        vm.step(module("int counter = 0;\nint bump(void) { return counter * 10; }"));
+        assertEquals(30, ((VM.IntValue) vm.call("bump", List.of())).value(), "a function is rebound, the global kept");
+        vm.step(module("double counter = 1.5;\ndouble get(void) { return counter; }"));
+        assertEquals(1.5, ((VM.FloatValue) vm.call("get", List.of())).value(), "a changed type is reallocated and initialized");
+    }
+
+    @Test
+    void memoryFaults() {
+        String nul = "int main(void) { int *p = 0; return *p; }";
+        String m = assertThrows(IllegalStateException.class, () -> run(nul)).getMessage();
+        assertEquals("null pointer dereference at 0x0", m);
+        String undefined = "extern int e;\nint main(void) { return e; }";
+        String m2 = assertThrows(IllegalStateException.class, () -> run(undefined)).getMessage();
+        assertEquals("no definition for @e at test.c:2:25", m2);
+    }
+
+    @Test
     void voidMainAndMissingFile() {
         assertNull(run("void main(void) { int x = 1; x++; }"));
         assertNull(run("void main(void) { return; }"));
