@@ -1,16 +1,9 @@
 package org.jbm;
 
+import org.jbm.cc.Compiler;
 import org.jbm.cc.lower.arch.X86_64SysV;
 import org.jbm.cc.parse.ast.AstPrinter;
-import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.HeaderProvider;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.lower.Lower;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.sema.Desugar;
-import org.jbm.cc.sema.Resolver;
-import org.jbm.cc.sema.Typer;
 import org.jbm.cc.lower.tac.TacWriter;
 import org.jbm.cc.sema.tast.TypedPrinter;
 import org.jbm.cc.sema.types.Types;
@@ -74,26 +67,15 @@ public class Main {
             source = Files.readString(Path.of(file));
         }
         HeaderProvider headers = HeaderProvider.standard(searchDirs);
-        var expanded = new Scanner().expand(CppTokenizer.tokenSet(source, headers, file));
-
-        // Translation phase 7: pp-tokens -> tokens (pp-numbers become
-        // integer/floating constants). This is the parser's input.
-        var converted = TokenConversion.convert(expanded);
-
-        // Phase 8 begins: parse the token sequence into a translation unit.
-        var translationUnit = Parser.parse(converted);
-        System.out.println(AstPrinter.print(translationUnit));
-
-        // Semantic analysis: syntactic rewrites, name resolution, typing.
-        var desugared = Desugar.desugar(translationUnit);
-        var bindings = Resolver.resolve(desugared);
         var types = new Types(X86_64SysV.INSTANCE);
-        var typed = Typer.type(desugared, bindings, types);
-        System.out.println();
-        System.out.println(TypedPrinter.print(typed));
+        Compiler.Compiled compiled = Compiler.compile(source, headers, file, types);
 
-        // Lowering: the typed tree to the TAC, the input of the VM and of code generation.
+        // The three stages a reader may want to see: the syntax tree, the
+        // typed tree, and the TAC that the VM and code generation consume.
+        System.out.println(AstPrinter.print(compiled.ast()));
         System.out.println();
-        System.out.print(TacWriter.print(Lower.lower(typed, types)));
+        System.out.println(TypedPrinter.print(compiled.typed()));
+        System.out.println();
+        System.out.print(TacWriter.print(compiled.tac()));
     }
 }

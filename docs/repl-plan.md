@@ -46,11 +46,11 @@ vm.step(compiled.tac())                               binds new and changed name
 - Redefinition replaces the kept line that declared the name; if the
   new text fails to compile the old line is restored.
 
-**Startup.** The shell loads one module before the first prompt: the
-prelude, an empty `.file` over `#include` of every bundled header. That
-binds every library declaration; today those bind to no-op builtins
-(`VM.bind(name, args -> null)`), and `/load` later replaces them with
-real ones. The prelude lines are kept, so `printf` is always declared.
+**Startup.** The shell loads one module before the first prompt: an
+empty unit, no headers. It binds the VM's builtins under their names,
+today no-ops (`VM.bind(name, args -> null)`), so a later `#include
+<stdio.h>` typed by the user declares `printf` and a call reaches the
+builtin. Nothing is included on the user's behalf.
 
 ## Values
 
@@ -99,7 +99,7 @@ A candidate shows its kind and type on the right, as `jshell` does:
 /vars  /funcs  /types  /macros          what is defined, with types or expansions
 /tac <name>            the TAC of a function or global as TacWriter prints it
 /drop <name>           forget the line that declares it; refused if others need it
-/reset                 forget everything; reload the prelude
+/reset                 forget everything; back to the empty startup module
 /load <file>           run a file line by line       /save <file>   write the kept text
 /exit
 ```
@@ -133,8 +133,8 @@ recompile, completion candidates for each context.
 
 ## Steps
 
-1. [ ] `Parser.parseScript` and `.file`; `$` in identifiers; `Compiler.compileScript`.
-2. [ ] `VM.bind`, `VM.symbols`, `Memory.read`; the prelude with no-op builtins.
+1. [x] `Parser.parseScript` and `.file`; `$` in identifiers; `Compiler.compileScript`.
+2. [ ] `VM.bind`, `VM.symbols`, `Memory.read`; the empty startup module and the no-op builtins.
 3. [ ] `Repl` core: kept lines, line map, declarations and statements, `ScriptConsole`, first transcripts.
 4. [ ] `$N`, `ValuePrinter`, continuation.
 5. [ ] Commands; redefinition and `/drop`.

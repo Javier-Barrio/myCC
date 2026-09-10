@@ -509,6 +509,14 @@ class CppTokenizerTest {
     }
 
     @Test
+    void dollarIsAnIdentifierCharacter() {
+        assertTokens("$1 + a$b",
+                TokenType.IDENTIFIER, "$1",
+                TokenType.PUNCTUATOR, "+",
+                TokenType.IDENTIFIER, "a$b");
+    }
+
+    @Test
     void nonDefineDirectiveDoesNotReclassifyFollowingIdentifiers() {
         assertTokens("#pragma foo",
                 TokenType.PUNCTUATOR, "#",
