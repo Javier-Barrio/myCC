@@ -78,6 +78,21 @@ public final class Repl {
         return vm;
     }
 
+    /** The last successful compile: the typed tree and syntax tree completion reads. */
+    public Compiler.Compiled last() {
+        return last;
+    }
+
+    /** The kept lines with the names each declares. */
+    public List<Kept> keptLines() {
+        return List.copyOf(kept);
+    }
+
+    /** The names of the commands, for completion and help. */
+    public static List<String> commands() {
+        return List.of("/list", "/vars", "/funcs", "/types", "/macros", "/tac", "/drop", "/reset", "/help", "/exit");
+    }
+
     /** The lines kept so far: directives, declarations, {@code $N} declarations. */
     public List<String> kept() {
         return kept.stream().map(Kept::text).toList();
