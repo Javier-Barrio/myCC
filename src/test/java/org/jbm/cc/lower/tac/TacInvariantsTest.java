@@ -1,12 +1,12 @@
-package org.jbm.cc.tac;
+package org.jbm.cc.lower.tac;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.function.Consumer;
 
-import static org.jbm.cc.tac.TacTest.AT;
-import static org.jbm.cc.tac.TacTest.X64;
+import static org.jbm.cc.lower.tac.TacTest.AT;
+import static org.jbm.cc.lower.tac.TacTest.X64;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;

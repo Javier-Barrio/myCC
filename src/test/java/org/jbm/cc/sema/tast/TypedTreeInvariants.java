@@ -1,4 +1,4 @@
-package org.jbm.cc.tast;
+package org.jbm.cc.sema.tast;
 
 import org.jbm.cc.sema.Symbol;
 import org.jbm.cc.types.CType;
