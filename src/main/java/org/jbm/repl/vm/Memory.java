@@ -1,4 +1,4 @@
-package org.jbm.vm;
+package org.jbm.repl.vm;
 
 /**
  * The arena: one flat little-endian address space. The first page is

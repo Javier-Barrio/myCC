@@ -1,5 +1,6 @@
 package org.jbm.vm;
 
+import org.jbm.repl.vm.VM;
 import org.junit.jupiter.api.Test;
 
 import static org.jbm.vm.VmTest.run;

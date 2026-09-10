@@ -20,7 +20,7 @@ import org.jbm.cc.sema.tast.TStmt;
 import org.jbm.cc.sema.tast.TUnit;
 import org.jbm.cc.sema.types.CType;
 import org.jbm.cc.sema.types.Types;
-import org.jbm.vm.VM;
+import org.jbm.repl.vm.VM;
 
 import java.io.IOException;
 import java.nio.file.Files;
