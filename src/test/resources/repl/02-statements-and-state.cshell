@@ -1,0 +1,23 @@
+cshell> int counter = 0;
+counter ==> 0
+cshell> int bump(void) { return ++counter; }
+|  defined bump
+cshell> bump(); bump();
+cshell> counter
+$1 ==> 2
+cshell> for (int i = 0; i < 5; i++) { counter += i; }
+cshell> counter
+$2 ==> 12
+cshell> bump()
+$3 ==> 13
+cshell> if (counter > 10) { counter = 0; } else { counter = 1; }
+cshell> counter
+$4 ==> 0
+cshell> struct P { int x; int y; };
+cshell> struct P p = { 3, 4 };
+p ==> {.x = 3, .y = 4}
+cshell> p.x * p.y
+$5 ==> 12
+cshell> p.y = 10;
+cshell> p
+$6 ==> {.x = 3, .y = 10}
