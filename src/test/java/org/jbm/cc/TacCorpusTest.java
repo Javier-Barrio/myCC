@@ -36,7 +36,7 @@ class TacCorpusTest {
 
     static Module lower(Path source) throws IOException {
         Types types = TypedCorpusTest.typesFor(source);
-        TUnit unit = TypedCorpusTest.type(Files.readString(source), types);
+        TUnit unit = TypedCorpusTest.type(Files.readString(source), source.toString(), types);
         return Lower.lower(unit, types);
     }
 
@@ -78,7 +78,7 @@ class TacCorpusTest {
     @Test
     void theMainProgramLowers() {
         var types = new Types(org.jbm.cc.arch.X86_64SysV.INSTANCE);
-        Module m = Lower.lower(TypedCorpusTest.type(org.jbm.Main.SOURCE, types), types);
+        Module m = Lower.lower(TypedCorpusTest.type(org.jbm.Main.SOURCE, "<source>", types), types);
         assertTrue(TacInvariants.check(m) > 0);
         assertTrue(TacWriter.print(m).contains("define @main() -> i32 {"));
     }

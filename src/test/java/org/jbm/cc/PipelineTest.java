@@ -7,6 +7,7 @@ import org.jbm.cc.ast.Decl;
 import org.jbm.cc.ast.Expr;
 import org.jbm.cc.ast.Stmt;
 import org.jbm.cc.ast.Type;
+import org.jbm.cc.cpp.BundledHeaders;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
@@ -34,7 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PipelineTest {
 
     private static List<Decl> parse(String source) {
-        return Parser.parse(TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source))));
+        CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
+        return Parser.parse(TokenConversion.convert(new Scanner().expand(tokens)));
     }
 
     /** Counts nodes by kind and collects a few of them. */
