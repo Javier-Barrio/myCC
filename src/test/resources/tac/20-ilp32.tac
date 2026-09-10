@@ -10,26 +10,20 @@ define @f(u32 %u, i32 %l, ptr %p, ptr %q) -> void {
   u32 %t0
   u32 %t1
   i32 %t2
-  u32 %t3
-  i32 %t4
-  i32 %t5
-  u8 %t6
-  i32 %t7
+  i32 %t3
+  u8 %t4
 .entry:
-  mov %t0, %l
-  %t1 = wadd %u, %t0
-  mov %t2, %t1
-  mov %l, %t2
-  mov %t3, 4
-  mov %z, %t3
-  %t4 = wsub %p, %q
-  %t4 = sdiv %t4, 4
-  mov %diff, %t4
-  mov %t5, 255
-  mov %t6, %t5
-  %t6 = and %t6, 255
-  mov %c, %t6
-  mov %t7, %c
-  mov %ci, %t7
+  %t0 = wadd %u, %l
+  mov %l, %t0
+  mov %t1, 4
+  mov %z, %t1
+  %t2 = wsub %p, %q
+  %t2 = sdiv %t2, 4
+  mov %diff, %t2
+  mov %t3, 255
+  mov %t4, %t3
+  %t4 = and %t4, 255
+  mov %c, %t4
+  mov %ci, %c
   ret
 }

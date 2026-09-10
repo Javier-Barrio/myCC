@@ -15,61 +15,57 @@ define @f() -> void {
   %S %tmp13
   i32 %t0
   i32 %t1
-  i32 %t2
+  f64 %t2
   f64 %t3
-  f64 %t4
-  f32 %t5
-  ptr %t6
-  i32 %t7
-  f64 %t8
+  f32 %t4
+  ptr %t5
+  f64 %t6
+  ptr %t7
+  i32 %t8
   ptr %t9
   i32 %t10
-  ptr %t11
-  i32 %t12
-  i64 %t13
-  i64 %t14
-  ptr %t15
-  ptr %t16
+  i64 %t11
+  i64 %t12
+  ptr %t13
+  ptr %t14
+  i32 %t15
+  i32 %t16
   i32 %t17
-  i32 %t18
+  ptr %t18
   i32 %t19
-  ptr %t20
+  i32 %t20
   i32 %t21
-  i32 %t22
-  i32 %t23
 .entry:
-  mov %t0, %c
-  mov %t1, 2
-  %t2 = call (i32, i32) -> i32 @add(%t0, %t1)
-  mov %i, %t2
-  %t3 = i2f %c
-  %t4 = call (f64) -> f64 @half(%t3)
-  %t5 = fcvt %t4
-  mov %fl, %t5
-  %t6 = addrof @.str.d153ce427d7ff938
-  mov %t7, %c
-  %t8 = fcvt %fl
-  %t9 = addrof @.str.d98ac5bc9eec51cb
-  %t10 = call (ptr, ...) -> i32 @printf(%t6, %t7, %t8, %t9)
+  mov %t0, 2
+  %t1 = call (i32, i32) -> i32 @add(%c, %t0)
+  mov %i, %t1
+  %t2 = i2f %c
+  %t3 = call (f64) -> f64 @half(%t2)
+  %t4 = fcvt %t3
+  mov %fl, %t4
+  %t5 = addrof @.str.d153ce427d7ff938
+  %t6 = fcvt %fl
+  %t7 = addrof @.str.d98ac5bc9eec51cb
+  %t8 = call (ptr, ...) -> i32 @printf(%t5, %c, %t6, %t7)
   call () -> void @noargs()
-  %t11 = addrof @table
-  mov %t12, 1
-  mov %t13, %t12
-  %t13 = shl %t13, 32
-  %t13 = ashr %t13, 32
-  %t14 = wmul %t13, 8
-  %t15 = wadd %t11, %t14
-  %t16 = load.u64 %t15
-  mov %t17, 1
-  mov %t18, 2
-  %t19 = icall (i32, i32) -> i32 %t16(%t17, %t18)
-  mov %i, %t19
-  %t20 = addrof %tmp13
-  mov %t21, 1
-  call (i32) -> %S @mk(%t21) into %t20
-  %t22 = load.s32 %t20
-  mov %i, %t22
-  %t23 = call (i32, i32) -> i32 @add(%i, %i)
-  mov %i, %t23
+  %t9 = addrof @table
+  mov %t10, 1
+  mov %t11, %t10
+  %t11 = shl %t11, 32
+  %t11 = ashr %t11, 32
+  %t12 = wmul %t11, 8
+  %t13 = wadd %t9, %t12
+  %t14 = load.u64 %t13
+  mov %t15, 1
+  mov %t16, 2
+  %t17 = icall (i32, i32) -> i32 %t14(%t15, %t16)
+  mov %i, %t17
+  %t18 = addrof %tmp13
+  mov %t19, 1
+  call (i32) -> %S @mk(%t19) into %t18
+  %t20 = load.s32 %t18
+  mov %i, %t20
+  %t21 = call (i32, i32) -> i32 @add(%i, %i)
+  mov %i, %t21
   ret
 }

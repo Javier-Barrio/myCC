@@ -11,56 +11,46 @@ define @f() -> void {
   ptr %v
   u8 %b
   ptr %fp
-  i32 %t0
-  i8 %t1
-  f64 %t2
-  i32 %t3
-  f64 %t4
-  f32 %t5
-  u8 %t6
+  i8 %t0
+  f64 %t1
+  i32 %t2
+  f64 %t3
+  f32 %t4
+  u8 %t5
+  ptr %t6
   ptr %t7
-  i64 %t8
-  ptr %t9
-  ptr %t10
-  ptr %t11
-  i32 %t12
-  i32 %t13
-  i32 %t14
-  i16 %t15
+  ptr %t8
+  i32 %t9
+  i16 %t10
 .entry:
-  mov %t0, %c
-  mov %i, %t0
-  mov %t1, %i
-  %t1 = shl %t1, 24
-  %t1 = ashr %t1, 24
-  mov %c, %t1
-  %t2 = i2f %i
-  mov %d, %t2
-  %t3 = f2i %d
-  mov %i, %t3
-  %t4 = fcvt %fl
-  mov %d, %t4
-  %t5 = fcvt %d
-  mov %fl, %t5
-  %t6 = ne %p, 0
-  mov %b, %t6
+  mov %i, %c
+  mov %t0, %i
+  %t0 = shl %t0, 24
+  %t0 = ashr %t0, 24
+  mov %c, %t0
+  %t1 = i2f %i
+  mov %d, %t1
+  %t2 = f2i %d
+  mov %i, %t2
+  %t3 = fcvt %fl
+  mov %d, %t3
+  %t4 = fcvt %d
+  mov %fl, %t4
+  %t5 = ne %p, 0
+  mov %b, %t5
   mov %v, %p
-  mov %t7, %l
+  mov %p, %l
+  mov %l, %p
+  mov %t6, 0
+  mov %p, %t6
+  %t7 = addrof %a
   mov %p, %t7
-  mov %t8, %p
-  mov %l, %t8
-  mov %t9, 0
-  mov %p, %t9
-  %t10 = addrof %a
-  mov %p, %t10
-  %t11 = addrof @f
-  mov %fp, %t11
-  mov %t12, %c
-  mov %t13, %s
-  %t14 = add %t12, %t13
-  mov %t15, %t14
-  %t15 = shl %t15, 16
-  %t15 = ashr %t15, 16
-  mov %s, %t15
+  %t8 = addrof @f
+  mov %fp, %t8
+  %t9 = add %c, %s
+  mov %t10, %t9
+  %t10 = shl %t10, 16
+  %t10 = ashr %t10, 16
+  mov %s, %t10
   ret
 }

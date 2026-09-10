@@ -55,8 +55,11 @@ final class Names {
 
         String of(@NonNull Symbol s) {
             String base = s.name;
-            if (base.startsWith("<temp")) base = "tmp" + base.substring(5, base.length() - 1);
-            else if (base.startsWith("<literal")) base = "lit" + base.substring(8, base.length() - 1);
+            if (base.startsWith("<temp")) {
+                base = "tmp" + base.substring(5, base.length() - 1);
+            } else if (base.startsWith("<literal")) {
+                base = "lit" + base.substring(8, base.length() - 1);
+            }
             int n = seen.merge(base, 1, Integer::sum);
             return n == 1 ? base : base + "." + n;
         }

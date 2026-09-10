@@ -62,7 +62,6 @@ define @g() -> void {
   u64 %t52
   u64 %t53
   u64 %t54
-  i64 %t55
 .entry:
   %t0 = addrof @arr
   mov %p, %t0
@@ -146,7 +145,6 @@ define @g() -> void {
   mov %t52, 16
   mov %t53, 4
   %t54 = udiv %t52, %t53
-  mov %t55, %t54
-  mov %n, %t55
+  mov %n, %t54
   ret
 }
