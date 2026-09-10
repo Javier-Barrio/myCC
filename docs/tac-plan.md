@@ -107,22 +107,22 @@ instruction into the declarations of its variables; (b) one width and no
 modifier, which makes narrow arithmetic a full-width operation followed
 by a mask or a shift pair. The modifier was chosen because:
 
-1. [ ] **Every value is held extended as its own type implies**, and the
+1. [x] **Every value is held extended as its own type implies**, and the
    instruction that writes it is what guarantees that: a `.sN` result is
    sign-extended, a `.uN` result zero-extended, a `load.s8` sign-extends,
    a `load.u8` zero-extends. No pass has to maintain an invariant the
    checker cannot see; the extension is part of the instruction's
    definition, as it is on RISC-V's `addw` and on x86's 32-bit writes.
-2. [ ] **Widening is free and narrowing is one instruction.** A `char` is
+2. [x] **Widening is free and narrowing is one instruction.** A `char` is
    already the `int` it promotes to; an `int` is already the `long`;
    `unsigned` to `unsigned long` is already the zero-extended value. Only a
    conversion that must rewrite the bits above the new width costs an
    instruction, and it is a `mov.sN` or `mov.uN`.
-3. [ ] **Only the instructions that can disturb the upper bits carry a
+3. [x] **Only the instructions that can disturb the upper bits carry a
    modifier**: arithmetic, logic, shifts and `mov`. A comparison, a
    `switch` or a `condbr` on values that are already extended is correct
    at the full width, so those have none.
-4. [ ] **An interpreter is one `long[]` and one `double[]` per frame**, and a
+4. [x] **An interpreter is one `long[]` and one `double[]` per frame**, and a
    `.s32` operation is `(long) (int) result`, one cast. A code generator
    maps `add.s32` onto its 32-bit add and inserts a sign-extending move
    only where a 64-bit use follows and its machine does not already
@@ -566,13 +566,13 @@ Each step is one commit with the suite green and `Main` still running.
    hand-built module tests.
 2. [x] **`TacWriter`** and **`TacInvariants`**; the text form fixed by tests.
 3. [x] **`Lower`**, by the steps of `lower-plan.md`.
-4. [ ] **The modifier**: one register width with `.sN`/`.uN` and `.P`
+4. [x] **The modifier**: one register width with `.sN`/`.uN` and `.P`
    modifiers in place of the register classes, in the model, the writer,
    the invariants and the lowerer.
 5. [ ] **`TacReader`** and the round trip on the whole corpus.
 
-Steps 1 to 3 were implemented in September 2026 on the two-class design
-that step 4 replaces. `TacInvariants` reports a violation as an
+Steps 1 to 4 are implemented (September 2026); step 4 replaced the
+two-class design steps 1 to 3 were first built on. `TacInvariants` reports a violation as an
 `IllegalStateException` naming the function and printing the
 instruction.
 
