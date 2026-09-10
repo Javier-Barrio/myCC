@@ -33,7 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class VmTest {
 
     static Module module(String source) {
-        Types types = new Types(X86_64SysV.INSTANCE);
+        return module(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    static Module module(String source, Types types) {
         CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
         List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
         TUnit typed = Typer.type(unit, Resolver.resolve(unit), types);
@@ -41,8 +44,12 @@ class VmTest {
     }
 
     static VM.Value run(String source) {
+        return run(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    static VM.Value run(String source, Types types) {
         VM vm = new VM();
-        vm.step(module(source));
+        vm.step(module(source, types));
         return vm.call("main", List.of());
     }
 
