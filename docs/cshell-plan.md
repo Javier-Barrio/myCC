@@ -180,14 +180,21 @@ interface Engine {
 ```
 
 **Loading with merge semantics.** `load` receives the whole program every
-time and must behave like a dynamic loader given a rebuilt library:
+time and must behave like a dynamic loader given a rebuilt library. The
+loader never asks whether a definition changed; it asks, per name, whether
+what is bound under it can stay:
 
-- a **function** that is new is bound; one whose TAC differs from what is
-  loaded under that name is replaced; one that is identical is skipped;
+- a **function** is always bound under its name, replacing whatever was
+  there. Code has no state, callers reach it by name at call time, and the
+  name keeps its address slot, so rebinding an unchanged function is
+  harmless and a changed one takes effect at its next call. No comparison
+  of TAC is made (the instructions carry source tokens, so two compiles
+  of the same text are not even `equals`);
 - a **data item** that is new is allocated and initialized once; one already
-  loaded under that name **keeps its storage and its contents**, whatever
-  earlier calls stored there, and its initializer is ignored; one whose
-  type or size changed is reallocated and initialized afresh;
+  bound under that name with the **same TAC type keeps its storage and its
+  contents**, whatever earlier calls stored there, and its initializer is
+  ignored; one whose type changed is reallocated and initialized afresh.
+  The type check is `equals` on the `Type` records;
 - a **string literal** already present by name is shared;
 - an **external** name is bound to a builtin if the VM has one, and left
   unbound otherwise, to fault at first use.
@@ -335,7 +342,8 @@ org.jbm.cshell                Repl (the loop, the kept lines, the line map, clas
 - **VM unit tests**: `Memory` (segments, widths, faults), `Interpreter` on
   hand-built modules (each instruction kind, conversions on both targets,
   `switch` ranges, by-value aggregates), `Loader` (relocations, merge on
-  reload: a global keeps its contents, a changed function is replaced),
+  reload: a global of unchanged type keeps its contents, one of a changed
+  type is reallocated, a function is rebound),
   `printf` formats, `malloc` reuse.
 - **Run corpus**: `src/test/resources/run/*.c`, programs with `main` and a
   `.out` file with the expected stdout and exit status, produced by `gcc`
