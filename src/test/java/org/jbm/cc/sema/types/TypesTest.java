@@ -1,4 +1,4 @@
-package org.jbm.cc.types;
+package org.jbm.cc.sema.types;
 
 import org.jbm.cc.arch.Ilp32;
 import org.jbm.cc.arch.X86_64SysV;

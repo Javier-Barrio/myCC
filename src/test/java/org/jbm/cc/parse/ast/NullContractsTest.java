@@ -1,4 +1,4 @@
-package org.jbm.cc.ast;
+package org.jbm.cc.parse.ast;
 
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;

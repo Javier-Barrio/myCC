@@ -13,7 +13,7 @@ import org.jbm.cc.sema.Resolver;
 import org.jbm.cc.sema.Typer;
 import org.jbm.cc.tast.TUnit;
 import org.jbm.cc.tast.TypedPrinter;
-import org.jbm.cc.tast.TypedTreeInvariants;
+import org.jbm.cc.sema.tast.TypedTreeInvariants;
 import org.jbm.cc.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
