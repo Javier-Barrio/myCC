@@ -245,7 +245,7 @@ final class ExprLower implements TVisitor<Val> {
             call(call, p);
         } else {
             Val v = value(m.value());
-            b.emit(new Instr.Copy(typeMap.of(m.type()), p, v.var(), m.token()));
+            b.emit(new Instr.Store(p, v.var(), typeMap.of(m.type()), false, m.token()));
         }
         return memory(p, m.type());
     }
@@ -320,14 +320,14 @@ final class ExprLower implements TVisitor<Val> {
         var m = (Place.Memory) place;
         CType t = m.type();
         if (t.isArray() || t.isRecord()) {
-            b.emit(new Instr.Copy(typeMap.of(t), m.ptr(), v.var(), at));
+            b.emit(new Instr.Store(m.ptr(), v.var(), typeMap.of(t), m.isVolatile(), at));
             return;
         }
         if (m.bits().isPresent()) {
             writeBits(m, m.bits().get(), v, at);
             return;
         }
-        b.emit(new Instr.Store(m.ptr(), v.var(), width(t), t.isFloating(), m.isVolatile(), at));
+        b.emit(new Instr.Store(m.ptr(), v.var(), storeType(t), m.isVolatile(), at));
     }
 
     // A bit-field store is a read-modify-write of the storage unit: clear
@@ -343,7 +343,7 @@ final class ExprLower implements TVisitor<Val> {
         b.emit(new Instr.Bin(Instr.BinOp.AND, f, v.var(), new Operand.IntImm(mask(bits.width())), full(false), at));
         b.emit(new Instr.Bin(Instr.BinOp.SHL, f, f, new Operand.IntImm(bits.bitOffset()), full(false), at));
         b.emit(new Instr.Bin(Instr.BinOp.OR, u, u, f, full(false), at));
-        b.emit(new Instr.Store(m.ptr(), u, unit, false, m.isVolatile(), at));
+        b.emit(new Instr.Store(m.ptr(), u, ut, m.isVolatile(), at));
     }
 
     /** The address of a place, into a ptr variable. */
@@ -353,6 +353,14 @@ final class ExprLower implements TVisitor<Val> {
         Var p = b.temp(Type.PTR);
         b.emit(new Instr.AddrOfVar(p, v.var(), at));
         return p;
+    }
+
+    /** The memory type a scalar store writes: a pointer as the unsigned integer of its width. */
+    private Type storeType(CType t) {
+        if (t.isPointer() || t.isNullptr()) {
+            return new Type.Int(types.width(t), false);
+        }
+        return typeMap.of(t);
     }
 
     private int width(CType t) {
@@ -907,7 +915,7 @@ final class ExprLower implements TVisitor<Val> {
     private void arm(TExpr.Rvalue arm, Var r, boolean aggregate, CType t, Token at) {
         Val v = value(arm);
         if (aggregate) {
-            b.emit(new Instr.Copy(typeMap.of(t), r, v.var(), at));
+            b.emit(new Instr.Store(r, v.var(), typeMap.of(t), false, at));
         } else if (r != null) {
             mov(r, v.var(), t, at);
         }
@@ -933,7 +941,7 @@ final class ExprLower implements TVisitor<Val> {
      * an earlier one where they overlap.
      */
     void initialize(@NonNull Var ptr, @NonNull CType type, @NonNull TInit init, @NonNull Token at) {
-        b.emit(new Instr.Zero(typeMap.of(type), ptr, at));
+        b.emit(new Instr.Store(ptr, new Operand.IntImm(0), typeMap.of(type), false, at));
         for (TInit.Item item : init.items()) {
             Var q = b.temp(Type.PTR);
             b.emit(new Instr.Bin(Instr.BinOp.WADD, q, ptr, new Operand.IntImm(item.offset()), pointerMod(), at));

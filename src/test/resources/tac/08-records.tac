@@ -96,7 +96,7 @@ define @f() -> void {
   %t0 = addrof %p
   mov.u64 %pp, %t0
   %t1 = addrof %b
-  zero %B %t1
+  store.%B %t1, 0
   %t2 = wadd.u64 %t1, 0
   mov.s32 %t3, 3
   mov.u32 %t4, %t3
@@ -130,7 +130,7 @@ define @f() -> void {
   store.f32 %t19, %t21
   %t22 = addrof %q
   %t23 = addrof %p
-  copy %P %t22, %t23
+  store.%P %t22, %t23
   %t24 = addrof %p
   %t25 = wadd.u64 %t24, 8
   %t26 = wadd.u64 %t25, 2

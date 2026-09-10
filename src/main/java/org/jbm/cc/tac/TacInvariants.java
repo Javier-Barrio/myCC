@@ -253,37 +253,31 @@ public final class TacInvariants implements TacVisitor<Void> {
     @Override
     public Void visit(Instr.Store i) {
         isPointer(i.ptr());
-        int w = i.width();
-        if (i.isFloat()) {
-            require(module.target.hasPrecision(w), "store.f" + w);
+        Type t = i.type();
+        if (t.isAggregate()) {
+            boolean zero = i.value() instanceof Operand.IntImm imm && imm.value() == 0;
+            boolean pointer = i.value() instanceof Var v && v.type instanceof Type.Ptr;
+            require(zero || pointer, "an aggregate store takes a ptr to the bytes or the immediate 0");
+            if (t instanceof Type.Struct st) {
+                require(structs.contains(st.name()), "unknown struct %" + st.name());
+            }
+            return null;
+        }
+        if (t instanceof Type.Float f) {
+            require(module.target.hasPrecision(f.width()), "store.f" + f.width());
             if (i.value() instanceof Var v) {
-                require(classOf(v).isFloating(), "store.f" + w + " of " + v);
+                require(classOf(v).isFloating(), "store.f" + f.width() + " of " + v);
             } else {
                 require(i.value() instanceof Operand.FloatImm, "store.f of an integer immediate");
             }
-        } else {
-            require(w == 8 || w == 16 || w == 32 || w == 64, "store." + w);
-            if (i.value() instanceof Var v) {
-                require(classOf(v).isInteger(), "store." + w + " of " + v);
-            } else {
-                require(i.value() instanceof Operand.IntImm, "store of a floating immediate");
-            }
+            return null;
         }
-        return null;
-    }
-
-    @Override
-    public Void visit(Instr.Copy i) {
-        require(i.type().isAggregate(), "copy of a scalar type");
-        isPointer(i.dst());
-        isPointer(i.src());
-        return null;
-    }
-
-    @Override
-    public Void visit(Instr.Zero i) {
-        require(i.type().isAggregate(), "zero of a scalar type");
-        isPointer(i.ptr());
+        require(t instanceof Type.Int || t instanceof Type.Ptr, "store of a " + t.spelling());
+        if (i.value() instanceof Var v) {
+            require(classOf(v).isInteger(), "store of " + v + " through an integer type");
+        } else {
+            require(i.value() instanceof Operand.IntImm, "store of a floating immediate");
+        }
         return null;
     }
 
