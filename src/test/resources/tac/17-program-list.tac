@@ -13,10 +13,11 @@ define @sum(ptr %head) -> i32 {
   i32 %t0
   ptr %t1
   i32 %t2
-  i32 %t3
+  ptr %t3
   i32 %t4
-  ptr %t5
+  i32 %t5
   ptr %t6
+  ptr %t7
 .entry:
   mov.s32 %t0, 0
   mov.s32 %total, %t0
@@ -27,14 +28,15 @@ define @sum(ptr %head) -> i32 {
   %t2 = ne %it, %t1
   condbr %t2, .for.body, .for.done
 .for.body:
-  %t3 = load.s32 %it
-  %t4 = add.s32 %total, %t3
-  mov.s32 %total, %t4
+  %t3 = wadd %it, 0
+  %t4 = load.s32 %t3
+  %t5 = add.s32 %total, %t4
+  mov.s32 %total, %t5
   br .for.step
 .for.step:
-  %t5 = wadd %it, 8
-  %t6 = load.u64 %t5
-  mov.u64 %it, %t6
+  %t6 = wadd %it, 8
+  %t7 = load.u64 %t6
+  mov.u64 %it, %t7
   br .for.cond
 .for.done:
   ret %total
@@ -70,48 +72,52 @@ define @main() -> i32 {
   %Node %b
   ptr %list
   ptr %t0
-  i32 %t1
-  ptr %t2
+  ptr %t1
+  i32 %t2
   ptr %t3
   ptr %t4
-  i32 %t5
+  ptr %t5
   ptr %t6
-  ptr %t7
+  i32 %t7
   ptr %t8
   ptr %t9
   ptr %t10
   ptr %t11
   ptr %t12
-  i32 %t13
-  i32 %t14
+  ptr %t13
+  ptr %t14
   i32 %t15
   i32 %t16
   i32 %t17
+  i32 %t18
+  i32 %t19
 .entry:
   %t0 = addrof %a
   zero %Node %t0
-  mov.s32 %t1, 1
-  store.32 %t0, %t1
-  %t2 = wadd %t0, 8
-  mov.u64 %t3, 0
-  store.64 %t2, %t3
-  %t4 = addrof %b
-  zero %Node %t4
-  mov.s32 %t5, 2
-  store.32 %t4, %t5
-  %t6 = wadd %t4, 8
-  mov.u64 %t7, 0
-  store.64 %t6, %t7
-  mov.u64 %t8, 0
-  %t9 = addrof %a
-  %t10 = call (ptr, ptr) -> ptr @push(%t8, %t9)
-  %t11 = addrof %b
+  %t1 = wadd %t0, 0
+  mov.s32 %t2, 1
+  store.32 %t1, %t2
+  %t3 = wadd %t0, 8
+  mov.u64 %t4, 0
+  store.64 %t3, %t4
+  %t5 = addrof %b
+  zero %Node %t5
+  %t6 = wadd %t5, 0
+  mov.s32 %t7, 2
+  store.32 %t6, %t7
+  %t8 = wadd %t5, 8
+  mov.u64 %t9, 0
+  store.64 %t8, %t9
+  mov.u64 %t10, 0
+  %t11 = addrof %a
   %t12 = call (ptr, ptr) -> ptr @push(%t10, %t11)
-  mov.u64 %list, %t12
-  %t13 = call (ptr) -> i32 @sum(%list)
-  %t14 = call (ptr) -> i32 @length(%list)
-  mov.s32 %t15, 2
-  %t16 = mul.s32 %t14, %t15
-  %t17 = sub.s32 %t13, %t16
-  ret %t17
+  %t13 = addrof %b
+  %t14 = call (ptr, ptr) -> ptr @push(%t12, %t13)
+  mov.u64 %list, %t14
+  %t15 = call (ptr) -> i32 @sum(%list)
+  %t16 = call (ptr) -> i32 @length(%list)
+  mov.s32 %t17, 2
+  %t18 = mul.s32 %t16, %t17
+  %t19 = sub.s32 %t15, %t18
+  ret %t19
 }

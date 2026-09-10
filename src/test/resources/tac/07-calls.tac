@@ -31,8 +31,9 @@ define @f() -> void {
   i32 %t15
   ptr %t16
   i32 %t17
-  i32 %t18
+  ptr %t18
   i32 %t19
+  i32 %t20
 .entry:
   mov.s32 %t0, 2
   %t1 = call (i32, i32) -> i32 @add(%c, %t0)
@@ -57,9 +58,10 @@ define @f() -> void {
   %t16 = addrof %tmp13
   mov.s32 %t17, 1
   call (i32) -> %S @mk(%t17) into %t16
-  %t18 = load.s32 %t16
-  mov.s32 %i, %t18
-  %t19 = call (i32, i32) -> i32 @add(%i, %i)
+  %t18 = wadd %t16, 0
+  %t19 = load.s32 %t18
   mov.s32 %i, %t19
+  %t20 = call (i32, i32) -> i32 @add(%i, %i)
+  mov.s32 %i, %t20
   ret
 }

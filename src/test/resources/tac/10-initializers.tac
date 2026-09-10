@@ -20,51 +20,57 @@ define @f(i32 %k) -> void {
   [3 x i32] %zero
   ptr %t0
   ptr %t1
-  i32 %t2
+  ptr %t2
   i32 %t3
-  ptr %t4
+  i32 %t4
   ptr %t5
   ptr %t6
   ptr %t7
   ptr %t8
-  i8 %t9
+  ptr %t9
   ptr %t10
   i8 %t11
   ptr %t12
-  i8 %t13
-  ptr %t14
-  i8 %t15
-  ptr %t16
+  ptr %t13
+  i8 %t14
+  ptr %t15
+  i8 %t16
+  ptr %t17
+  i8 %t18
+  ptr %t19
 .entry:
   %t0 = addrof %loc
   zero [2 x i32] %t0
-  store.32 %t0, %k
-  %t1 = wadd %t0, 4
-  mov.s32 %t2, 1
-  %t3 = add.s32 %k, %t2
-  store.32 %t1, %t3
-  %t4 = addrof %in
-  zero %In %t4
-  %t5 = wadd %t4, 4
-  store.32 %t5, %k
-  %t6 = addrof %out
-  zero %Out %t6
-  %t7 = addrof %in
-  copy %In %t6, %t7
-  %t8 = wadd %t6, 8
-  mov.s8 %t9, 122
-  store.8 %t8, %t9
-  %t10 = addrof %name
-  zero [4 x i8] %t10
-  mov.s8 %t11, 108
+  %t1 = wadd %t0, 0
+  store.32 %t1, %k
+  %t2 = wadd %t0, 4
+  mov.s32 %t3, 1
+  %t4 = add.s32 %k, %t3
+  store.32 %t2, %t4
+  %t5 = addrof %in
+  zero %In %t5
+  %t6 = wadd %t5, 4
+  store.32 %t6, %k
+  %t7 = addrof %out
+  zero %Out %t7
+  %t8 = wadd %t7, 0
+  %t9 = addrof %in
+  copy %In %t8, %t9
+  %t10 = wadd %t7, 8
+  mov.s8 %t11, 122
   store.8 %t10, %t11
-  %t12 = wadd %t10, 1
-  mov.s8 %t13, 111
-  store.8 %t12, %t13
-  %t14 = wadd %t10, 2
-  mov.s8 %t15, 99
-  store.8 %t14, %t15
-  %t16 = addrof %zero
-  zero [3 x i32] %t16
+  %t12 = addrof %name
+  zero [4 x i8] %t12
+  %t13 = wadd %t12, 0
+  mov.s8 %t14, 108
+  store.8 %t13, %t14
+  %t15 = wadd %t12, 1
+  mov.s8 %t16, 111
+  store.8 %t15, %t16
+  %t17 = wadd %t12, 2
+  mov.s8 %t18, 99
+  store.8 %t17, %t18
+  %t19 = addrof %zero
+  zero [3 x i32] %t19
   ret
 }
