@@ -42,6 +42,8 @@ public class VM implements TacVisitor<Void> {
         return frames.peek().vars();
     }
 
+    Memory memory = new Memory();
+
     private void load(Module mod) {
         for (var s : mod.symbols()) {
             symbolTable.symbols.put(s.name(), s);
@@ -373,6 +375,13 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Load i) {
+        long address = integer(i.ptr());
+        if (i.ext() == Instr.Ext.FLOAT) {
+            vars().put(i.dst(), new FloatValue(memory.loadFloat(address, i.width())));
+        } else {
+            boolean signed = i.ext() == Instr.Ext.SIGNED;
+            vars().put(i.dst(), new IntValue(memory.loadInt(address, i.width(), signed)));
+        }
         return null;
     }
 
