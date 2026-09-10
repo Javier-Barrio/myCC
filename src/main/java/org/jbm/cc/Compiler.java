@@ -30,7 +30,17 @@ public final class Compiler {
     public record Compiled(@NonNull TokenSet tokens, @NonNull List<Decl> ast, @NonNull TUnit typed, @NonNull Module tac) {
     }
 
+    /** The front half: preprocessed tokens and the syntax tree, before any semantic check. */
+    public record Parsed(@NonNull TokenSet tokens, @NonNull List<Decl> ast) {
+    }
+
     private Compiler() {
+    }
+
+    /** Preprocesses and parses a script, without resolving or typing it. */
+    public static Parsed parseScript(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
+        TokenSet tokens = TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file)));
+        return new Parsed(tokens, Parser.parseScript(tokens));
     }
 
     public static Compiled compile(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,

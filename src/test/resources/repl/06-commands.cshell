@@ -1,0 +1,72 @@
+cshell> int x = 1;
+x ==> 1
+cshell> int sq(int v) { return v * v; }
+|  defined sq
+cshell> typedef struct P { int a; int b; } P;
+cshell> #define TWICE(v) ((v) * 2)
+cshell> P p = { 1, 2 };
+p ==> {.a = 1, .b = 2}
+cshell> TWICE(x) + sq(3)
+$1 ==> 11
+cshell> /list
+|  1 : int x = 1;
+|  2 : int sq(int v) { return v * v; }
+|  3 : typedef struct P { int a; int b; } P;
+|  4 : #define TWICE(v) ((v) * 2)
+|  5 : P p = { 1, 2 };
+|  6 : typeof_unqual((TWICE(x) + sq(3))) $1;
+cshell> /list sq
+|  2 : int sq(int v) { return v * v; }
+cshell> /vars
+|  int x = 1
+|  struct P p = {.a = 1, .b = 2}
+|  int $1 = 11
+cshell> /funcs
+|  sq : int (int)
+cshell> /types
+|  struct P
+|  typedef P
+cshell> /macros
+|  #define TWICE(v) ((v) * 2)
+cshell> /tac sq
+|  define @sq(i32 %v) -> i32 {
+|    i32 %t0
+|  .entry:
+|    %t0 = mul.s32 %v, %v
+|    ret %t0
+|  }
+cshell> /tac x
+|  global @x : i32 align 4 = { 0 : i32 1 }
+cshell> /tac nope
+|  no such name: nope
+cshell> /drop x
+|  cannot drop x: use of undeclared identifier 'x' at kept line 6:22
+cshell> /drop P
+|  cannot drop P: expected ';' at kept line 5:3 near 'p'
+cshell> /drop p
+|  dropped p
+cshell> /drop P
+|  dropped P, struct P
+cshell> /list
+|  1 : int x = 1;
+|  2 : int sq(int v) { return v * v; }
+|  3 : #define TWICE(v) ((v) * 2)
+|  4 : typeof_unqual((TWICE(x) + sq(3))) $1;
+cshell> /drop nothing
+|  no kept line declares nothing
+cshell> /help
+|  /list [name]   the kept lines, numbered; or the line declaring a name
+|  /vars          the objects, with their values
+|  /funcs         the functions, with their types
+|  /types         the typedefs, structs, unions and enums
+|  /macros        the #defines
+|  /tac name      the TAC of a function or an object
+|  /drop name     forget the line that declares a name
+|  /reset         forget everything
+|  /exit          leave
+cshell> /reset
+|  reset
+cshell> /list
+cshell> sq(2)
+|  error: use of undeclared identifier 'sq' at 1:1
+cshell> /exit

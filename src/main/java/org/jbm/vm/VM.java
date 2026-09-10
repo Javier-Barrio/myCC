@@ -43,6 +43,11 @@ public class VM implements TacVisitor<Void> {
         builtins.put(name, builtin);
     }
 
+    /** Unbinds a name; its storage stays for whatever still points at it. */
+    public void drop(String name) {
+        symbolTable.symbols.remove(name);
+    }
+
     /** Every name loaded so far, defined or declared, with what it is. */
     public Map<String, Symbol> symbols() {
         return Collections.unmodifiableMap(symbolTable.symbols);
@@ -79,6 +84,7 @@ public class VM implements TacVisitor<Void> {
     // number like any other. Names keep their address across reloads.
     private final LinkedHashMap<String, Long> addresses = new LinkedHashMap<>();
     private final LinkedHashMap<Long, String> functionAt = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Long> allocated = new LinkedHashMap<>();
 
     private void load(Module mod) {
         if (target != null && !target.equals(mod.target)) {
@@ -95,9 +101,13 @@ public class VM implements TacVisitor<Void> {
         for (Symbol s : mod.symbols()) {
             if (s instanceof Global g) {
                 Symbol previous = symbolTable.symbols.get(g.name());
-                boolean keep = previous instanceof Global old && old.type().equals(g.type());
+                long size = size(g.type());
+                // the same type by name may have a new layout: the size tells
+                boolean keep = previous instanceof Global old && old.type().equals(g.type())
+                        && allocated.getOrDefault(g.name(), -1L) == size;
                 if (!keep) {
-                    addresses.put(g.name(), memory.allocate(size(g.type()), g.align()));
+                    addresses.put(g.name(), memory.allocate(size, g.align()));
+                    allocated.put(g.name(), size);
                     placed.add(g);
                 }
             } else if (s instanceof Function || s instanceof Module.FuncDecl) {
