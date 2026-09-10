@@ -146,12 +146,9 @@ public final class TacInvariants implements TacVisitor<Void> {
         }
     }
 
-    // An integer modifier is an Int narrower than the register: .s8 .u8 .s16 .u16 .s32 .u32.
+    // An integer modifier is an Int no wider than the register: .s8 .u8 ... .s64 .u64.
     private void integerModifier(Type mod) {
-        if (mod == null) {
-            return;
-        }
-        require(mod instanceof Type.Int i && i.width() < module.target.registerWidth(), "modifier ." + mod.spelling() + " on an integer instruction");
+        require(mod instanceof Type.Int i && i.width() <= module.target.registerWidth(), "an integer instruction needs .sN or .uN");
     }
 
     // A floating modifier is a precision the target computes in.
@@ -178,7 +175,7 @@ public final class TacInvariants implements TacVisitor<Void> {
             sameClass(c, i.src());
         }
         if (c.isInteger()) {
-            require(i.mod() instanceof Type.Int m && m.width() <= module.target.registerWidth(), "an integer mov needs .sN or .uN");
+            integerModifier(i.mod());
         } else {
             precision(i.mod());
         }

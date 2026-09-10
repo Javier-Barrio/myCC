@@ -118,10 +118,11 @@ by a mask or a shift pair. The modifier was chosen because:
    `unsigned` to `unsigned long` is already the zero-extended value. Only a
    conversion that must rewrite the bits above the new width costs an
    instruction, and it is a `mov.sN` or `mov.uN`.
-3. [x] **Only the instructions that can disturb the upper bits carry a
-   modifier**: arithmetic, logic, shifts and `mov`. A comparison, a
-   `switch` or a `condbr` on values that are already extended is correct
-   at the full width, so those have none.
+3. [x] **Every instruction that writes an integer says its width**:
+   arithmetic, logic, shifts and `mov`, with `.s64`/`.u64` for the whole
+   register. A comparison, a `switch` or a `condbr` reads values that are
+   already extended and is correct at the full width, so those have
+   none.
 4. [x] **An interpreter is one `long[]` and one `double[]` per frame**, and a
    `.s32` operation is `(long) (int) result`, one cast. A code generator
    maps `add.s32` onto its 32-bit add and inserts a sign-extending move
@@ -261,9 +262,10 @@ int to unsigned                   mov.u32: the bits above 31 must become zero
 signed char to unsigned short     mov.u16: wider, but a negative value must lose its sign extension
 ```
 
-**Integer arithmetic and logic**, each with an optional modifier `.sN`
-or `.uN` (N 8, 16 or 32) that computes in N bits and extends the
-result; without one, the whole register:
+**Integer arithmetic and logic**, each with a modifier `.sN` or `.uN`
+(N 8, 16, 32 or 64) that computes in N bits and extends the result; the
+whole register is `.s64` or `.u64`, so every instruction states its
+width:
 
 ```
 wadd wsub wmul                 wrap modulo 2^N
@@ -276,13 +278,11 @@ shl lshr ashr                  the amount is any integer operand; amounts >= N a
 Both forms of the first two rows exist so that `Lower` can say what C
 said: unsigned arithmetic wraps, signed overflow is undefined, and a
 consumer may exploit the difference or simply wrap. `int` addition is
-`add.s32`, `unsigned` addition `wadd.u32`, `long` addition `add`. A
-division, `and`, `or` or `lshr` of extended values is correct without a
-modifier and `Lower` emits one anyway for uniformity; `xor` and `shl`
-need theirs, since they can set bits above the width. Pointer arithmetic
-is `wadd` with the offset already scaled by `Lower`, with a `.u32`
-modifier on a 32-bit target: `p[i]` is `wmul %i, 8` then `wadd %p, %o`;
-`p->m` is `wadd %p, 4`. A `_BitInt` whose width is not a register width
+`add.s32`, `unsigned` addition `wadd.u32`, `long` addition `add.s64`.
+Pointer arithmetic is `wadd.u64` (`.u32` on a 32-bit target) with the
+offset already scaled by `Lower`: `p[i]` is `wmul.s64 %i, 8` then
+`wadd.u64 %p, %o`; `p->m` is `wadd.u64 %p, 4`, emitted for an offset of
+0 too. A `_BitInt` whose width is not a register width
 is computed at its storage width and then masked or shifted to its own.
 
 **Floating arithmetic**, each with the precision as its modifier:
@@ -455,8 +455,8 @@ except through names.
   variables are of the class it requires, all operands of an arithmetic,
   logic or comparison instruction integer or all floating; an aggregate
   variable appears only under `addrof`;
-- an integer modifier is `.s8 .u8 .s16 .u16 .s32 .u32` and appears only
-  on an integer instruction; a floating modifier is `.32 .64 .80`, one
+- an integer modifier is `.s8 .u8 .s16 .u16 .s32 .u32 .s64 .u64` and
+  every integer arithmetic, logic, shift and `mov` instruction has one; a floating modifier is `.32 .64 .80`, one
   the target has, and every floating instruction and every `i2f`, `u2f`,
   `f2i`, `f2u` and `fcvt` has one;
 - `load` and `store` go through a `ptr` variable; `copy`, `zero`, `into`

@@ -74,15 +74,12 @@ public sealed interface Instr {
     }
 
     /**
-     * {@code %dst = op[.mod] a, b}: an integer operation at the width of
-     * its modifier (the whole register without one), or a floating
-     * operation at the precision of its modifier.
+     * {@code %dst = op.mod a, b}: an integer operation at the width and
+     * signedness of its modifier ({@code .s64}/{@code .u64} for the whole
+     * register), or a floating operation at the precision of its modifier.
      */
-    record Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @Nullable Type mod,
+    record Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @NonNull Type mod,
                @NonNull Token token) implements Instr {
-        public Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @NonNull Token token) {
-            this(op, dst, a, b, null, token);
-        }
 
         @Override
         public <R> R accept(TacVisitor<R> v) {

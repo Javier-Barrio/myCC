@@ -36,9 +36,9 @@ define @f() -> void {
   mov.u32 %t1, %i
   %t2 = wsub.u32 %t1, %u
   mov.u32 %u, %t2
-  %t3 = mul %l, %i
+  %t3 = mul.s64 %l, %i
   mov.s64 %l, %t3
-  %t4 = udiv %l, %ul
+  %t4 = udiv.u64 %l, %ul
   mov.u64 %ul, %t4
   %t5 = srem.s32 %i, %c
   mov.s32 %i, %t5
@@ -46,14 +46,14 @@ define @f() -> void {
   %t7 = and.u32 %u, %t6
   mov.u32 %u, %t7
   mov.s32 %t8, 1
-  %t9 = or %l, %t8
+  %t9 = or.s64 %l, %t8
   mov.s64 %l, %t9
   %t10 = xor.s32 %uc, %c
   mov.s32 %i, %t10
   %t11 = shl.s32 %c, %l
   mov.s32 %i, %t11
   mov.s32 %t12, 3
-  %t13 = lshr %ul, %t12
+  %t13 = lshr.u64 %ul, %t12
   mov.u64 %ul, %t13
   %t14 = i2f.32 %i
   %t15 = fadd.32 %fl, %t14

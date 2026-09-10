@@ -3,7 +3,7 @@ type %Node = { i32 @0, ptr @8 } size 16 align 8
 define @push(ptr %head, ptr %node) -> ptr {
   ptr %t0
 .entry:
-  %t0 = wadd %node, 8
+  %t0 = wadd.u64 %node, 8
   store.64 %t0, %head
   ret %node
 }
@@ -28,13 +28,13 @@ define @sum(ptr %head) -> i32 {
   %t2 = ne %it, %t1
   condbr %t2, .for.body, .for.done
 .for.body:
-  %t3 = wadd %it, 0
+  %t3 = wadd.u64 %it, 0
   %t4 = load.s32 %t3
   %t5 = add.s32 %total, %t4
   mov.s32 %total, %t5
   br .for.step
 .for.step:
-  %t6 = wadd %it, 8
+  %t6 = wadd.u64 %it, 8
   %t7 = load.u64 %t6
   mov.u64 %it, %t7
   br .for.cond
@@ -60,7 +60,7 @@ define @length(ptr %head) -> i32 {
   mov.s32 %t2, 1
   %t3 = add.s32 %n, %t2
   mov.s32 %n, %t3
-  %t4 = wadd %head, 8
+  %t4 = wadd.u64 %head, 8
   %t5 = load.u64 %t4
   mov.u64 %head, %t5
   br .while.cond
@@ -94,18 +94,18 @@ define @main() -> i32 {
 .entry:
   %t0 = addrof %a
   zero %Node %t0
-  %t1 = wadd %t0, 0
+  %t1 = wadd.u64 %t0, 0
   mov.s32 %t2, 1
   store.32 %t1, %t2
-  %t3 = wadd %t0, 8
+  %t3 = wadd.u64 %t0, 8
   mov.u64 %t4, 0
   store.64 %t3, %t4
   %t5 = addrof %b
   zero %Node %t5
-  %t6 = wadd %t5, 0
+  %t6 = wadd.u64 %t5, 0
   mov.s32 %t7, 2
   store.32 %t6, %t7
-  %t8 = wadd %t5, 8
+  %t8 = wadd.u64 %t5, 8
   mov.u64 %t9, 0
   store.64 %t8, %t9
   mov.u64 %t10, 0
