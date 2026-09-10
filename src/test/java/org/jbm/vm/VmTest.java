@@ -11,7 +11,6 @@ import org.jbm.cc.parse.Parser;
 import org.jbm.cc.sema.Desugar;
 import org.jbm.cc.sema.Resolver;
 import org.jbm.cc.sema.Typer;
-import org.jbm.cc.tac.Function;
 import org.jbm.cc.tac.Module;
 import org.jbm.cc.tast.TUnit;
 import org.jbm.cc.types.Types;
@@ -25,11 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Whole C programs through the compiler and the VM: {@code main} is
- * renamed {@code .file}, which the parser cannot produce yet, and what
- * it returns is what {@code step} hands back. Only what the VM runs
- * today is used: registers, control flow and calls between defined
- * functions; no memory.
+ * Whole C programs through the compiler and the VM: the module is
+ * loaded and {@code main} is called, and what it returns is what
+ * {@code call} hands back. Only what the VM runs today is used:
+ * registers, control flow and calls between defined functions; no
+ * memory.
  */
 class VmTest {
 
@@ -38,19 +37,13 @@ class VmTest {
         CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
         List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
         TUnit typed = Typer.type(unit, Resolver.resolve(unit), types);
-        Module m = Lower.lower(typed, types);
-        m.functions.stream().filter(f -> f.name.equals("main")).findFirst().ifPresent(main -> {
-            Function file = new Function(".file", main.linkage, main.sig, main.params);
-            file.locals.addAll(main.locals);
-            file.blocks.addAll(main.blocks);
-            m.functions.remove(main);
-            m.functions.add(file);
-        });
-        return m;
+        return Lower.lower(typed, types);
     }
 
     static VM.Value run(String source) {
-        return new VM().step(module(source));
+        VM vm = new VM();
+        vm.step(module(source));
+        return vm.call("main", List.of());
     }
 
     /** {@code expr} evaluated after {@code body} in a {@code long long main} with {@code decls} in scope. */
@@ -227,10 +220,24 @@ class VmTest {
     }
 
     @Test
-    void voidFileAndMissingFile() {
+    void voidMainAndMissingFile() {
         assertNull(run("void main(void) { int x = 1; x++; }"));
-        assertNull(run("int g(void) { return 1; }"), "no .file: nothing runs");
         assertNull(run("void main(void) { return; }"));
+        assertNull(new VM().step(module("int g(void) { return 1; }")), "no .file: step runs nothing");
+    }
+
+    @Test
+    void callByNameWithArguments() {
+        VM vm = new VM();
+        vm.step(module("int add(int a, int b) { return a + b; }\ndouble half(double d) { return d / 2; }"));
+        VM.Value sum = vm.call("add", List.of(new VM.IntValue(40), new VM.IntValue(2)));
+        assertEquals(42, ((VM.IntValue) sum).value());
+        VM.Value h = vm.call("half", List.of(new VM.FloatValue(5)));
+        assertEquals(2.5, ((VM.FloatValue) h).value());
+        String m = assertThrows(IllegalStateException.class, () -> vm.call("add", List.of())).getMessage();
+        assertEquals("@add takes 2 arguments, given 0", m);
+        String u = assertThrows(IllegalStateException.class, () -> vm.call("nope", List.of())).getMessage();
+        assertEquals("no definition for @nope", u);
     }
 
     @Test
@@ -247,7 +254,9 @@ class VmTest {
     @Test
     void aFaultLeavesTheVmUsable() {
         VM vm = new VM();
-        assertThrows(IllegalStateException.class, () -> vm.step(module("int f(int n) { return n / 0 + f(n); }\nint main(void) { return f(1); }")));
-        assertEquals(7, ((VM.IntValue) vm.step(module("int main(void) { return 7; }"))).value());
+        vm.step(module("int f(int n) { return n / 0 + f(n); }\nint main(void) { return f(1); }"));
+        assertThrows(IllegalStateException.class, () -> vm.call("main", List.of()));
+        vm.step(module("int main(void) { return 7; }"));
+        assertEquals(7, ((VM.IntValue) vm.call("main", List.of())).value());
     }
 }
