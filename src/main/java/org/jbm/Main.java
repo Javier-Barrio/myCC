@@ -3,6 +3,7 @@ package org.jbm;
 import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.AstPrinter;
 import org.jbm.cc.cpp.CppTokenizer;
+import org.jbm.cc.cpp.HeaderProvider;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.lower.Lower;
@@ -13,6 +14,12 @@ import org.jbm.cc.sema.Typer;
 import org.jbm.cc.tac.TacWriter;
 import org.jbm.cc.tast.TypedPrinter;
 import org.jbm.cc.types.Types;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Main {
 
@@ -51,8 +58,23 @@ public class Main {
             }
             """;
 
-    public static void main(String[] args) {
-        var expanded = new Scanner().expand(CppTokenizer.tokenSet(SOURCE));
+    // With a path argument compiles that file, with `-I dir` search
+    // directories for its includes; without one, SOURCE.
+    public static void main(String[] args) throws IOException {
+        List<Path> searchDirs = new ArrayList<>();
+        String file = "<source>";
+        String source = SOURCE;
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("-I") && i + 1 < args.length) {
+                searchDirs.add(Path.of(args[i + 1]));
+                i++;
+                continue;
+            }
+            file = args[i];
+            source = Files.readString(Path.of(file));
+        }
+        HeaderProvider headers = HeaderProvider.standard(searchDirs);
+        var expanded = new Scanner().expand(CppTokenizer.tokenSet(source, headers, file));
 
         // Translation phase 7: pp-tokens -> tokens (pp-numbers become
         // integer/floating constants). This is the parser's input.

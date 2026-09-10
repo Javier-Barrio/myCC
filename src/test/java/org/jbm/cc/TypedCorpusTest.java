@@ -3,6 +3,7 @@ package org.jbm.cc;
 import org.jbm.cc.arch.Ilp32;
 import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.Decl;
+import org.jbm.cc.cpp.BundledHeaders;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
@@ -52,8 +53,9 @@ class TypedCorpusTest {
         return new Types(source.getFileName().toString().contains("ilp32") ? Ilp32.INSTANCE : X86_64SysV.INSTANCE);
     }
 
-    static TUnit type(String source, Types types) {
-        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source)))));
+    static TUnit type(String source, String file, Types types) {
+        CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, file);
+        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
         return Typer.type(unit, Resolver.resolve(unit), types);
     }
 
@@ -61,7 +63,7 @@ class TypedCorpusTest {
     @MethodSource("sources")
     void typedOutputMatchesTheGoldenFile(Path source) throws IOException {
         Types types = typesFor(source);
-        TUnit unit = type(Files.readString(source), types);
+        TUnit unit = type(Files.readString(source), source.toString(), types);
         String actual = TypedPrinter.print(unit) + "\n";
         Path golden = Path.of(source.toString().replaceAll("\\.c$", ".typed"));
         if (Boolean.getBoolean("typed.update")) Files.writeString(golden, actual);
@@ -72,7 +74,7 @@ class TypedCorpusTest {
     @MethodSource("sources")
     void typedTreeSatisfiesTheInvariants(Path source) throws IOException {
         Types types = typesFor(source);
-        TUnit unit = type(Files.readString(source), types);
+        TUnit unit = type(Files.readString(source), source.toString(), types);
         int nodes = TypedTreeInvariants.check(unit, types);
         assertTrue(nodes > 0, "the checker visited the tree");
     }
@@ -100,6 +102,6 @@ class TypedCorpusTest {
     @Test
     void theMainProgramPassesTheInvariants() {
         var types = new Types(X86_64SysV.INSTANCE);
-        TypedTreeInvariants.check(type(org.jbm.Main.SOURCE, types), types);
+        TypedTreeInvariants.check(type(org.jbm.Main.SOURCE, "<source>", types), types);
     }
 }

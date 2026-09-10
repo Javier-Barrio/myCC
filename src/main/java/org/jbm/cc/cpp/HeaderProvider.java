@@ -2,6 +2,7 @@ package org.jbm.cc.cpp;
 
 import lombok.NonNull;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,6 +25,11 @@ public interface HeaderProvider {
             }
             return Optional.of(new Header(name, text));
         };
+    }
+
+    /** What a compilation sees: files next to the includer and in {@code searchDirs}, then the bundled headers. */
+    static HeaderProvider standard(@NonNull List<Path> searchDirs) {
+        return chain(List.of(new FileHeaders(searchDirs), BundledHeaders.INSTANCE));
     }
 
     /** The first provider that has the header wins. */
