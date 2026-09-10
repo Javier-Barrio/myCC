@@ -123,6 +123,8 @@ public class VM implements TacVisitor<Void> {
             vars.put(i.dst(), new IntValue(imm.value()));
         } else if (src instanceof Operand.FloatImm imm) {
             vars.put(i.dst(), new FloatValue(imm.value()));
+        } else if (i.mod() instanceof Type.Float precision) {
+            vars.put(i.dst(), new FloatValue(round(floating((Var) src), precision)));
         } else {
             vars.put(i.dst(), value((Var) src));
         }
@@ -271,7 +273,52 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Cvt i) {
+        switch (i.op()) {
+            case I2F -> {
+                double d = (double) integer(i.src());
+                vars.put(i.dst(), new FloatValue(round(d, i.precision())));
+            }
+            case U2F -> {
+                double d = unsignedToDouble(integer(i.src()));
+                vars.put(i.dst(), new FloatValue(round(d, i.precision())));
+            }
+            case F2I -> {
+                long v = (long) floating(i.src());
+                vars.put(i.dst(), new IntValue(extendTo(v, i.dst())));
+            }
+            case F2U -> {
+                long v = doubleToUnsigned(floating(i.src()));
+                vars.put(i.dst(), new IntValue(extendTo(v, i.dst())));
+            }
+        }
         return null;
+    }
+
+    // A 64-bit register as an unsigned number: values with the top bit
+    // set are 2^63 and above.
+    private static double unsignedToDouble(long v) {
+        if (v >= 0) {
+            return (double) v;
+        }
+        double half = (double) (v >>> 1);
+        return half * 2.0 + (v & 1);
+    }
+
+    // Truncation toward zero into an unsigned 64-bit value; out of range
+    // is undefined in C, so a value at or above 2^63 goes through the
+    // signed range.
+    private static long doubleToUnsigned(double d) {
+        double twoTo63 = 9223372036854775808.0;
+        if (d < twoTo63) {
+            return (long) d;
+        }
+        return ((long) (d - twoTo63)) ^ Long.MIN_VALUE;
+    }
+
+    // A converted integer held extended per the destination's own type.
+    private static long extendTo(long v, Var dst) {
+        Type.Int type = (Type.Int) dst.type;
+        return extend(v, type.width(), type.signed());
     }
 
     // ---- memory --------------------------------------------------------------------------------
