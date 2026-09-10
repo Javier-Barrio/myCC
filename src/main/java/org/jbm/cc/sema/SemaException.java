@@ -7,7 +7,7 @@ public final class SemaException extends RuntimeException {
     public final Token token;
 
     public SemaException(@NonNull String message, @NonNull Token token) {
-        super(message + " at " + token.line + ":" + token.column);
+        super(message + " at " + token.location());
         this.token = token;
     }
 }
