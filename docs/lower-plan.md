@@ -70,7 +70,7 @@ the choice between register and memory is never `Lower`'s.
 An rvalue of struct, union or array type is a `Val` whose variable is a
 **pointer** to the bytes, never the bytes. `LvalueToRvalue` of an
 aggregate is the address of its place; a call returning an aggregate
-writes `into` a pointer and yields it; `Assign` of aggregates is `copy`
+writes `into` a pointer and yields it; `Assign` of aggregates is a `store.%T`
 and yields the target's pointer; an aggregate argument is passed as its
 pointer. That is the TAC's rule for aggregates, so no node kind needs a
 special case beyond choosing `copy` over `mov`/`store`.
@@ -271,12 +271,12 @@ that node instance to `old`; `n = value(newValue)`; `write(a, n)`; yield
 ```
 
 With an aggregate type, `%r` is `addrof` of a fresh aggregate variable
-and each arm ends with `copy %r, %arm`. With `void`, no variable.
+and each arm ends with `store.%T %r, %arm`. With `void`, no variable.
 
 **Comma.** `value(left)` discarded, then `value(right)`.
 
 **Temporaries.** `Materialize(value, symbol)`: `%p = addrof %symbol`; if
-`value` is a call, lower it with `into %p`; otherwise `copy %p,
+`value` is a call, lower it with `into %p`; otherwise `store.%T %p,
 value(value)`. The `Val` is `%p`. `CompoundLit(symbol, init)`: `%p =
 addrof %symbol`, `initialize(%p, init)` each time the expression is
 evaluated (C evaluates the initializer each time), then `%p`. Both
@@ -498,7 +498,7 @@ code, then the suite green with `Main` still running. Steps 1 and 2 of
     yields 12; `x += 1` and `x++` on a local (no memory), `p->m += 1`
     (pointer evaluated once), `++x`, `p++`, `a[k++] += 1` with
     `TargetValue` used once; `bf += 1`.
-15. [x] **Aggregates.** Tests: `s = t` is a `copy` yielding `s`'s pointer;
+15. [x] **Aggregates.** Tests: `s = t` is a `store.%T` yielding `s`'s pointer;
     `(s = t).m` loads from `s`; `sizeof` is already a constant.
 
 **Calls and conditionals**
@@ -513,7 +513,7 @@ code, then the suite green with `Main` still running. Steps 1 and 2 of
 19. [x] **Compound literals and local initializers.** Tests: `(struct P){1,
     2}.x`, `int v[3] = {1, 2}` as `zero` then two stores, `struct P p =
     {.y = 2}`, `char s[] = "ab"`, `struct Out o = {in, "z"}` with the
-    `copy`, `int x = e` as one `mov`, an initializer in a loop body
+    `store.%T`, `int x = e` as one `mov`, an initializer in a loop body
     re-run each iteration.
 
 **Statements**
