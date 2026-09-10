@@ -55,6 +55,19 @@ public class Memory {
         return Double.longBitsToDouble(loadInt(address, 64, false));
     }
 
+    /** {@code count} bytes from one address to another; the ranges may overlap. */
+    public void copy(long to, long from, long count) {
+        int src = index(from, (int) count);
+        int dst = index(to, (int) count);
+        System.arraycopy(bytes, src, bytes, dst, (int) count);
+    }
+
+    /** {@code count} bytes at the address set to a value. */
+    public void fill(long address, long count, byte value) {
+        int i = index(address, (int) count);
+        java.util.Arrays.fill(bytes, i, i + (int) count, value);
+    }
+
     public void storeFloat(long address, int width, double value) {
         if (width == 32) {
             storeInt(address, 32, Float.floatToRawIntBits((float) value));

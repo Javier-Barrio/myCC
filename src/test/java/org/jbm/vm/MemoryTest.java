@@ -60,6 +60,20 @@ class MemoryTest {
     }
 
     @Test
+    void copyAndFill() {
+        Memory m = new Memory();
+        m.storeInt(A, 64, 0x0807060504030201L);
+        m.copy(A + 16, A, 8);
+        assertEquals(0x0807060504030201L, m.loadInt(A + 16, 64, false));
+        m.copy(A + 2, A, 6);
+        assertEquals(0x0605040302010201L, m.loadInt(A, 64, false), "an overlapping copy behaves as memmove");
+        m.fill(A, 4, (byte) 0);
+        assertEquals(0x0605040300000000L, m.loadInt(A, 64, false));
+        m.fill(A + 4, 4, (byte) 0xff);
+        assertEquals(0xffffffff00000000L, m.loadInt(A, 64, false));
+    }
+
+    @Test
     void faults() {
         Memory m = new Memory();
         String nul = assertThrows(IllegalStateException.class, () -> m.loadInt(0, 32, true)).getMessage();
