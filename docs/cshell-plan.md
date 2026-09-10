@@ -236,6 +236,9 @@ other, a `Function` in `Module.functions` under the name `.file`. Nothing
 in the `Module` marks it; the shell calls it by name when it is present.
 A unit without file-scope statements has no `.file`.
 
+A statement that ends at end of input needs no `;`, as in `jshell`, so
+`print(y + 1)` on its own is a complete line.
+
 Being last in the unit, the body sees every file-scope name. In the shell
 that is exact, since the kept text is declarations only and the new line
 comes after them; in a script file it means a statement may use a name
@@ -259,7 +262,9 @@ it (anonymous struct types have no spelling), and without qualifiers so
 that it is assignable. `typeof` at file scope is unevaluated, so any
 expression over file-scope names is allowed. The declaration of `$N` is
 kept in the accumulated text; the statement is not, since it ran once.
-Statements and `void` expressions keep nothing.
+Statements and `void` expressions keep nothing. A line with several
+expression statements gets no `$N` for now; whether each expression
+should get its own, as in `jshell`, is decided later.
 
 **Running.** `engine.load` with the module, then `engine.call(".file")`
 when the module has it. The shell reads `$N` back through `addressOf` and
