@@ -1,4 +1,4 @@
-package org.jbm.vm;
+package org.jbm.repl.vm;
 
 import org.jbm.cc.lower.tac.Block;
 import org.jbm.cc.lower.tac.Function;

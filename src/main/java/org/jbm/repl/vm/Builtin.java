@@ -1,4 +1,4 @@
-package org.jbm.vm;
+package org.jbm.repl.vm;
 
 import org.jetbrains.annotations.Nullable;
 

@@ -3,8 +3,8 @@ package org.jbm.repl;
 import org.jbm.cc.sema.types.CType;
 import org.jbm.cc.sema.types.Layout;
 import org.jbm.cc.sema.types.Types;
-import org.jbm.vm.Memory;
-import org.jbm.vm.VM;
+import org.jbm.repl.vm.Memory;
+import org.jbm.repl.vm.VM;
 
 import java.util.ArrayList;
 import java.util.List;

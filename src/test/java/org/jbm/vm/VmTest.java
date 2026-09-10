@@ -14,6 +14,7 @@ import org.jbm.cc.sema.Typer;
 import org.jbm.cc.lower.tac.Module;
 import org.jbm.cc.sema.tast.TUnit;
 import org.jbm.cc.sema.types.Types;
+import org.jbm.repl.vm.VM;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
