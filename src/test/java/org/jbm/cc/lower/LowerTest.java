@@ -1234,4 +1234,85 @@ class LowerTest {
                 }
                 """));
     }
+
+    @Test
+    void aFunctionPointerProgram() {
+        assertEquals("""
+                global internal @.str.H : [9 x i8] align 1 readonly = { 0 : bytes "Add: %d\\0a\\00" }
+                global internal @.str.H : [14 x i8] align 1 readonly = { 0 : bytes "Multiply: %d\\0a\\00" }
+                declare @printf(ptr, ...) -> i32
+                define @add(i32 %a, i32 %b) -> i32 {
+                  i32 %t0
+                .entry:
+                  %t0 = add.s32 %a, %b
+                  ret %t0
+                }
+                define @multiply(i32 %a, i32 %b) -> i32 {
+                  i32 %t0
+                .entry:
+                  %t0 = mul.s32 %a, %b
+                  ret %t0
+                }
+                define @main() -> i32 {
+                  ptr %operation
+                  ptr %t0
+                  ptr %t1
+                  i32 %t2
+                  i32 %t3
+                  i32 %t4
+                  i32 %t5
+                  ptr %t6
+                  ptr %t7
+                  i32 %t8
+                  i32 %t9
+                  i32 %t10
+                  i32 %t11
+                  i32 %t12
+                .entry:
+                  %t0 = addrof @add
+                  mov.u64 %operation, %t0
+                  %t1 = addrof @.str.H
+                  mov.s32 %t2, 3
+                  mov.s32 %t3, 4
+                  %t4 = icall (i32, i32) -> i32 %operation(%t2, %t3)
+                  %t5 = call (ptr, ...) -> i32 @printf(%t1, %t4)
+                  %t6 = addrof @multiply
+                  mov.u64 %operation, %t6
+                  %t7 = addrof @.str.H
+                  mov.s32 %t8, 3
+                  mov.s32 %t9, 4
+                  %t10 = icall (i32, i32) -> i32 %operation(%t8, %t9)
+                  %t11 = call (ptr, ...) -> i32 @printf(%t7, %t10)
+                  mov.s32 %t12, 0
+                  ret %t12
+                }
+                """, normalizeStrings(unit("""
+                int printf(const char *, ...);   /* stdio.h: #include is not implemented yet */
+
+                int add(int a, int b)
+                {
+                    return a + b;
+                }
+
+                int multiply(int a, int b)
+                {
+                    return a * b;
+                }
+
+                int main(void)
+                {
+                    // Function pointer:
+                    // points to a function taking two ints and returning an int
+                    int (*operation)(int, int);
+
+                    operation = add;
+                    printf("Add: %d\\n", operation(3, 4));
+
+                    operation = multiply;
+                    printf("Multiply: %d\\n", operation(3, 4));
+
+                    return 0;
+                }
+                """)));
+    }
 }
