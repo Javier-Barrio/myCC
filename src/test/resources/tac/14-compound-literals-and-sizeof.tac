@@ -31,8 +31,7 @@ define @f(i32 %k) -> i32 {
   u64 %t17
   u64 %t18
   u64 %t19
-  u64 %t20
-  i32 %t21
+  i32 %t20
 .entry:
   %t0 = addrof %p
   zero %Pt %t0
@@ -41,7 +40,7 @@ define @f(i32 %k) -> i32 {
   store.32 %t1, %k
   %t2 = wadd %t1, 4
   mov %t3, 1
-  %t4 = add %k, %t3
+  %t4 = add.s32 %k, %t3
   store.32 %t2, %t4
   copy %Pt %t0, %t1
   %t5 = addrof %lit11
@@ -62,13 +61,10 @@ define @f(i32 %k) -> i32 {
   store.32 %t12, %t13
   %t14 = wadd %t10, 4
   %t15 = load.s32 %t14
-  mov %t16, %t15
-  %t16 = shl %t16, 32
-  %t16 = ashr %t16, 32
-  mov %t17, 8
-  %t18 = wadd %t16, %t17
-  mov %t19, 8
-  %t20 = wadd %t18, %t19
-  mov %t21, %t20
-  ret %t21
+  mov %t16, 8
+  %t17 = wadd %t15, %t16
+  mov %t18, 8
+  %t19 = wadd %t17, %t18
+  mov.s32 %t20, %t19
+  ret %t20
 }

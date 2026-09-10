@@ -41,7 +41,7 @@ define @f(i32 %k) -> void {
   store.32 %t0, %k
   %t1 = wadd %t0, 4
   mov %t2, 1
-  %t3 = add %k, %t2
+  %t3 = add.s32 %k, %t2
   store.32 %t1, %t3
   %t4 = addrof %in
   zero %In %t4

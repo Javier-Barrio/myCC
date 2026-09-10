@@ -16,58 +16,56 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   ptr %t10
   i64 %t11
   i64 %t12
-  i64 %t13
-  ptr %t14
+  ptr %t13
+  i64 %t14
   i64 %t15
-  i64 %t16
+  ptr %t16
   ptr %t17
-  ptr %t18
-  u8 %t19
-  i32 %t20
-  u8 %t21
+  u8 %t18
+  i32 %t19
+  u8 %t20
+  ptr %t21
   ptr %t22
-  ptr %t23
+  i8 %t23
   i8 %t24
-  i8 %t25
 .entry:
   %t0 = addrof @b7
   %t1 = addrof @b7
   %t2 = load.s8 %t1
   %t3 = addrof @b7
   %t4 = load.s8 %t3
-  %t5 = add %t2, %t4
-  %t5 = shl %t5, 25
-  %t5 = ashr %t5, 25
+  %t5 = add.s8 %t2, %t4
+  %t5 = shl %t5, 57
+  %t5 = ashr %t5, 57
   store.8 %t0, %t5
   %t6 = addrof @b7
   %t7 = load.s8 %t6
-  %t8 = add %t7, %i
+  %t8 = add.s32 %t7, %i
   mov %i, %t8
   %t9 = addrof @b40
   %t10 = addrof @b40
   %t11 = load.s64 %t10
-  mov %t12, %u
-  %t13 = add %t11, %t12
-  %t13 = shl %t13, 24
-  %t13 = ashr %t13, 24
-  store.64 %t9, %t13
-  %t14 = addrof @b40
-  %t15 = load.s64 %t14
-  %t16 = mul %t15, %l
-  mov %l, %t16
+  %t12 = add %t11, %u
+  %t12 = shl %t12, 24
+  %t12 = ashr %t12, 24
+  store.64 %t9, %t12
+  %t13 = addrof @b40
+  %t14 = load.s64 %t13
+  %t15 = mul %t14, %l
+  mov %l, %t15
+  %t16 = addrof @u3
   %t17 = addrof @u3
-  %t18 = addrof @u3
-  %t19 = load.u8 %t18
-  mov %t20, 1
-  %t21 = shl %t19, %t20
-  %t21 = and %t21, 7
-  store.8 %t17, %t21
+  %t18 = load.u8 %t17
+  mov %t19, 1
+  %t20 = shl.u8 %t18, %t19
+  %t20 = and %t20, 7
+  store.8 %t16, %t20
+  %t21 = addrof @b7
   %t22 = addrof @b7
-  %t23 = addrof @b7
-  %t24 = load.s8 %t23
-  %t25 = sub 0, %t24
-  %t25 = shl %t25, 25
-  %t25 = ashr %t25, 25
-  store.8 %t22, %t25
+  %t23 = load.s8 %t22
+  %t24 = sub.s8 0, %t23
+  %t24 = shl %t24, 57
+  %t24 = ashr %t24, 57
+  store.8 %t21, %t24
   ret
 }

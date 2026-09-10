@@ -48,12 +48,12 @@ define @f(i32 %n) -> i32 {
   br .if.done
 .if.done:
   mov %t4, 2
-  %t5 = mul %n, %t4
+  %t5 = mul.s32 %n, %t4
   mov %m, %t5
   %t6 = ne %m, 0
   condbr %t6, .then.2, .if.done.2
 .then.2:
-  %t7 = add %total, %m
+  %t7 = add.s32 %total, %m
   mov %total, %t7
   br .if.done.2
 .if.done.2:
@@ -62,7 +62,7 @@ define @f(i32 %n) -> i32 {
   %t9 = slt %t8, %m.2
   condbr %t9, .then.3, .if.done.3
 .then.3:
-  %t10 = add %total, %m.2
+  %t10 = add.s32 %total, %m.2
   mov %total, %t10
   br .if.done.3
 .if.done.3:
@@ -73,14 +73,14 @@ define @f(i32 %n) -> i32 {
   condbr %t12, .while.body, .while.done
 .while.body:
   mov %t13, 1
-  %t14 = sub %n, %t13
+  %t14 = sub.s32 %n, %t13
   mov %n, %t14
   br .while.cond
 .while.done:
   br .do.body
 .do.body:
   mov %t15, 1
-  %t16 = add %total, %t15
+  %t16 = add.s32 %total, %t15
   mov %total, %t16
   br .do.cond
 .do.cond:
@@ -97,15 +97,15 @@ define @f(i32 %n) -> i32 {
   %t21 = slt %i, %n
   condbr %t21, .for.body, .for.done
 .for.body:
-  %t22 = add %total, %j
+  %t22 = add.s32 %total, %j
   mov %total, %t22
   br .for.step
 .for.step:
   mov %t23, 1
-  %t24 = add %i, %t23
+  %t24 = add.s32 %i, %t23
   mov %i, %t24
   mov %t25, 2
-  %t26 = mul %j, %t25
+  %t26 = mul.s32 %j, %t25
   mov %j, %t26
   br .for.cond
 .for.done:

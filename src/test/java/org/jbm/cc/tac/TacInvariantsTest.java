@@ -71,23 +71,33 @@ class TacInvariantsTest {
             var d = local(f, "d", Type.F64);
             f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, d, d, d, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("add on a D"));
+        }).contains("add on a FLOAT"));
         assertTrue(rejects(f -> {
-            var l = local(f, "l", Type.I64);
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, l, l, x(f), AT));
+            var d = local(f, "d", Type.F64);
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), d, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("not of class L"));
+        }).contains("not of class INT"));
         accepts(f -> {
             var l = local(f, "l", Type.I64);
             f.entry().instrs.add(new Instr.Mov(l, x(f), AT));
-            f.entry().instrs.add(new Instr.Mov(x(f), l, AT));
+            f.entry().instrs.add(new Instr.Mov(x(f), l, (Type.Int) Type.I32, AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, l, l, x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         });
         assertTrue(rejects(f -> {
             var d = local(f, "d", Type.F64);
             f.entry().instrs.add(new Instr.Mov(d, x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("mov between W and D"));
+        }).contains("mov between INT and FLOAT"));
+        assertTrue(rejects(f -> {
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), x(f), Type.I64, AT));
+            f.entry().instrs.add(new Instr.Ret(x(f), AT));
+        }).contains("modifier .i64"));
+        assertTrue(rejects(f -> {
+            var d = local(f, "d", Type.F64);
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.FADD, d, d, d, AT));
+            f.entry().instrs.add(new Instr.Ret(x(f), AT));
+        }).contains("needs a precision"));
         assertTrue(rejects(f -> {
             var s = local(f, "s", new Type.Struct("Q"));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
@@ -100,23 +110,23 @@ class TacInvariantsTest {
             var c = local(f, "c", Type.U8);
             var d = local(f, "d", Type.F64);
             f.entry().instrs.add(new Instr.Cmp(Instr.CmpOp.SLT, c, x(f), new Operand.IntImm(3), AT));
-            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.I2F, d, x(f), AT));
+            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.I2F, d, x(f), (Type.Float) Type.F64, AT));
             f.entry().instrs.add(new Instr.Cmp(Instr.CmpOp.FLT, c, d, new Operand.FloatImm(0.5), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         });
         assertTrue(rejects(f -> {
-            var l = local(f, "l", Type.I64);
-            f.entry().instrs.add(new Instr.Cmp(Instr.CmpOp.EQ, l, x(f), x(f), AT));
+            var d = local(f, "d", Type.F64);
+            f.entry().instrs.add(new Instr.Cmp(Instr.CmpOp.EQ, d, x(f), x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("must be a W"));
+        }).contains("must be an integer"));
         assertTrue(rejects(f -> {
             var c = local(f, "c", Type.U8);
             f.entry().instrs.add(new Instr.Cmp(Instr.CmpOp.FLT, c, x(f), x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("flt on W"));
+        }).contains("flt on INT"));
         assertTrue(rejects(f -> {
             var l = local(f, "l", Type.I64);
-            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.FCVT, l, x(f), AT));
+            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.FCVT, l, x(f), (Type.Float) Type.F32, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("fcvt"));
     }
@@ -142,9 +152,9 @@ class TacInvariantsTest {
         }).contains("not a ptr"));
         assertTrue(rejects(f -> {
             var p = local(f, "p", Type.PTR);
-            f.entry().instrs.add(new Instr.Load(x(f), p, 64, Instr.Ext.SIGNED, false, AT));
+            f.entry().instrs.add(new Instr.Load(x(f), p, 64, Instr.Ext.FLOAT, false, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("load.64 into a W"));
+        }).contains("load.f into a INT"));
         assertTrue(rejects(f -> {
             var p = local(f, "p", Type.PTR);
             f.entry().instrs.add(new Instr.AddrOfGlobal(p, "nope", AT));
@@ -185,7 +195,7 @@ class TacInvariantsTest {
             var d = local(f, "d", Type.F64);
             f.entry().instrs.add(new Instr.Call(x(f), I_I, "sq", List.of(d), null, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("not of class W"));
+        }).contains("not of class INT"));
         assertTrue(rejects(f -> {
             var p = local(f, "p", Type.PTR);
             var asig = new Type.Func(List.of(), false, new Type.Struct("P"));

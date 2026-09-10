@@ -19,53 +19,47 @@ define @f() -> void {
   f64 %t3
   f32 %t4
   ptr %t5
-  f64 %t6
-  ptr %t7
-  i32 %t8
-  ptr %t9
-  i32 %t10
-  i64 %t11
-  i64 %t12
-  ptr %t13
-  ptr %t14
+  ptr %t6
+  i32 %t7
+  ptr %t8
+  i32 %t9
+  i64 %t10
+  ptr %t11
+  ptr %t12
+  i32 %t13
+  i32 %t14
   i32 %t15
-  i32 %t16
+  ptr %t16
   i32 %t17
-  ptr %t18
+  i32 %t18
   i32 %t19
-  i32 %t20
-  i32 %t21
 .entry:
   mov %t0, 2
   %t1 = call (i32, i32) -> i32 @add(%c, %t0)
   mov %i, %t1
-  %t2 = i2f %c
+  %t2 = i2f.64 %c
   %t3 = call (f64) -> f64 @half(%t2)
-  %t4 = fcvt %t3
+  %t4 = fcvt.32 %t3
   mov %fl, %t4
   %t5 = addrof @.str.d153ce427d7ff938
-  %t6 = fcvt %fl
-  %t7 = addrof @.str.d98ac5bc9eec51cb
-  %t8 = call (ptr, ...) -> i32 @printf(%t5, %c, %t6, %t7)
+  %t6 = addrof @.str.d98ac5bc9eec51cb
+  %t7 = call (ptr, ...) -> i32 @printf(%t5, %c, %fl, %t6)
   call () -> void @noargs()
-  %t9 = addrof @table
-  mov %t10, 1
-  mov %t11, %t10
-  %t11 = shl %t11, 32
-  %t11 = ashr %t11, 32
-  %t12 = wmul %t11, 8
-  %t13 = wadd %t9, %t12
-  %t14 = load.u64 %t13
-  mov %t15, 1
-  mov %t16, 2
-  %t17 = icall (i32, i32) -> i32 %t14(%t15, %t16)
-  mov %i, %t17
-  %t18 = addrof %tmp13
-  mov %t19, 1
-  call (i32) -> %S @mk(%t19) into %t18
-  %t20 = load.s32 %t18
-  mov %i, %t20
-  %t21 = call (i32, i32) -> i32 @add(%i, %i)
-  mov %i, %t21
+  %t8 = addrof @table
+  mov %t9, 1
+  %t10 = wmul %t9, 8
+  %t11 = wadd %t8, %t10
+  %t12 = load.u64 %t11
+  mov %t13, 1
+  mov %t14, 2
+  %t15 = icall (i32, i32) -> i32 %t12(%t13, %t14)
+  mov %i, %t15
+  %t16 = addrof %tmp13
+  mov %t17, 1
+  call (i32) -> %S @mk(%t17) into %t16
+  %t18 = load.s32 %t16
+  mov %i, %t18
+  %t19 = call (i32, i32) -> i32 @add(%i, %i)
+  mov %i, %t19
   ret
 }

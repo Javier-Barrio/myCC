@@ -14,54 +14,47 @@ define @g() -> void {
   ptr %t4
   i32 %t5
   i64 %t6
-  i64 %t7
+  ptr %t7
   ptr %t8
-  ptr %t9
-  i64 %t10
-  ptr %t11
-  i32 %t12
+  i64 %t9
+  ptr %t10
+  i32 %t11
+  i64 %t12
   i64 %t13
-  i64 %t14
-  i64 %t15
-  ptr %t16
+  ptr %t14
+  ptr %t15
+  i64 %t16
   ptr %t17
-  i64 %t18
-  ptr %t19
-  i32 %t20
-  i64 %t21
-  i64 %t22
-  ptr %t23
+  i32 %t18
+  i64 %t19
+  ptr %t20
+  ptr %t21
+  i32 %t22
+  i64 %t23
   ptr %t24
   i32 %t25
-  i64 %t26
-  i64 %t27
-  ptr %t28
-  i32 %t29
-  ptr %t30
-  i32 %t31
-  i64 %t32
-  i64 %t33
-  ptr %t34
-  i32 %t35
-  i64 %t36
+  ptr %t26
+  i32 %t27
+  i64 %t28
+  ptr %t29
+  i32 %t30
+  i64 %t31
+  ptr %t32
+  ptr %t33
+  i32 %t34
+  ptr %t35
+  i32 %t36
   i64 %t37
   ptr %t38
-  ptr %t39
+  i32 %t39
   i32 %t40
-  ptr %t41
+  i32 %t41
   i32 %t42
-  i64 %t43
-  i64 %t44
-  ptr %t45
-  i32 %t46
-  i32 %t47
-  i32 %t48
-  i32 %t49
-  i32 %t50
-  i32 %t51
-  u64 %t52
-  u64 %t53
-  u64 %t54
+  i32 %t43
+  i32 %t44
+  u64 %t45
+  u64 %t46
+  u64 %t47
 .entry:
   %t0 = addrof @arr
   mov %p, %t0
@@ -73,78 +66,57 @@ define @g() -> void {
   store.32 %p, %t3
   %t4 = addrof @arr
   mov %t5, 2
-  mov %t6, %t5
-  %t6 = shl %t6, 32
-  %t6 = ashr %t6, 32
-  %t7 = wmul %t6, 4
-  %t8 = wadd %t4, %t7
-  mov %p, %t8
-  %t9 = addrof @arr
-  %t10 = wmul %n, 4
-  %t11 = wadd %t9, %t10
-  mov %p, %t11
-  mov %t12, 2
-  mov %t13, %t12
-  %t13 = shl %t13, 32
-  %t13 = ashr %t13, 32
-  %t14 = sub 0, %t13
-  %t15 = wmul %t14, 4
-  %t16 = wadd %p, %t15
-  mov %p, %t16
+  %t6 = wmul %t5, 4
+  %t7 = wadd %t4, %t6
+  mov %p, %t7
+  %t8 = addrof @arr
+  %t9 = wmul %n, 4
+  %t10 = wadd %t8, %t9
+  mov %p, %t10
+  mov %t11, 2
+  %t12 = sub 0, %t11
+  %t13 = wmul %t12, 4
+  %t14 = wadd %p, %t13
+  mov %p, %t14
+  %t15 = addrof @arr
+  %t16 = wsub %p, %t15
+  %t16 = sdiv %t16, 4
+  mov %n, %t16
   %t17 = addrof @arr
-  %t18 = wsub %p, %t17
-  %t18 = sdiv %t18, 4
-  mov %n, %t18
-  %t19 = addrof @arr
-  mov %t20, 1
-  mov %t21, %t20
-  %t21 = shl %t21, 32
-  %t21 = ashr %t21, 32
-  %t22 = wmul %t21, 4
-  %t23 = wadd %t19, %t22
-  %t24 = addrof @arr
-  mov %t25, 3
-  mov %t26, %t25
-  %t26 = shl %t26, 32
-  %t26 = ashr %t26, 32
-  %t27 = wmul %t26, 4
-  %t28 = wadd %t24, %t27
-  %t29 = load.s32 %t28
-  store.32 %t23, %t29
-  %t30 = addrof @m
-  mov %t31, 1
-  mov %t32, %t31
-  %t32 = shl %t32, 32
-  %t32 = ashr %t32, 32
-  %t33 = wmul %t32, 12
-  %t34 = wadd %t30, %t33
-  mov %t35, 2
-  mov %t36, %t35
-  %t36 = shl %t36, 32
-  %t36 = ashr %t36, 32
-  %t37 = wmul %t36, 4
-  %t38 = wadd %t34, %t37
-  %t39 = load.u64 %pp
-  %t40 = load.s32 %t39
-  store.32 %t38, %t40
-  %t41 = addrof @m
-  mov %t42, 1
-  mov %t43, %t42
-  %t43 = shl %t43, 32
-  %t43 = ashr %t43, 32
-  %t44 = wmul %t43, 12
-  %t45 = wadd %t41, %t44
-  mov %p, %t45
-  mov %t46, 3
-  %t47 = icall (i32) -> i32 %fp(%t46)
-  mov %t48, 4
-  %t49 = icall (i32) -> i32 %fp(%t48)
-  mov %t50, 5
-  %t51 = icall (i32) -> i32 %fp(%t50)
+  mov %t18, 1
+  %t19 = wmul %t18, 4
+  %t20 = wadd %t17, %t19
+  %t21 = addrof @arr
+  mov %t22, 3
+  %t23 = wmul %t22, 4
+  %t24 = wadd %t21, %t23
+  %t25 = load.s32 %t24
+  store.32 %t20, %t25
+  %t26 = addrof @m
+  mov %t27, 1
+  %t28 = wmul %t27, 12
+  %t29 = wadd %t26, %t28
+  mov %t30, 2
+  %t31 = wmul %t30, 4
+  %t32 = wadd %t29, %t31
+  %t33 = load.u64 %pp
+  %t34 = load.s32 %t33
+  store.32 %t32, %t34
+  %t35 = addrof @m
+  mov %t36, 1
+  %t37 = wmul %t36, 12
+  %t38 = wadd %t35, %t37
+  mov %p, %t38
+  mov %t39, 3
+  %t40 = icall (i32) -> i32 %fp(%t39)
+  mov %t41, 4
+  %t42 = icall (i32) -> i32 %fp(%t41)
+  mov %t43, 5
+  %t44 = icall (i32) -> i32 %fp(%t43)
   mov %p, %p
-  mov %t52, 16
-  mov %t53, 4
-  %t54 = udiv %t52, %t53
-  mov %n, %t54
+  mov %t45, 16
+  mov %t46, 4
+  %t47 = udiv %t45, %t46
+  mov %n, %t47
   ret
 }

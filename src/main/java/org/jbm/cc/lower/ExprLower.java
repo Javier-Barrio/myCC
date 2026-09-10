@@ -52,29 +52,58 @@ final class ExprLower implements TVisitor<Val> {
         this.vars = vars;
     }
 
-    // ---- canonical form -------------------------------------------------------------------------
+    // ---- modifiers -------------------------------------------------------------------------------
 
-    private int classWidth(CType t) {
-        return target.widthOf(target.classOf(typeMap.of(t)));
+    private int registerWidth() {
+        return target.registerWidth();
     }
 
     /**
-     * Restores canonical form for {@code t} in {@code r}: a sign extension
-     * from the type's width for a signed type narrower than its class, a
-     * mask for an unsigned one, nothing for a type as wide as its class.
+     * The modifier of an operation performed in C type {@code t}: its
+     * storage type when that is narrower than the register, the precision
+     * for a floating type, none for a 64-bit integer.
      */
-    private void canon(Var r, CType t, Token at) {
-        canon(r, types.isSigned(t), types.width(t), classWidth(t), at);
+    private Type mod(CType t) {
+        Type tt = typeMap.of(t);
+        if (tt instanceof Type.Float) {
+            return tt;
+        }
+        if (t.isPointer() || t.isNullptr()) {
+            tt = typeMap.integer(types.sizeT());
+        }
+        Type.Int it = (Type.Int) tt;
+        if (it.width() >= registerWidth()) {
+            return null;
+        }
+        return it;
     }
 
-    /** Canonical form for an {@code n}-bit value, signed or not, in a class {@code c} bits wide. */
-    private void canon(Var r, boolean signed, int n, int c, Token at) {
-        if (n >= c) return;
+    private Type.Float precision(CType floating) {
+        return (Type.Float) typeMap.of(floating);
+    }
+
+    /**
+     * A {@code _BitInt} whose width is not its storage width is computed at
+     * the storage width; this makes the result extended from its own width.
+     */
+    private void canon(Var r, CType t, Token at) {
+        if (!(t instanceof CType.BitInt)) {
+            return;
+        }
+        extend(r, types.isSigned(t), types.width(t), at);
+    }
+
+    /** Extends {@code r} from its low {@code n} bits, signed or not, over the whole register. */
+    private void extend(Var r, boolean signed, int n, Token at) {
+        int shift = registerWidth() - n;
+        if (shift <= 0) {
+            return;
+        }
         if (signed) {
-            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(c - n), at));
-            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - n), at));
+            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(shift), at));
+            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(shift), at));
         } else {
-            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm((1L << n) - 1), at));
+            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm(mask(n)), at));
         }
     }
 
@@ -85,31 +114,23 @@ final class ExprLower implements TVisitor<Val> {
      */
     private Val convertInt(Val v, CType to, Type dest, Token at) {
         CType from = v.type();
-        if (typeMap.of(from).equals(dest)) {
-            return new Val(v.var(), to);
-        }
-        int fromClass = classWidth(from);
-        int toClass = classWidth(to);
-        if (fromClass == toClass && isImplied(from, to)) {
-            // The value is already canonical for the destination: the same
-            // variable, read at the new type.
+        if (isImplied(from, to)) {
+            // The value is already held as the destination requires: the
+            // same variable, read at the new type.
             return new Val(v.var(), to);
         }
         Var r = b.temp(dest);
-        b.emit(new Instr.Mov(r, v.var(), at));
-        if (fromClass < toClass) {
-            // Widening across classes: mov zero-extends; a signed source is
-            // then sign-extended from the narrower class's width.
-            boolean fromSigned = isSignedInteger(from);
-            if (fromSigned) {
-                int shift = toClass - fromClass;
-                b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(shift), at));
-                b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(shift), at));
-            }
-            return new Val(r, to);
-        }
+        Type.Int narrow = new Type.Int(storageWidth(to), isSignedInteger(to));
+        b.emit(new Instr.Mov(r, v.var(), narrow, at));
         canon(r, to, at);
         return new Val(r, to);
+    }
+
+    private int storageWidth(CType t) {
+        if (t.isPointer() || t.isNullptr()) {
+            return types.width(t);
+        }
+        return typeMap.integer(t).width();
     }
 
     // A pointer converts as an unsigned integer of its width.
@@ -121,17 +142,17 @@ final class ExprLower implements TVisitor<Val> {
     }
 
     /**
-     * Whether a value canonical for {@code from} is already canonical for
-     * {@code to}, both in one class: the destination is as wide as the
-     * class, or wider than the source and the sign cannot change, or of
-     * the same width and signedness.
+     * Whether a value held as {@code from} implies is already held as
+     * {@code to} requires: the destination fills the register, or is wider
+     * than the source and the extension cannot differ, or has the same
+     * width and signedness.
      */
     private boolean isImplied(CType from, CType to) {
         int fromWidth = types.width(from);
         int toWidth = types.width(to);
         boolean fromSigned = isSignedInteger(from);
         boolean toSigned = isSignedInteger(to);
-        if (toWidth >= classWidth(to)) {
+        if (toWidth >= registerWidth()) {
             return true;
         }
         if (toWidth > fromWidth) {
@@ -255,7 +276,8 @@ final class ExprLower implements TVisitor<Val> {
     // top and arithmetically down (signed), which lands it canonical.
     private Val readBits(Place.Memory m, Layout.BitField bits, Token at) {
         CType t = m.type();
-        int unit = width(t), c = classWidth(t);
+        int unit = width(t);
+        int c = registerWidth();
         Var u = b.temp(typeMap.integer(types.unsignedOf(t)));
         b.emit(new Instr.Load(u, m.ptr(), unit, Instr.Ext.UNSIGNED, m.isVolatile(), at));
         Var r = temp(t);
@@ -443,7 +465,8 @@ final class ExprLower implements TVisitor<Val> {
     public Val visit(TExpr.IntToFloat e) {
         Val v = value(e.operand());
         Var r = temp(e.type());
-        b.emit(new Instr.Cvt(types.isSigned(v.type()) ? Instr.CvtOp.I2F : Instr.CvtOp.U2F, r, v.var(), e.token()));
+        Instr.CvtOp op = types.isSigned(v.type()) ? Instr.CvtOp.I2F : Instr.CvtOp.U2F;
+        b.emit(new Instr.Cvt(op, r, v.var(), precision(e.type()), e.token()));
         return new Val(r, e.type());
     }
 
@@ -451,17 +474,23 @@ final class ExprLower implements TVisitor<Val> {
     public Val visit(TExpr.FloatToInt e) {
         Val v = value(e.operand());
         Var r = temp(e.type());
-        b.emit(new Instr.Cvt(types.isSigned(e.type()) ? Instr.CvtOp.F2I : Instr.CvtOp.F2U, r, v.var(), e.token()));
+        Instr.CvtOp op = types.isSigned(e.type()) ? Instr.CvtOp.F2I : Instr.CvtOp.F2U;
+        b.emit(new Instr.Cvt(op, r, v.var(), precision(v.type()), e.token()));
         canon(r, e.type(), e.token());
         return new Val(r, e.type());
     }
 
+    // A widening between floating formats is exact: nothing. A narrowing rounds.
     @Override
     public Val visit(TExpr.FloatToFloat e) {
         Val v = value(e.operand());
-        if (typeMap.of(v.type()).equals(typeMap.of(e.type()))) return new Val(v.var(), e.type());
+        Type.Float from = precision(v.type());
+        Type.Float to = precision(e.type());
+        if (to.width() >= from.width()) {
+            return new Val(v.var(), e.type());
+        }
         Var r = temp(e.type());
-        b.emit(new Instr.Cvt(Instr.CvtOp.FCVT, r, v.var(), e.token()));
+        b.emit(new Instr.Cvt(Instr.CvtOp.FCVT, r, v.var(), to, e.token()));
         return new Val(r, e.type());
     }
 
@@ -530,10 +559,10 @@ final class ExprLower implements TVisitor<Val> {
         long size = elementSize(e.type());
         if (size != 1) {
             offset = b.temp(typeMap.of(i.type()));
-            b.emit(new Instr.Bin(Instr.BinOp.WMUL, offset, i.var(), new Operand.IntImm(size), e.token()));
+            b.emit(new Instr.Bin(Instr.BinOp.WMUL, offset, i.var(), new Operand.IntImm(size), mod(i.type()), e.token()));
         }
         Var r = b.temp(Type.PTR);
-        b.emit(new Instr.Bin(Instr.BinOp.WADD, r, p.var(), offset, e.token()));
+        b.emit(new Instr.Bin(Instr.BinOp.WADD, r, p.var(), offset, mod(e.type()), e.token()));
         return new Val(r, e.type());
     }
 
@@ -542,9 +571,11 @@ final class ExprLower implements TVisitor<Val> {
         Val l = value(e.left());
         Val r = value(e.right());
         Var d = temp(e.type());
-        b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, l.var(), r.var(), e.token()));
+        b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, l.var(), r.var(), mod(e.type()), e.token()));
         long size = elementSize(l.type());
-        if (size != 1) b.emit(new Instr.Bin(Instr.BinOp.SDIV, d, d, new Operand.IntImm(size), e.token()));
+        if (size != 1) {
+            b.emit(new Instr.Bin(Instr.BinOp.SDIV, d, d, new Operand.IntImm(size), mod(e.type()), e.token()));
+        }
         return new Val(d, e.type());
     }
 
@@ -559,8 +590,8 @@ final class ExprLower implements TVisitor<Val> {
         Val r = value(right);
         Instr.BinOp op = t.isFloating() ? floating : types.isSigned(t) ? signed : wrapping;
         Var d = temp(t);
-        b.emit(new Instr.Bin(op, d, l.var(), r.var(), at));
-        if (t instanceof CType.BitInt) canon(d, t, at);
+        b.emit(new Instr.Bin(op, d, l.var(), r.var(), mod(t), at));
+        canon(d, t, at);
         return new Val(d, t);
     }
 
@@ -604,19 +635,13 @@ final class ExprLower implements TVisitor<Val> {
         return binary(e.left(), e.right(), e.type(), e.token(), Instr.BinOp.XOR, Instr.BinOp.XOR, Instr.BinOp.XOR);
     }
 
-    // The amount was promoted on its own and is in W; when the left is in
-    // L it is moved into an L first, since a shift's operands share a class.
+    // The amount was promoted on its own by the typer and is used as it is.
     private Val shift(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Instr.BinOp op, Token at) {
         Val l = value(left);
         Val r = value(right);
-        Var amount = r.var();
-        if (target.classOf(typeMap.of(t)) != target.classOf(amount.type)) {
-            amount = b.temp(typeMap.of(t));
-            b.emit(new Instr.Mov(amount, r.var(), at));
-        }
         Var d = temp(t);
-        b.emit(new Instr.Bin(op, d, l.var(), amount, at));
-        if (t instanceof CType.BitInt) canon(d, t, at);
+        b.emit(new Instr.Bin(op, d, l.var(), r.var(), mod(t), at));
+        canon(d, t, at);
         return new Val(d, t);
     }
 
@@ -709,9 +734,13 @@ final class ExprLower implements TVisitor<Val> {
         Val v = value(e.operand());
         CType t = e.type();
         Var d = temp(t);
-        if (t.isFloating()) b.emit(new Instr.Bin(Instr.BinOp.FSUB, d, new Operand.FloatImm(-0.0), v.var(), e.token()));
-        else b.emit(new Instr.Bin(types.isSigned(t) ? Instr.BinOp.SUB : Instr.BinOp.WSUB, d, new Operand.IntImm(0), v.var(), e.token()));
-        if (t instanceof CType.BitInt) canon(d, t, e.token());
+        if (t.isFloating()) {
+            b.emit(new Instr.Bin(Instr.BinOp.FSUB, d, new Operand.FloatImm(-0.0), v.var(), mod(t), e.token()));
+        } else {
+            Instr.BinOp op = types.isSigned(t) ? Instr.BinOp.SUB : Instr.BinOp.WSUB;
+            b.emit(new Instr.Bin(op, d, new Operand.IntImm(0), v.var(), mod(t), e.token()));
+        }
+        canon(d, t, e.token());
         return new Val(d, t);
     }
 
@@ -719,8 +748,8 @@ final class ExprLower implements TVisitor<Val> {
     public Val visit(TExpr.BitNot e) {
         Val v = value(e.operand());
         Var d = temp(e.type());
-        b.emit(new Instr.Bin(Instr.BinOp.XOR, d, v.var(), new Operand.IntImm(-1), e.token()));
-        if (e.type() instanceof CType.BitInt) canon(d, e.type(), e.token());
+        b.emit(new Instr.Bin(Instr.BinOp.XOR, d, v.var(), new Operand.IntImm(-1), mod(e.type()), e.token()));
+        canon(d, e.type(), e.token());
         return new Val(d, e.type());
     }
 
@@ -790,7 +819,7 @@ final class ExprLower implements TVisitor<Val> {
             if (m.bits().isPresent()) {
                 Var r = temp(m.type());
                 b.emit(new Instr.Mov(r, v.var(), at));
-                canon(r, types.isSigned(m.type()), m.bits().get().width(), classWidth(m.type()), at);
+                extend(r, types.isSigned(m.type()), m.bits().get().width(), at);
                 return new Val(r, m.type());
             }
         }

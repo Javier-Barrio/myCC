@@ -178,7 +178,11 @@ final class StmtLower implements TStmtVisitor<Void> {
             if (!(c instanceof TStmt.CaseRange r)) continue;
             Type t = v.var().type;
             Var d = b.temp(t);
-            b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, v.var(), new Operand.IntImm(r.low()), s.token()));
+            Type.Int mod = null;
+            if (t instanceof Type.Int i && i.width() < 64) {
+                mod = new Type.Int(i.width(), false);
+            }
+            b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, v.var(), new Operand.IntImm(r.low()), mod, s.token()));
             Var in = b.temp(Type.U8);
             b.emit(new Instr.Cmp(Instr.CmpOp.ULE, in, d, new Operand.IntImm(r.high() - r.low()), s.token()));
             Block next = b.block("case.next");

@@ -14,43 +14,37 @@ define @f() -> void {
   i8 %t0
   f64 %t1
   i32 %t2
-  f64 %t3
-  f32 %t4
-  u8 %t5
+  f32 %t3
+  u8 %t4
+  ptr %t5
   ptr %t6
   ptr %t7
-  ptr %t8
-  i32 %t9
-  i16 %t10
+  i32 %t8
+  i16 %t9
 .entry:
   mov %i, %c
-  mov %t0, %i
-  %t0 = shl %t0, 24
-  %t0 = ashr %t0, 24
+  mov.s8 %t0, %i
   mov %c, %t0
-  %t1 = i2f %i
+  %t1 = i2f.64 %i
   mov %d, %t1
-  %t2 = f2i %d
+  %t2 = f2i.64 %d
   mov %i, %t2
-  %t3 = fcvt %fl
-  mov %d, %t3
-  %t4 = fcvt %d
-  mov %fl, %t4
-  %t5 = ne %p, 0
-  mov %b, %t5
+  mov %d, %fl
+  %t3 = fcvt.32 %d
+  mov %fl, %t3
+  %t4 = ne %p, 0
+  mov %b, %t4
   mov %v, %p
   mov %p, %l
   mov %l, %p
-  mov %t6, 0
+  mov %t5, 0
+  mov %p, %t5
+  %t6 = addrof %a
   mov %p, %t6
-  %t7 = addrof %a
-  mov %p, %t7
-  %t8 = addrof @f
-  mov %fp, %t8
-  %t9 = add %c, %s
-  mov %t10, %t9
-  %t10 = shl %t10, 16
-  %t10 = ashr %t10, 16
-  mov %s, %t10
+  %t7 = addrof @f
+  mov %fp, %t7
+  %t8 = add.s32 %c, %s
+  mov.s16 %t9, %t8
+  mov %s, %t9
   ret
 }

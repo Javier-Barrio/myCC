@@ -7,99 +7,103 @@ define @f() -> void {
   ptr %q
   u8 %b
   i8 %c
-  i32 %t0
-  f64 %t1
-  i32 %t2
+  u32 %t0
+  i32 %t1
+  f64 %t2
   i32 %t3
   i32 %t4
   i32 %t5
-  ptr %t6
-  i32 %t7
-  u32 %t8
-  i32 %t9
-  i32 %t10
-  u8 %t11
-  u8 %t12
-  i32 %t13
+  i32 %t6
+  ptr %t7
+  i32 %t8
+  u32 %t9
+  u32 %t10
+  i32 %t11
+  i32 %t12
+  u8 %t13
   u8 %t14
-  u8 %t15
-  i32 %t16
-  i32 %t17
+  i32 %t15
+  u8 %t16
+  u8 %t17
   i32 %t18
-  f64 %t19
-  f64 %t20
-  ptr %t21
-  ptr %t22
-  i32 %t23
+  i32 %t19
+  i32 %t20
+  f64 %t21
+  f64 %t22
+  ptr %t23
+  ptr %t24
+  i32 %t25
 .entry:
-  %t0 = eq %i, %u
-  mov %b, %t0
-  %t1 = i2f %i
-  %t2 = fne %t1, %d
-  mov %b, %t2
-  mov %t3, 122
-  %t4 = slt %c, %t3
-  mov %b, %t4
-  %t5 = ule %p, %q
+  mov.u32 %t0, %i
+  %t1 = eq %t0, %u
+  mov %b, %t1
+  %t2 = i2f.64 %i
+  %t3 = fne %t2, %d
+  mov %b, %t3
+  mov %t4, 122
+  %t5 = slt %c, %t4
   mov %b, %t5
-  mov %t6, 0
-  %t7 = eq %p, %t6
-  mov %b, %t7
-  mov %t8, 0
-  %t9 = ule %t8, %i
-  mov %b, %t9
+  %t6 = ule %p, %q
+  mov %b, %t6
+  mov %t7, 0
+  %t8 = eq %p, %t7
+  mov %b, %t8
+  mov.u32 %t9, %i
   mov %t10, 0
-  %t11 = ne %p, 0
-  condbr %t11, .and, .and.done
+  %t11 = ule %t10, %t9
+  mov %b, %t11
+  mov %t12, 0
+  %t13 = ne %p, 0
+  condbr %t13, .and, .and.done
 .and:
-  %t12 = fne %d, 0.0
-  mov %t10, %t12
+  %t14 = fne %d, 0.0
+  mov %t12, %t14
   br .and.done
 .and.done:
-  mov %b, %t10
-  mov %t13, 1
-  %t14 = ne %i, 0
-  condbr %t14, .or.done, .or
+  mov %b, %t12
+  mov %t15, 1
+  %t16 = ne %i, 0
+  condbr %t16, .or.done, .or
 .or:
-  mov %t13, %b
+  mov %t15, %b
   br .or.done
 .or.done:
-  mov %b, %t13
-  %t15 = ne %p, 0
-  %t16 = eq %t15, 0
-  mov %b, %t16
-  %t18 = slt %c, %i
-  condbr %t18, .then, .else
+  mov %b, %t15
+  %t17 = ne %p, 0
+  %t18 = eq %t17, 0
+  mov %b, %t18
+  %t20 = slt %c, %i
+  condbr %t20, .then, .else
 .then:
-  mov %t17, %i
+  mov %t19, %i
   br .cond.done
 .else:
-  mov %t17, %c
+  mov %t19, %c
   br .cond.done
 .cond.done:
-  mov %i, %t17
+  mov %i, %t19
   condbr %b, .then.2, .else.2
 .then.2:
-  %t20 = i2f %i
-  mov %t19, %t20
+  %t22 = i2f.64 %i
+  mov %t21, %t22
   br .cond.done.2
 .else.2:
-  mov %t19, %d
+  mov %t21, %d
   br .cond.done.2
 .cond.done.2:
-  mov %d, %t19
+  mov %d, %t21
   condbr %b, .then.3, .else.3
 .then.3:
-  mov %t21, %p
+  mov %t23, %p
   br .cond.done.3
 .else.3:
-  mov %t22, 0
-  mov %t21, %t22
+  mov %t24, 0
+  mov %t23, %t24
   br .cond.done.3
 .cond.done.3:
-  mov %p, %t21
-  mov %t23, 1
-  mov %i, %t23
+  mov %p, %t23
+  mov %t25, 1
+  mov %i, %t25
   mov %i, %c
   ret
 }

@@ -25,7 +25,7 @@ define @f(i32 %c, i8 %ch) -> i32 {
   i32 %t20
   i32 %t21
 .entry:
-  %t0 = wsub %ch, 98
+  %t0 = wsub.u8 %ch, 98
   %t1 = ule %t0, 4
   condbr %t1, .case.98.102, .case.next
 .case.next:
@@ -59,7 +59,7 @@ define @f(i32 %c, i8 %ch) -> i32 {
   condbr %t6, .then, .if.done
 .then:
   mov %t7, 1
-  %t8 = add %c, %t7
+  %t8 = add.s32 %c, %t7
   mov %c, %t8
   br .retry
 .if.done:
@@ -98,12 +98,12 @@ define @f(i32 %c, i8 %ch) -> i32 {
   br .for.done
 .for.step:
   mov %t18, 1
-  %t19 = add %i, %t18
+  %t19 = add.s32 %i, %t18
   mov %i, %t19
   br .for.cond
 .for.done:
   mov %t20, 1
-  %t21 = sub %c, %t20
+  %t21 = sub.s32 %c, %t20
   mov %c, %t21
   br .while.cond
 .while.done:

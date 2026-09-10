@@ -21,12 +21,12 @@ define @f() -> void {
   %t1 = load.s32 %t0
   %t2 = addrof @e
   %t3 = load.s32 %t2
-  %t4 = add %t1, %t3
+  %t4 = add.s32 %t1, %t3
   store.32 %t0, %t4
   %t5 = addrof @later
   %t6 = addrof @count.static
   %t7 = load.s32 %t6
-  %t8 = i2f %t7
+  %t8 = i2f.64 %t7
   store.f64 %t5, %t8
   ret
 }
