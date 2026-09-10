@@ -1,5 +1,14 @@
 plugins {
     id("java")
+    id("application")
+}
+
+// `./gradlew installDist` puts a launcher at build/install/cshell/bin/cshell;
+// run that on a terminal for line editing, history and completion. The
+// `cshell` task below works for pipes, but Gradle gives it no terminal.
+application {
+    mainClass.set("org.jbm.repl.CShell")
+    applicationName = "cshell"
 }
 
 group = "org.jbm"

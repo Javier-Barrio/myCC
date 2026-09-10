@@ -23,8 +23,15 @@ regenerated with `./gradlew test -Dtyped.update=true -Dtac.update=true`.
 ## The shell
 
 ```
-./gradlew -q cshell --console=plain
+./gradlew installDist
+build/install/cshell/bin/cshell
 ```
+
+The launcher runs on your terminal, which is what gives line editing,
+history (Up and Down arrows walk it, Ctrl-R searches it, kept in
+`~/.cshell_history`) and tab completion. `./gradlew -q cshell
+--console=plain` also runs the shell but through Gradle's pipes, so it
+has none of those; use it for scripted input.
 
 Type declarations, statements or expressions; a declaration is kept
 for the lines that follow, a statement runs once, an expression is
@@ -51,7 +58,7 @@ in `~/.cshell_history`, and tab completion of names, members after
 
 Headers are not included unless you ask: `#include <stdio.h>` declares
 `printf`, and `-I dir` on the command line adds a directory for your
-own headers, `./gradlew -q cshell --console=plain --args="-I include"`.
+own headers, `build/install/cshell/bin/cshell -I include`.
 The library functions themselves are not provided yet; calling one
 faults with "no definition".
 
