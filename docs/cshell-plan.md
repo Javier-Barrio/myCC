@@ -303,7 +303,7 @@ editing, history and completion come later through JLine behind a
 ## Packages and classes
 
 ```
-org.jbm.cc.tac                Module, Function, Block, Data, Reloc, Slot, Temp, Type; Instr (sealed, one record
+org.jbm.cc.tac                Module, Symbol (Function, Global and the declarations), Block, Type; Instr (sealed, one record
                               per instruction, each with its token); TacVisitor; TacWriter; TacReader;
                               TacInvariants (temps typed and assigned before use, branch targets in the
                               function, names defined or external, widths consistent)

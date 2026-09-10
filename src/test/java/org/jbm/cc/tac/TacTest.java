@@ -50,6 +50,26 @@ class TacTest {
     }
 
     @Test
+    void everyNamedThingIsASymbol() {
+        var m = new Module(X64);
+        m.globals.add(new Global("g", Linkage.EXTERNAL, Type.I32, 4, false, null));
+        m.globalDecls.add(new Module.GlobalDecl("errno", Type.I32));
+        var sig = new Type.Func(List.of(Type.PTR), true, Type.I32);
+        m.funcDecls.add(new Module.FuncDecl("printf", sig));
+        m.functions.add(new Function("f", Linkage.INTERNAL, sig, List.of(new Var("s", Type.PTR))));
+
+        List<String> names = m.symbols().stream().map(Symbol::name).toList();
+        assertEquals(List.of("g", "errno", "printf", "f"), names);
+        List<Boolean> defined = m.symbols().stream().map(Symbol::isDefined).toList();
+        assertEquals(List.of(true, false, false, true), defined);
+        assertEquals(Type.I32, m.symbol("g").orElseThrow().type());
+        assertEquals(sig, m.symbol("printf").orElseThrow().type());
+        assertEquals(sig, m.symbol("f").orElseThrow().type());
+        assertTrue(m.symbol("f").orElseThrow() instanceof Function);
+        assertTrue(m.symbol("nope").isEmpty());
+    }
+
+    @Test
     void theExampleModulePrints() {
         var m = new Module(X64);
         m.structs.add(new StructDef("P", List.of(new StructDef.Member(Type.I32, 0), new StructDef.Member(Type.I32, 4)), 8, 4));
