@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Transcripts: each {@code src/test/resources/repl/*.cshell} is a
@@ -51,6 +52,21 @@ class ReplTest {
             }
         }
         assertEquals(expected, session(inputs), file.getFileName().toString());
+    }
+
+    @org.junit.jupiter.api.io.TempDir
+    Path dir;
+
+    @Test
+    void saveWritesTheKeptLines() throws IOException {
+        Path file = dir.resolve("session.c");
+        ScriptConsole console = new ScriptConsole(List.of("int x = 1;", "x++;", "int f(void) { return x; }", "/save " + file));
+        new Repl(console, BundledHeaders.INSTANCE, new Types(X86_64SysV.INSTANCE)).run();
+        assertEquals("int x = 1;\nint f(void) { return x; }\n", Files.readString(file));
+        assertTrue(console.transcript().endsWith("|  saved 2 lines to " + file + "\n"), console.transcript());
+        ScriptConsole again = new ScriptConsole(List.of("/load " + file, "f()"));
+        new Repl(again, BundledHeaders.INSTANCE, new Types(X86_64SysV.INSTANCE)).run();
+        assertTrue(again.transcript().endsWith("$1 ==> 1\n"), again.transcript());
     }
 
     @Test

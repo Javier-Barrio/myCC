@@ -62,6 +62,8 @@ cshell> /help
 |  /macros        the #defines
 |  /tac name      the TAC of a function or an object
 |  /drop name     forget the line that declares a name
+|  /load file     run a file line by line, as if typed
+|  /save file     write the kept lines to a file
 |  /reset         forget everything
 |  /exit          leave
 cshell> /reset
@@ -69,4 +71,6 @@ cshell> /reset
 cshell> /list
 cshell> sq(2)
 |  error: use of undeclared identifier 'sq' at 1:1
+|  sq(2)
+|  ^
 cshell> /exit
