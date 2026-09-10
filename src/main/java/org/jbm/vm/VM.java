@@ -16,9 +16,11 @@ import org.jbm.cc.lower.tac.Var;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A virtual machine that executes C TAC IR as compiled from `Lower.lower()`
@@ -30,6 +32,24 @@ public class VM implements TacVisitor<Void> {
     }
 
     SymbolTable symbolTable = new SymbolTable();
+
+    // Functions the VM provides under a name, called when a program calls
+    // a declared function it does not define.
+    private final LinkedHashMap<String, Builtin> builtins = new LinkedHashMap<>();
+
+    /** Provides {@code name} as a builtin; a later module defining it takes precedence. */
+    public void bind(String name, Builtin builtin) {
+        builtins.put(name, builtin);
+    }
+
+    /** Every name loaded so far, defined or declared, with what it is. */
+    public Map<String, Symbol> symbols() {
+        return Collections.unmodifiableMap(symbolTable.symbols);
+    }
+
+    public Memory memory() {
+        return memory;
+    }
 
     // The block being executed and the index of the next instruction in
     // it; a terminator changes them, `ret` clears the block.
@@ -650,12 +670,36 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Call c) {
-        var callee = symbolTable.symbols.get(c.callee());
-        if (!(callee instanceof Function target)) {
-            throw new IllegalStateException("no definition for @" + c.callee() + " at " + c.token().location());
-        }
-        invoke(target, c);
+        callByName(c.callee(), c);
         return null;
+    }
+
+    // A defined function runs in a new frame; a declared one goes to its
+    // builtin, whose result is written like a returned value.
+    private void callByName(String name, Instr.Call c) {
+        Symbol callee = symbolTable.symbols.get(name);
+        if (callee instanceof Function target) {
+            invoke(target, c);
+            return;
+        }
+        Builtin builtin = builtins.get(name);
+        if (builtin == null) {
+            throw new IllegalStateException("no definition for @" + name + " at " + c.token().location());
+        }
+        if (c.into() != null) {
+            throw new IllegalStateException("builtin @" + name + " cannot return an aggregate at " + c.token().location());
+        }
+        List<Value> args = new ArrayList<>();
+        for (Operand o : c.args()) {
+            args.add(operand(o));
+        }
+        Value result = builtin.call(this, args);
+        if (c.dst() != null) {
+            if (result == null) {
+                throw new IllegalStateException("builtin @" + name + " returned nothing at " + c.token().location());
+            }
+            set(c.dst(), result);
+        }
     }
 
     // Through a pointer to function: the address names the function.
@@ -666,11 +710,7 @@ public class VM implements TacVisitor<Void> {
         if (name == null) {
             throw new IllegalStateException("call through a bad function pointer 0x" + Long.toHexString(address) + " at " + i.token().location());
         }
-        Symbol callee = symbolTable.symbols.get(name);
-        if (!(callee instanceof Function target)) {
-            throw new IllegalStateException("no definition for @" + name + " at " + i.token().location());
-        }
-        invoke(target, new Instr.Call(i.dst(), i.sig(), name, i.args(), i.into(), i.token()));
+        callByName(name, new Instr.Call(i.dst(), i.sig(), name, i.args(), i.into(), i.token()));
         return null;
     }
 

@@ -103,6 +103,12 @@ public class Memory {
         return Double.longBitsToDouble(loadInt(address, 64, false));
     }
 
+    /** {@code count} bytes at the address, copied out. */
+    public byte[] read(long address, int count) {
+        int i = index(address, count);
+        return java.util.Arrays.copyOfRange(bytes, i, i + count);
+    }
+
     /** The bytes written at the address. */
     public void write(long address, byte[] data) {
         int i = index(address, data.length);
