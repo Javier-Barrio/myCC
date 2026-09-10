@@ -214,6 +214,11 @@ builtins are written against those declarations.
 
 ## The shell
 
+The shell itself is designed in `repl-plan.md`, which supersedes this
+section through "The REPL" below and names the package `org.jbm.repl`.
+The text is kept for the decisions it records.
+
+
 **State.** A list of the lines kept so far, each tagged as a directive or
 a declaration with the range it occupies in the concatenation, and a
 counter for `$N`. That is all; there is no session object.
