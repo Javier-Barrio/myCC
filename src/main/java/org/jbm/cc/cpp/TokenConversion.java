@@ -66,8 +66,9 @@ public final class TokenConversion {
             }
             var type = classifyPpNumber(t.token.text).orElseThrow(() -> new ConversionException(
                     "pp-number is not a valid integer or floating constant", t.token));
-            var converted = new CppToken(
-                    new Token(type, t.token.text, t.token.line, t.token.column));
+            Token constant = new Token(type, t.token.text, t.token.line, t.token.column);
+            constant.file = t.token.file;
+            var converted = new CppToken(constant);
             converted.hideSet.addAll(t.hideSet);
             tokens.add(converted);
         }

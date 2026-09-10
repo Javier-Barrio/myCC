@@ -334,16 +334,21 @@ public class Scanner {
     // the stream, echoing the replacement-list tokens it also captured onto
     // the macro token. Preprocessing consumes directives, so drop those
     // lines before expanding. A '#' is only lexed as a PUNCTUATOR when it
-    // starts a line, i.e. when it introduces a directive.
+    // starts a line, i.e. when it introduces a directive. A line is the
+    // same line only within the same file: an included header's tokens
+    // follow the includer's in the stream with their own numbering.
     private static TokenSet stripDirectiveLines(TokenSet ts) {
         var kept = new ArrayList<CppToken>();
         int directiveLine = -1;
+        String directiveFile = "";
         for (var t : ts.tokens) {
             if (t.token.type == TokenType.PUNCTUATOR && t.token.text.equals("#")) {
                 directiveLine = t.token.line;
+                directiveFile = t.token.file;
                 continue;
             }
-            if (t.token.line == directiveLine && t.token.type != TokenType.EOF) {
+            boolean onDirectiveLine = t.token.line == directiveLine && t.token.file.equals(directiveFile);
+            if (onDirectiveLine && t.token.type != TokenType.EOF) {
                 continue;
             }
             kept.add(t);

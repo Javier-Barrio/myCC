@@ -90,6 +90,10 @@ public class CppTokenizer {
         public final int line;
         public final int column;
 
+        // The file the token was read from; "" for tokens the expander or
+        // the tests make up.
+        public String file = "";
+
         // Whether white space (or a comment) separated this token from the
         // previous one in the source. The expander keeps a per-occurrence
         // copy on CppToken, which is what the stringize operator reads.
@@ -126,12 +130,13 @@ public class CppTokenizer {
         public boolean equals(Object o) {
             if (o == null || getClass() != o.getClass()) return false;
             Token token = (Token) o;
-            return line == token.line && column == token.column && type == token.type && Objects.equals(text, token.text);
+            boolean samePlace = line == token.line && column == token.column && file.equals(token.file);
+            return samePlace && type == token.type && Objects.equals(text, token.text);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(type, text, line, column);
+            return Objects.hash(type, text, line, column, file);
         }
     }
 
@@ -194,6 +199,7 @@ public class CppTokenizer {
     // `#define` continued over several physical lines is one line - which
     // is also how the expander tells where a directive ends.
     private final String src;
+    private final String file;
     private int pos;
     private int line = 1;
     private int col = 1;
@@ -227,7 +233,12 @@ public class CppTokenizer {
     private final ArrayDeque<Group> groups = new ArrayDeque<>();
 
     public CppTokenizer(@NonNull String source) {
+        this(source, "<source>");
+    }
+
+    public CppTokenizer(@NonNull String source, @NonNull String file) {
         this.src = splice(source);
+        this.file = file;
         this.macroTable = new LinkedHashMap<>();
     }
 
@@ -236,8 +247,9 @@ public class CppTokenizer {
     // start of a physical line. A `#define`'s replacement list is lexed
     // against an empty table, so its macro names stay unresolved until
     // expansion; an `#if` condition shares this tokenizer's table.
-    private CppTokenizer(String source, int startLine, int startCol, Map<String, Token> macroTable) {
+    private CppTokenizer(String source, String file, int startLine, int startCol, Map<String, Token> macroTable) {
         this.src = source;
+        this.file = file;
         this.line = startLine;
         this.col = startCol;
         this.atLineStart = false;
@@ -264,7 +276,11 @@ public class CppTokenizer {
     }
 
     public static TokenSet tokenSet(@NonNull String source) {
-        CppTokenizer tokenizer = new CppTokenizer(source);
+        return tokenSet(source, "<source>");
+    }
+
+    public static TokenSet tokenSet(@NonNull String source, @NonNull String file) {
+        CppTokenizer tokenizer = new CppTokenizer(source, file);
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
         set.macros = tokenizer.macroTable();
         return set;
@@ -343,6 +359,7 @@ public class CppTokenizer {
                 throw new LexException("unterminated #if", open.line, open.column);
             }
             t.spaceBefore = separated;
+            t.file = file;
             return t;
         }
     }
@@ -651,6 +668,7 @@ public class CppTokenizer {
             }
             Token value = new Token(TokenType.PP_NUMBER, defined ? "1" : "0", t.line, t.column);
             value.spaceBefore = t.spaceBefore;
+            value.file = t.file;
             out.add(value);
             i = j;
         }
@@ -805,7 +823,7 @@ public class CppTokenizer {
             return List.of();
         }
 
-        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos), new LinkedHashMap<>()).scan();
+        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new LinkedHashMap<>()).scan();
         List<List<Token>> arguments = new ArrayList<>();
         List<Token> current = new ArrayList<>();
         int depth = 0;
@@ -834,7 +852,7 @@ public class CppTokenizer {
     // a variadic "...", i.e. dropping the separating commas.
     private List<Token> scanParamListTokens(int from, int to) {
         String inner = src.substring(from, to);
-        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos), new LinkedHashMap<>()).scan();
+        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new LinkedHashMap<>()).scan();
         List<Token> params = new ArrayList<>();
         for (Token t : raw) {
             if (t.type == TokenType.IDENTIFIER || (t.type == TokenType.PUNCTUATOR && t.text.equals("..."))) {
@@ -863,7 +881,7 @@ public class CppTokenizer {
             end++;
         }
         String rest = src.substring(from, end);
-        List<Token> raw = new CppTokenizer(rest, line, col + (from - pos), table).scan();
+        List<Token> raw = new CppTokenizer(rest, file, line, col + (from - pos), table).scan();
         List<Token> expansion = new ArrayList<>();
         for (Token t : raw) {
             if (t.type != TokenType.EOF) {
