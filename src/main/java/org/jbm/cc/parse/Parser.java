@@ -39,17 +39,36 @@ public final class Parser {
     private final TokenCursor cur;
     private final ScopeStack scopes = new ScopeStack();
 
+    // Script mode: a statement may appear where an external declaration
+    // may; the file-scope statements become the body of a synthetic
+    // `void .file(void)` appended to the unit, and the last statement
+    // needs no ';' before the end of input. What the shell compiles.
+    private final boolean script;
+
     public Parser(@NonNull TokenSet tokens) {
         this(tokens.tokens);
     }
 
     public Parser(@NonNull List<CppToken> tokens) {
+        this(tokens, false);
+    }
+
+    private Parser(List<CppToken> tokens, boolean script) {
         this.cur = new TokenCursor(tokens);
+        this.script = script;
     }
 
     /** Parses a whole translation-unit (6.9.1). */
     public static List<Decl> parse(@NonNull TokenSet tokens) {
         return new Parser(tokens).parseTranslationUnit();
+    }
+
+    /** The name of the function that holds a script's file-scope statements. */
+    public static final String FILE_FUNCTION = ".file";
+
+    /** Parses a script: a translation unit that may also have statements at file scope. */
+    public static List<Decl> parseScript(@NonNull TokenSet tokens) {
+        return new Parser(tokens.tokens, true).parseTranslationUnit();
     }
 
     // ---- keyword classes --------------------------------------------------
@@ -116,10 +135,46 @@ public final class Parser {
 
     public List<Decl> parseTranslationUnit() {
         var decls = new ArrayList<Decl>();
+        var statements = new ArrayList<BlockItem>();
+        Token first = null;
         while (!cur.atEof()) {
-            decls.add(parseExternalDeclaration());
+            if (script && atFileScopeStatement()) {
+                if (first == null) {
+                    first = cur.peek();
+                }
+                statements.add(parseStatement());
+            } else {
+                decls.add(parseExternalDeclaration());
+            }
+        }
+        if (first != null) {
+            decls.add(fileFunction(first, statements));
         }
         return decls;
+    }
+
+    // In a script, whatever cannot begin an external declaration is a
+    // statement: an expression, a keyword like `if` or `for`, a block,
+    // or a label.
+    private boolean atFileScopeStatement() {
+        if (atAttributeSpecifier() || cur.at("static_assert")) {
+            return false;
+        }
+        if (atLabel()) {
+            return true;
+        }
+        return !atDeclaration();
+    }
+
+    // `void .file(void) { statements }`, located at the first statement.
+    private static Decl.FunctionDefinition fileFunction(Token first, List<BlockItem> statements) {
+        Token name = new Token(TokenType.IDENTIFIER, FILE_FUNCTION, first.line, first.column);
+        name.file = first.file;
+        Type voidType = new Type.Basic(first, Type.Kind.VOID, false, Quals.NONE);
+        Type.Function type = new Type.Function(first, voidType, List.of(), false, Quals.NONE);
+        Specifiers specs = new Specifiers(first, List.of(), List.of(), Optional.empty(), Optional.of(voidType));
+        Stmt.Compound body = new Stmt.Compound(first, statements);
+        return new Decl.FunctionDefinition(List.of(), specs, name, type, body);
     }
 
     // external-declaration: function-definition | declaration. Both start
@@ -920,7 +975,9 @@ public final class Parser {
             return new Stmt.ExprStmt(t, Optional.empty());
         }
         Expr expr = parseExpression();
-        cur.expect(";");
+        if (!(script && cur.atEof())) {
+            cur.expect(";");
+        }
         return new Stmt.ExprStmt(t, Optional.of(expr));
     }
 

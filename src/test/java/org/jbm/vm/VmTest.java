@@ -336,6 +336,18 @@ class VmTest {
     }
 
     @Test
+    void aScriptRunsItsFileFunctionThroughStep() {
+        Types types = new Types(X86_64SysV.INSTANCE);
+        VM vm = new VM();
+        assertNull(vm.step(org.jbm.cc.Compiler.compileScript("int x = 1;", BundledHeaders.INSTANCE, "line", types).tac()));
+        assertEquals(1, vm.memory.loadInt(vm.addressOf("x"), 32, true));
+        assertNull(vm.step(org.jbm.cc.Compiler.compileScript("int x = 1; x += 41;", BundledHeaders.INSTANCE, "line", types).tac()));
+        assertEquals(42, vm.memory.loadInt(vm.addressOf("x"), 32, true), "the statement ran; x kept its storage");
+        vm.step(org.jbm.cc.Compiler.compileScript("int x = 1; int $1; $1 = x * 2", BundledHeaders.INSTANCE, "line", types).tac());
+        assertEquals(84, vm.memory.loadInt(vm.addressOf("$1"), 32, true));
+    }
+
+    @Test
     void voidMainAndMissingFile() {
         assertNull(run("void main(void) { int x = 1; x++; }"));
         assertNull(run("void main(void) { return; }"));

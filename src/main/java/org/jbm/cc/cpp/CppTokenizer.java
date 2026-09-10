@@ -781,12 +781,14 @@ public class CppTokenizer {
         return t.type == TokenType.PUNCTUATOR && t.text.equals(text);
     }
 
+    // `$` is accepted in identifiers as GCC and Clang do: the shell names
+    // its results `$1`, `$2`, ... and nothing portable can collide.
     private static boolean isIdentifierStart(char c) {
-        return Character.isLetter(c) || c == '_';
+        return Character.isLetter(c) || c == '_' || c == '$';
     }
 
     private static boolean isIdentifierPart(char c) {
-        return Character.isLetterOrDigit(c) || c == '_';
+        return Character.isLetterOrDigit(c) || c == '_' || c == '$';
     }
 
     private Token scanIdentifier(int startLine, int startCol) {
