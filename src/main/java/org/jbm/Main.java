@@ -1,12 +1,12 @@
 package org.jbm;
 
-import org.jbm.cc.Compiler;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.parse.ast.AstPrinter;
-import org.jbm.cc.cpp.HeaderProvider;
-import org.jbm.cc.lower.tac.TacWriter;
-import org.jbm.cc.sema.tast.TypedPrinter;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.Compiler;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.parse.ast.AstPrinter;
+import org.jbm.mycc.cc.cpp.HeaderProvider;
+import org.jbm.mycc.cc.lower.tac.TacWriter;
+import org.jbm.mycc.cc.sema.tast.TypedPrinter;
+import org.jbm.mycc.cc.sema.types.Types;
 
 import java.io.IOException;
 import java.nio.file.Files;

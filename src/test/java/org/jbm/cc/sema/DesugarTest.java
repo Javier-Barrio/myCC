@@ -1,14 +1,16 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.parse.ast.AstPrinter;
-import org.jbm.cc.parse.ast.Decl;
-import org.jbm.cc.parse.ast.Stmt;
-import org.jbm.cc.cpp.CppTokenizer;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.parse.ast.Expr;
-import org.jbm.cc.parse.ast.Initializer;
+import org.jbm.mycc.cc.parse.ast.AstPrinter;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.parse.ast.Stmt;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.parse.ast.Expr;
+import org.jbm.mycc.cc.parse.ast.Initializer;
+import org.jbm.mycc.cc.sema.Desugar;
+import org.jbm.mycc.cc.sema.Resolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

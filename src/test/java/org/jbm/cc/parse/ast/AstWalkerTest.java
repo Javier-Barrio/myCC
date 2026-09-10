@@ -1,9 +1,10 @@
 package org.jbm.cc.parse.ast;
 
-import org.jbm.cc.cpp.CppTokenizer;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.parse.Parser;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.parse.ast.*;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;

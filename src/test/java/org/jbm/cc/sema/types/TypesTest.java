@@ -1,9 +1,12 @@
 package org.jbm.cc.sema.types;
 
 import org.jbm.cc.lower.arch.Ilp32;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.sema.types.CType.Int.Rank;
-import org.jbm.cc.sema.types.CType.Int.Sign;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.sema.types.CType;
+import org.jbm.mycc.cc.sema.types.CType.Int.Rank;
+import org.jbm.mycc.cc.sema.types.CType.Int.Sign;
+import org.jbm.mycc.cc.sema.types.Quals;
+import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

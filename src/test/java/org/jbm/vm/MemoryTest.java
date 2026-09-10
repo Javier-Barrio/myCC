@@ -1,6 +1,6 @@
 package org.jbm.vm;
 
-import org.jbm.repl.vm.Memory;
+import org.jbm.mycc.repl.vm.Memory;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

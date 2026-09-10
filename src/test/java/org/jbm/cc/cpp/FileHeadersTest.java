@@ -1,6 +1,10 @@
 package org.jbm.cc.cpp;
 
-import org.jbm.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.cpp.FileHeaders;
+import org.jbm.mycc.cc.cpp.HeaderProvider;
+import org.jbm.mycc.cc.cpp.Scanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

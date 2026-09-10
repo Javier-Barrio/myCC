@@ -1,9 +1,10 @@
 package org.jbm.cc.parse.ast;
 
-import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.cpp.CppTokenizer.TokenType;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.sema.Resolver;
+import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
+import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.parse.ast.*;
+import org.jbm.mycc.cc.sema.Resolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -337,8 +337,8 @@ org.jbm.cc.tac                Module, Symbol (Function, Global and the declarati
                               function, names defined or external, widths consistent)
 org.jbm.cc.lower              Lower (the pass), ExprLower, StmtLower (JumpTarget to Block, switch tables),
                               the global items straight from TInit
-org.jbm.cc.Compiler           compile(source, headers) -> Compiled(typed, tac); the one entry; Main uses it
-org.jbm.cc.cpp.HeaderProvider headers by name; the bundled ones as resources
+org.jbm.mycc.cc.Compiler           compile(source, headers) -> Compiled(typed, tac); the one entry; Main uses it
+org.jbm.mycc.cpp.cc.HeaderProvider headers by name; the bundled ones as resources
 org.jbm.vm                    Engine, Value, ExecutionException (the contract);
                               Memory (segments: unmapped null page, data, stack, heap; typed load/store; faults);
                               Loader (symbol table, placement, relocations, merge on reload, late binding);

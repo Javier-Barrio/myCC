@@ -1,5 +1,7 @@
 package org.jbm.cc.lower.tac;
 
+import org.jbm.mycc.cc.lower.tac.*;
+import org.jbm.mycc.cc.lower.tac.Module;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,11 +19,11 @@ class TacInvariantsTest {
     static final Type.Func I_I = new Type.Func(List.of(Type.I32), false, Type.I32);
 
     /** A module with {@code @sq}, {@code @g : i32}, {@code %P}, and a function {@code f(i32 %x)} whose entry the test fills. */
-    private static Module module(Consumer<Function> body) {
-        var m = new Module(X64);
+    private static org.jbm.mycc.cc.lower.tac.Module module(Consumer<Function> body) {
+        var m = new org.jbm.mycc.cc.lower.tac.Module(X64);
         m.structs.add(new StructDef("P", List.of(new StructDef.Member(Type.I32, 0)), 4, 4));
         m.globals.add(new Global("g", Linkage.EXTERNAL, Type.I32, 4, false, null));
-        m.funcDecls.add(new Module.FuncDecl("sq", I_I));
+        m.funcDecls.add(new org.jbm.mycc.cc.lower.tac.Module.FuncDecl("sq", I_I));
         var f = new Function("f", Linkage.EXTERNAL, I_I, List.of(new Var("x", Type.I32)));
         f.blocks.add(new Block("entry"));
         body.accept(f);
@@ -206,11 +208,11 @@ class TacInvariantsTest {
 
     @Test
     void globals() {
-        var m = new Module(X64);
+        var m = new org.jbm.mycc.cc.lower.tac.Module(X64);
         m.globals.add(new Global("a", Linkage.EXTERNAL, new Type.Array(Type.I8, 4), 1, true, List.of(new Global.BytesItem(0, new byte[]{1, 2, 3, 4}))));
         m.globals.add(new Global("p", Linkage.EXTERNAL, Type.PTR, 8, false, List.of(new Global.AddrItem(0, "a", 2))));
         assertEquals(0, TacInvariants.check(m));
-        var bad = new Module(X64);
+        var bad = new org.jbm.mycc.cc.lower.tac.Module(X64);
         bad.globals.add(new Global("a", Linkage.EXTERNAL, Type.I32, 4, false, List.of(new Global.IntItem(4, (Type.Int) Type.I32, 1))));
         assertTrue(assertThrows(IllegalStateException.class, () -> TacInvariants.check(bad)).getMessage().contains("outside the object"));
         var ro = new Module(X64);

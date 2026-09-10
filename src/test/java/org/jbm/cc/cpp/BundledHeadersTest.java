@@ -1,15 +1,16 @@
 package org.jbm.cc.cpp;
 
 import org.jbm.cc.lower.arch.Ilp32;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.parse.ast.Decl;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.sema.Desugar;
-import org.jbm.cc.sema.Resolver;
-import org.jbm.cc.sema.Typer;
-import org.jbm.cc.sema.tast.TUnit;
-import org.jbm.cc.sema.tast.TypedPrinter;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.cpp.*;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.sema.Desugar;
+import org.jbm.mycc.cc.sema.Resolver;
+import org.jbm.mycc.cc.sema.Typer;
+import org.jbm.mycc.cc.sema.tast.TUnit;
+import org.jbm.mycc.cc.sema.tast.TypedPrinter;
+import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
