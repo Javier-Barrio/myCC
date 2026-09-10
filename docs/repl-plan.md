@@ -135,8 +135,8 @@ recompile, completion candidates for each context.
 
 1. [x] `Parser.parseScript` and `.file`; `$` in identifiers; `Compiler.compileScript`.
 2. [x] `VM.bind`, `VM.symbols`, `Memory.read`; the empty startup module and the no-op builtins.
-3. [ ] `Repl` core: kept lines, line map, declarations and statements, `ScriptConsole`, first transcripts.
-4. [ ] `$N`, `ValuePrinter`, continuation.
+3. [x] `Repl` core: kept lines, line map, declarations and statements, `ScriptConsole`, first transcripts.
+4. [x] `$N`, `ValuePrinter`, continuation.
 5. [ ] Commands; redefinition and `/drop`.
 6. [ ] `Completer` and its contexts; `JLineConsole`; `CShell` main and a `cshell` Gradle task.
 7. [ ] `/load`, `/save`, errors with the caret, faults with the C location.

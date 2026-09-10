@@ -21,6 +21,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A virtual machine that executes C TAC IR as compiled from `Lower.lower()`
@@ -137,6 +138,11 @@ public class VM implements TacVisitor<Void> {
                 }
             }
         }
+    }
+
+    /** The function whose code address this is, if any: what a pointer to function names. */
+    public Optional<String> functionName(long address) {
+        return Optional.ofNullable(functionAt.get(address));
     }
 
     /** The address of a global or function by name. */
@@ -267,8 +273,8 @@ public class VM implements TacVisitor<Void> {
     // when it has none.
     public Value step(Module m) {
         load(m);
-        Symbol symbol = symbolTable.symbols.get(".file");
-        if (!(symbol instanceof Function)) {
+        boolean hasFile = m.functions.stream().anyMatch(f -> f.name.equals(".file"));
+        if (!hasFile) {
             return null;
         }
         return call(".file", List.of());

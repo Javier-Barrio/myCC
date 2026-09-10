@@ -1,0 +1,11 @@
+cshell> #include <limits.h>
+cshell> INT_MAX
+$1 ==> 2147483647
+cshell> #define SQUARE(x) ((x) * (x))
+cshell> SQUARE(12)
+$2 ==> 144
+cshell> #include <stdio.h>
+cshell> printf("hi\n")
+|  fault: no definition for @printf at 1:7
+cshell> sizeof(size_t)
+$3 ==> 8

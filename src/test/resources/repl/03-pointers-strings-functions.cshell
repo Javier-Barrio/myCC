@@ -1,0 +1,24 @@
+cshell> const char *greeting = "hello";
+greeting ==> 0x1000 "hello"
+cshell> int *nothing = 0;
+nothing ==> nullptr
+cshell> int add(int a, int b) { return a + b; }
+|  defined add
+cshell> int (*op)(int, int) = add;
+op ==> 0x1018 (add)
+cshell> op(2, 3)
+$1 ==> 5
+cshell> char buf[8] = "abc";
+buf ==> "abc"
+cshell> buf[0] = 'X';
+cshell> buf
+$2 ==> "Xbc"
+cshell> typedef struct { char tag; double d; } T;
+cshell> T t = { 'q', 1.5 };
+t ==> {.tag = 'q' (113), .d = 1.5}
+cshell> union U { int i; float f; } u = { .i = 1 };
+u ==> {.i = 1}
+cshell> struct B { unsigned lo : 4; int hi : 4; } bits = { 15, -3 };
+bits ==> {.lo = 15, .hi = -3}
+cshell> greeting[1]
+$3 ==> 'e' (101)

@@ -1,0 +1,22 @@
+cshell> int sq(int x) { return x * x; }
+|  defined sq
+cshell> int v[3] = { 1, 4, 9 };
+v ==> {1, 4, 9}
+cshell> v[1] + sq(v[2])
+$1 ==> 85
+cshell> $1 * 2
+$2 ==> 170
+cshell> v[0] = $2;
+cshell> v
+$3 ==> {170, 4, 9}
+cshell> double half = 2.5; char c = 'a'; bool b = 1;
+half ==> 2.5
+c ==> 'a' (97)
+b ==> true
+cshell> unsigned u = 4000000000u; long long big = -1;
+u ==> 4000000000
+big ==> -1
+cshell> half * 2
+$4 ==> 5.0
+cshell> c + 1
+$5 ==> 98

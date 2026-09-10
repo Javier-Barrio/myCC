@@ -138,6 +138,9 @@ public final class Parser {
         var statements = new ArrayList<BlockItem>();
         Token first = null;
         while (!cur.atEof()) {
+            if (script && cur.accept(";")) {
+                continue;
+            }
             if (script && atFileScopeStatement()) {
                 if (first == null) {
                     first = cur.peek();

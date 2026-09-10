@@ -27,3 +27,11 @@ tasks.test {
         System.getProperty(flag)?.let { systemProperty(flag, it) }
     }
 }
+// The interactive shell: ./gradlew -q cshell --console=plain
+tasks.register<JavaExec>("cshell") {
+    group = "application"
+    description = "Runs the C shell on the terminal"
+    mainClass.set("org.jbm.repl.CShell")
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}

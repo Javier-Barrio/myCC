@@ -6,7 +6,7 @@ package org.jbm.vm;
  */
 public class Memory {
 
-    static final long NULL_PAGE = 4096;
+    public static final long NULL_PAGE = 4096;
 
     public long size() {
         return bytes.length;
