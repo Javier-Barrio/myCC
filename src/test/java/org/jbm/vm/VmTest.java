@@ -348,6 +348,42 @@ class VmTest {
     }
 
     @Test
+    void builtinsServeDeclaredFunctions() {
+        VM vm = new VM();
+        vm.bind("twice", (m, args) -> new VM.IntValue(((VM.IntValue) args.get(0)).value() * 2));
+        List<Integer> seen = new java.util.ArrayList<>();
+        vm.bind("note", (m, args) -> {
+            seen.add((int) ((VM.IntValue) args.get(0)).value());
+            return null;
+        });
+        vm.bind("half", (m, args) -> new VM.FloatValue(((VM.FloatValue) args.get(0)).value() / 2));
+        vm.step(module("""
+                int twice(int);
+                void note(int);
+                double half(double);
+                int (*viaPointer)(int) = twice;
+                int main(void) { note(7); note(twice(4)); return twice(21) + viaPointer(1) + (int) half(9.0); }
+                """));
+        assertEquals(42 + 2 + 4, ((VM.IntValue) vm.call("main", List.of())).value());
+        assertEquals(List.of(7, 8), seen);
+        assertEquals(java.util.Set.of("twice", "note", "half", "viaPointer", "main"), vm.symbols().keySet());
+        assertTrue(vm.symbols().get("twice") instanceof org.jbm.cc.lower.tac.Module.FuncDecl);
+    }
+
+    @Test
+    void aDefinitionWinsOverABuiltinAndAnUnboundDeclarationFaults() {
+        VM vm = new VM();
+        vm.bind("f", (m, args) -> new VM.IntValue(1));
+        vm.step(module("int f(void) { return 2; }\nint g(void);\nint main(void) { return f(); }"));
+        assertEquals(2, ((VM.IntValue) vm.call("main", List.of())).value());
+        String m = assertThrows(IllegalStateException.class, () -> vm.call("g", List.of())).getMessage();
+        assertEquals("no definition for @g", m);
+        vm.step(module("int g(void);\nint main(void) { return g(); }"));
+        String m2 = assertThrows(IllegalStateException.class, () -> vm.call("main", List.of())).getMessage();
+        assertTrue(m2.startsWith("no definition for @g at"), m2);
+    }
+
+    @Test
     void voidMainAndMissingFile() {
         assertNull(run("void main(void) { int x = 1; x++; }"));
         assertNull(run("void main(void) { return; }"));

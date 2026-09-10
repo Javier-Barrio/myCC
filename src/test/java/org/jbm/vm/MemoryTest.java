@@ -74,6 +74,19 @@ class MemoryTest {
     }
 
     @Test
+    void readCopiesBytesOut() {
+        Memory m = new Memory();
+        m.storeInt(A, 32, 0x04030201);
+        byte[] out = m.read(A, 4);
+        assertEquals(4, out.length);
+        assertEquals(1, out[0]);
+        assertEquals(4, out[3]);
+        out[0] = 9;
+        assertEquals(1, m.loadInt(A, 8, false), "a copy, not a view");
+        assertThrows(IllegalStateException.class, () -> m.read(0, 1));
+    }
+
+    @Test
     void faults() {
         Memory m = new Memory();
         String nul = assertThrows(IllegalStateException.class, () -> m.loadInt(0, 32, true)).getMessage();
