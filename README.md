@@ -66,11 +66,11 @@ A session can also be piped in: `echo '6 * 7' | ./gradlew -q cshell --console=pl
 
 ## Compiling a file
 
-`./gradlew -q run` is not defined; `org.jbm.Main` prints the syntax
+`./gradlew -q run` is not defined; `org.jbm.mycc.Main` prints the syntax
 tree, the typed tree and the TAC of a file:
 
 ```
-java -cp build/classes/java/main:<annotations jar> org.jbm.Main file.c [-I dir]
+java -cp build/classes/java/main:<annotations jar> org.jbm.mycc.Main file.c [-I dir]
 ```
 
 Without a file it compiles its built-in sample program.
