@@ -11,8 +11,10 @@ import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 /**
  * A virtual machine that executes C TAC IR as compiled from `Lower.lower()`
@@ -90,29 +92,51 @@ public class VM implements TacVisitor<Void> {
         return value((Var) o);
     }
 
-    // What the last `ret` of `.file` returned: null for void.
+    // What the `ret` of the function `call` started returned: null for void.
     private Value result;
 
-    // Runs `.file`: from the entry block, one instruction after another,
-    // each dispatched to its handler below, until `ret`; returns what
-    // that `ret` carried, or null when `.file` is void or absent.
+    // Loads the module and runs its `.file`, the shell's line; nothing
+    // when it has none.
     public Value step(Module m) {
         load(m);
         Symbol symbol = symbolTable.symbols.get(".file");
-        if (!(symbol instanceof Function file)) {
+        if (!(symbol instanceof Function)) {
             return null;
+        }
+        return call(".file", List.of());
+    }
+
+    // Runs the named function with the arguments bound to its parameters:
+    // from the entry block, one instruction after another, each dispatched
+    // to its handler below, until its `ret`; returns what that `ret`
+    // carried, or null for void.
+    public Value call(String name, List<Value> args) {
+        Symbol symbol = symbolTable.symbols.get(name);
+        if (!(symbol instanceof Function function)) {
+            throw new IllegalStateException("no definition for @" + name);
+        }
+        if (args.size() != function.params.size()) {
+            throw new IllegalStateException("@" + name + " takes " + function.params.size() + " arguments, given " + args.size());
         }
         frames.clear();
         result = null;
-        block = file.entry();
-        pc = 0;
-        frames.push(new Frame(null, 0, new LinkedHashMap<>(), null));
+        frames.push(new Frame(null, 0, bind(function, args), null));
+        jump(function.entry());
         while (block != null) {
             Instr inst = block.instrs.get(pc);
             pc++;
             inst.accept(this);
         }
         return result;
+    }
+
+    // A fresh register file for a call, with the parameters bound.
+    private static LinkedHashMap<Var, Value> bind(Function function, List<Value> args) {
+        var vars = new LinkedHashMap<Var, Value>();
+        for (int i = 0; i < function.params.size(); i++) {
+            vars.put(function.params.get(i), args.get(i));
+        }
+        return vars;
     }
 
     private void jump(Block target) {
@@ -424,17 +448,12 @@ public class VM implements TacVisitor<Void> {
         if (!(callee instanceof Function target)) {
             throw new IllegalStateException("no definition for @" + c.callee() + " at " + c.token().location());
         }
-        var entry = target.entry();
-
-        var frameVars = new LinkedHashMap<Var, Value>();
-        // Bind the parameters
-        int i = 0;
-        for (var p : target.params) {
-            frameVars.put(p, operand(c.args().get(i)));
-            i++;
+        List<Value> args = new ArrayList<>();
+        for (Operand o : c.args()) {
+            args.add(operand(o));
         }
-        frames.push(new Frame(block, pc, frameVars, c));
-        jump(entry);
+        frames.push(new Frame(block, pc, bind(target, args), c));
+        jump(target.entry());
         return null;
     }
 
