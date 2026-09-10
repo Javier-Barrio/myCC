@@ -43,6 +43,12 @@ cshell> v
 $2 ==> {2, 8, 18}
 ```
 
+`/help` lists the commands: `/list`, `/vars`, `/funcs`, `/types`,
+`/macros`, `/tac name`, `/drop name`, `/load file`, `/save file`,
+`/reset`, `/exit`. On a terminal the shell has line editing, history
+in `~/.cshell_history`, and tab completion of names, members after
+`.` or `->`, commands and header names.
+
 Headers are not included unless you ask: `#include <stdio.h>` declares
 `printf`, and `-I dir` on the command line adds a directory for your
 own headers, `./gradlew -q cshell --console=plain --args="-I include"`.

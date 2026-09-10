@@ -22,6 +22,8 @@ cshell> int twice(int v);
 |  replaced twice
 cshell> use()
 |  fault: no definition for @twice at kept line 3:29
+|  int use(void) { return twice(10); }
+|                              ^
 cshell> int twice(int v) { return v; }
 |  replaced twice
 |  defined twice

@@ -22,12 +22,17 @@ import org.jbm.cc.sema.types.CType;
 import org.jbm.cc.sema.types.Types;
 import org.jbm.vm.VM;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.UnaryOperator;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -111,8 +116,13 @@ public final class Repl {
         }
     }
 
-    /** Handles one line, asking for more when it is incomplete; false means exit. */
+    /** Handles one line, asking the console for more when it is incomplete; false means exit. */
     public boolean handle(String line) {
+        return handle(line, () -> console.readLine(MORE));
+    }
+
+    // `more` supplies the continuation lines: the console, or the rest of a loaded file.
+    private boolean handle(String line, Supplier<Optional<String>> more) {
         String text = line;
         while (true) {
             if (text.isBlank()) {
@@ -122,12 +132,12 @@ public final class Repl {
                 return command(text.strip());
             }
             if (!snippet(text)) {
-                Optional<String> more = console.readLine(MORE);
-                if (more.isEmpty()) {
+                Optional<String> next = more.get();
+                if (next.isEmpty()) {
                     console.print("|  error: incomplete input");
                     return true;
                 }
-                text = text + "\n" + more.get();
+                text = text + "\n" + next.get();
                 continue;
             }
             return true;
@@ -206,11 +216,46 @@ public final class Repl {
             if (e.token.type == TokenType.EOF) {
                 return new Attempt(Optional.empty(), true);
             }
-            console.print("|  error: " + relocate(e.getMessage(), trial, 0, 0));
+            report("error", e.getMessage(), trial, 0, 0, typed(trial));
         } catch (SemaException | LexException | ConversionException e) {
-            console.print("|  error: " + relocate(e.getMessage(), trial, 0, 0));
+            report("error", e.getMessage(), trial, 0, 0, typed(trial));
         }
         return new Attempt(Optional.empty(), false);
+    }
+
+    // The message with its locations relocated, then the line the first
+    // location is on and a caret under its column. `typed` is what the
+    // user wrote when the snippet is a rewrite of it.
+    private void report(String kind, String message, Trial trial, int skipLines, int skipColumns, String typed) {
+        console.print("|  " + kind + ": " + relocate(message, trial, skipLines, skipColumns));
+        Matcher m = LOCATION.matcher(message);
+        if (!m.find()) {
+            return;
+        }
+        int line = Integer.parseInt(m.group(1));
+        int column = Integer.parseInt(m.group(2));
+        String[] all = trial.text().split("\n", -1);
+        if (line < 1 || line > all.length) {
+            return;
+        }
+        String source = all[line - 1];
+        if (trial.inSnippet(line)) {
+            int own = line - trial.start() + 1 - skipLines;
+            String[] lines = typed.split("\n", -1);
+            if (own < 1 || own > lines.length) {
+                return;
+            }
+            source = lines[own - 1];
+            if (own == 1) {
+                column -= skipColumns;
+            }
+        }
+        console.print("|  " + source);
+        console.print("|  " + " ".repeat(Math.max(column - 1, 0)) + "^");
+    }
+
+    private static String typed(Trial trial) {
+        return trial.lines() == 0 ? "" : trial.entries().get(trial.index()).text();
     }
 
     /** Compiles and runs one snippet; false when it is incomplete. */
@@ -250,7 +295,7 @@ public final class Repl {
                 vm.drop(n);
             }
         }
-        if (!load(compiled, message -> relocate(message, trial, 0, 0))) {
+        if (!load(compiled, trial, 0, 0, text)) {
             return true;
         }
         last = compiled;
@@ -286,7 +331,7 @@ public final class Repl {
             return false;
         }
         int skip = (name + " = (").length();
-        if (!load(compiled, message -> relocate(message, trial, 1, skip))) {
+        if (!load(compiled, trial, 1, skip, text)) {
             return true;
         }
         results = n;
@@ -302,12 +347,12 @@ public final class Repl {
     }
 
     // The module into the VM; a fault is reported and nothing is kept.
-    private boolean load(Compiler.Compiled compiled, UnaryOperator<String> relocator) {
+    private boolean load(Compiler.Compiled compiled, Trial trial, int skipLines, int skipColumns, String typed) {
         try {
             vm.step(compiled.tac());
             return true;
         } catch (IllegalStateException e) {
-            console.print("|  fault: " + relocator.apply(e.getMessage()));
+            report("fault", e.getMessage(), trial, skipLines, skipColumns, typed);
             return false;
         }
     }
@@ -501,6 +546,8 @@ public final class Repl {
             case "/macros" -> macros();
             case "/tac" -> tac(arg);
             case "/drop" -> drop(arg);
+            case "/load" -> loadFile(arg);
+            case "/save" -> saveFile(arg);
             case "/reset" -> {
                 reset();
                 console.print("|  reset");
@@ -518,6 +565,8 @@ public final class Repl {
         console.print("|  /macros        the #defines");
         console.print("|  /tac name      the TAC of a function or an object");
         console.print("|  /drop name     forget the line that declares a name");
+        console.print("|  /load file     run a file line by line, as if typed");
+        console.print("|  /save file     write the kept lines to a file");
         console.print("|  /reset         forget everything");
         console.print("|  /exit          leave");
     }
@@ -598,6 +647,41 @@ public final class Repl {
             }
         }
         console.print("|  no such name: " + name);
+    }
+
+    // A file's lines, each as if typed; continuation comes from the file.
+    private void loadFile(String path) {
+        if (path.isEmpty()) {
+            console.print("|  usage: /load file");
+            return;
+        }
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(Path.of(path));
+        } catch (IOException e) {
+            console.print("|  cannot read " + path + ": " + e.getMessage());
+            return;
+        }
+        Deque<String> rest = new ArrayDeque<>(lines);
+        while (!rest.isEmpty()) {
+            String line = rest.poll();
+            if (!handle(line, () -> Optional.ofNullable(rest.poll()))) {
+                return;
+            }
+        }
+    }
+
+    private void saveFile(String path) {
+        if (path.isEmpty()) {
+            console.print("|  usage: /save file");
+            return;
+        }
+        try {
+            Files.writeString(Path.of(path), prefix());
+            console.print("|  saved " + kept.size() + " lines to " + path);
+        } catch (IOException e) {
+            console.print("|  cannot write " + path + ": " + e.getMessage());
+        }
     }
 
     // The kept line declaring the name goes; if the rest no longer

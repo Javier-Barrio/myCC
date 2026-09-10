@@ -1,0 +1,15 @@
+cshell> /load src/test/resources/repl/fixtures/lib.c
+|  defined twice
+base ==> 20
+$1 ==> 42
+cshell> twice(4)
+$2 ==> 8
+cshell> /load nope.c
+|  cannot read nope.c: nope.c
+cshell> /list
+|  1 : int twice(int v) {
+|          return v * 2;
+|      }
+|  2 : int base = 20;
+|  3 : typeof_unqual((twice(base) + 2)) $1;
+|  4 : typeof_unqual((twice(4))) $2;

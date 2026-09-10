@@ -139,7 +139,7 @@ recompile, completion candidates for each context.
 4. [x] `$N`, `ValuePrinter`, continuation.
 5. [x] Commands; redefinition and `/drop`.
 6. [x] `Completer` and its contexts; `JLineConsole`; `CShell` main and a `cshell` Gradle task.
-7. [ ] `/load`, `/save`, errors with the caret, faults with the C location.
+7. [x] `/load`, `/save`, errors with the caret, faults with the C location.
 
 Deferred: real builtins (`printf`, `malloc`, ...) replacing the no-ops;
 non-constant initializers at file scope; `$N` per expression when a
