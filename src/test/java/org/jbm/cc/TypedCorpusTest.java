@@ -1,6 +1,7 @@
 package org.jbm.cc;
 
 import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.cpp.BundledHeaders;
@@ -102,6 +103,6 @@ class TypedCorpusTest {
     @Test
     void theMainProgramPassesTheInvariants() {
         var types = new Types(X86_64SysV.INSTANCE);
-        TypedTreeInvariants.check(type(org.jbm.Main.SOURCE, "<source>", types), types);
+        TypedTreeInvariants.check(type(Main.SOURCE, "<source>", types), types);
     }
 }

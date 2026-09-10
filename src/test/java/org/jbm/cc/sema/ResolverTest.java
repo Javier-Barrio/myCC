@@ -1,5 +1,6 @@
 package org.jbm.cc.sema;
 
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.parse.ast.Expr;
 import org.jbm.mycc.cc.parse.ast.Type;
@@ -376,7 +377,7 @@ class ResolverTest {
 
     @Test
     void mainDriverProgramResolves() {
-        var b = resolve(org.jbm.Main.SOURCE);
+        var b = resolve(Main.SOURCE);
         assertEquals(List.of("values", "size_str", "get_count", "main"),
                 b.fileScope.stream().map(s -> s.name).toList());
         var uses = uses(b);

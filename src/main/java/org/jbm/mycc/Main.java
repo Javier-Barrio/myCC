@@ -1,4 +1,4 @@
-package org.jbm;
+package org.jbm.mycc;
 
 import org.jbm.mycc.cc.Compiler;
 import org.jbm.mycc.cc.lower.arch.X86_64SysV;

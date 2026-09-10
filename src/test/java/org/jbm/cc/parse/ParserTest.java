@@ -1,5 +1,6 @@
 package org.jbm.cc.parse;
 
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.parse.ParseException;
 import org.jbm.mycc.cc.parse.Parser;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
@@ -547,7 +548,7 @@ class ParserTest {
 
     @Test
     void mainDriverProgramParses() {
-        List<Decl> decls = Parser.parse(preprocess(org.jbm.Main.SOURCE));
+        List<Decl> decls = Parser.parse(preprocess(Main.SOURCE));
         assertEquals(4, decls.size());
         assertInstanceOf(Decl.Declaration.class, decls.get(0));
         assertInstanceOf(Decl.Declaration.class, decls.get(1));
