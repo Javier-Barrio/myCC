@@ -142,11 +142,11 @@ Compiler.compile(source, headers) :
 The shell, per line:
 
 ```
-text = declarations so far + the new line (wrapped if it is a statement or an expression)
-compiled = Compiler.compile(text, headers)         on error: report, keep the old text
-engine.load(compiled.tac())                         merge: new and changed definitions only
-value = engine.call("$sN")                          the one synthetic function
-print(value, type from compiled.typed())
+text = declarations so far + the new line, as typed
+compiled = Compiler.compileScript(text, headers)   on error: report, keep the old text
+engine.load(compiled.tac())                         the merge rule
+engine.call(".file")                                the synthetic file function, if the module has one
+print($N, type from compiled.typed())               when the line was an expression
 ```
 
 ## The TAC
@@ -218,36 +218,54 @@ builtins are written against those declarations.
 a declaration with the range it occupies in the concatenation, and a
 counter for `$N`. That is all; there is no session object.
 
+**Statements at file scope: the file function.** In script mode the
+parser accepts a statement wherever an external declaration may appear.
+It tells the two apart the way it already does for block items, so
+`T * x;` is a declaration exactly when `T` is a typedef in scope. The
+file-scope statements, in textual order, become the body of one synthetic
+function appended at the end of the unit:
+
+```
+void .file(void) { <the file-scope statements> }
+```
+
+Its name cannot be spelled in C, so it cannot collide, and it follows the
+`.str.` and `.lit.` scheme of the other compiler-made names. From the
+parser on it is an ordinary function: resolved, typed and lowered like any
+other, a `Function` in `Module.functions` under the name `.file`. Nothing
+in the `Module` marks it; the shell calls it by name when it is present.
+A unit without file-scope statements has no `.file`.
+
+Being last in the unit, the body sees every file-scope name. In the shell
+that is exact, since the kept text is declarations only and the new line
+comes after them; in a script file it means a statement may use a name
+declared below it, which is accepted.
+
 **Classifying a line.** The line is appended to the accumulated text and
-compiled. If the compiler accepts it, it was a directive or a declaration
-and it is kept. If the parser fails at end of input, the line is
-incomplete and the REPL asks for more. Otherwise the line is tried as a
-statement, wrapped in a synthetic function:
-
-```
-void $sN(void) { <line> }
-```
-
-If that compiles, the shell looks at the typed tree of `$sN`: if the body
-is one expression statement of non-`void` type the line was an
-expression, and it is compiled once more as
+compiled in script mode. If the parser fails at end of input, the line is
+incomplete and the REPL asks for more. Otherwise the typed tree says what
+it was: if the unit has no `.file`, the line was a directive or a
+declaration and it is kept. If `.file`'s body is one expression statement
+of non-`void` type, the line was an expression, and it is compiled once
+more as
 
 ```
 typeof_unqual((<line>)) $N;
-void $sN(void) { $N = (<line>); }
+$N = (<line>);
 ```
 
 which gives `$N` the expression's type without the shell having to spell
 it (anonymous struct types have no spelling), and without qualifiers so
 that it is assignable. `typeof` at file scope is unevaluated, so any
 expression over file-scope names is allowed. The declaration of `$N` is
-kept in the accumulated text; `$sN` is not, since it ran once. Statements
-and `void` expressions keep nothing.
+kept in the accumulated text; the statement is not, since it ran once.
+Statements and `void` expressions keep nothing.
 
-**Running.** `engine.load` with the module, then `engine.call("$sN")`. The
-shell reads `$N` back through `addressOf` and `read` and prints it by its
-`CType` from the typed tree. A declaration of an object prints its value
-the same way; a function definition prints `|  defined function f`.
+**Running.** `engine.load` with the module, then `engine.call(".file")`
+when the module has it. The shell reads `$N` back through `addressOf` and
+`read` and prints it by its `CType` from the typed tree. A declaration of
+an object prints its value the same way; a function definition prints
+`|  defined function f`.
 
 **Redefinition.** A declaration whose file-scope names are already
 declared by an earlier kept line replaces that line before compiling.
@@ -326,6 +344,11 @@ org.jbm.cshell                Repl (the loop, the kept lines, the line map, clas
 - **`cpp.Scanner`**: `#include <name>` through `HeaderProvider` (resources
   for the bundled headers, the file system for the compiler). Not
   implemented today. Nothing else in the front end changes.
+- **`parse`**: a script mode, `Parser.parseScript`, that accepts
+  statements at file scope and collects them into the `.file` function
+  definition; `Compiler.compileScript` is the entry that uses it. The
+  ordinary `parse` still rejects them, so a file compiled as C is still C.
+- **`cpp`**: `$` accepted in identifiers, as GCC does, for `$N`.
 - **`sema`**: no change. The names `Lower` emits are `Symbol` names, which
   the resolver already makes unique for names with linkage; `static` names
   and locals get the `function.variable` scheme in `Lower`.
@@ -356,8 +379,10 @@ org.jbm.cshell                Repl (the loop, the kept lines, the line map, clas
   redefinition (compatible and not), a failing line leaving the kept text
   intact, a run-time fault mid-expression, a global's value surviving a
   recompile.
-- **Classification tests**: declaration versus statement versus expression
-  for the ambiguous spellings, with and without the typedef in scope.
+- **Classification tests**: `Parser.parseScript` on declaration versus
+  statement versus expression for the ambiguous spellings, with and without
+  the typedef in scope; the `.file` body in order; no `.file` without
+  statements; `parse` still rejecting a file-scope statement.
 
 ## Steps
 
@@ -410,8 +435,9 @@ the shell and needs all three; E and F follow D.
 ### D - the loop
 1. [ ] **`Repl` core**: kept lines, line map, compile, `load`, `call`;
    declarations only; the first transcripts with the VM.
-2. [ ] **Statements and expressions**: the statement wrap, the `typeof_unqual`
-   wrap, `$N`, `ValuePrinter`, continuation on `EOF`.
+2. [ ] **Statements and expressions**: `Parser.parseScript` and the `.file`
+   function, `$` in identifiers, the `typeof_unqual` declaration of `$N`,
+   `ValuePrinter`, continuation on `EOF`.
 3. [ ] **Redefinition and `/drop`**: replacing a kept line, restoring it on
    failure, the refusal when a drop breaks dependents.
 4. [ ] **Transcripts** for everything above.
