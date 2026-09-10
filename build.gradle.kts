@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation("org.jetbrains:annotations:26.0.2")
+    implementation("org.jline:jline:3.26.3")
     compileOnly("org.projectlombok:lombok:1.18.36")
     annotationProcessor("org.projectlombok:lombok:1.18.36")
     testCompileOnly("org.projectlombok:lombok:1.18.36")
