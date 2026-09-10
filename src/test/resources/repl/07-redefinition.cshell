@@ -1,0 +1,56 @@
+cshell> int x = 1;
+x ==> 1
+cshell> x = 41;
+cshell> int x = 5;
+|  replaced x
+x ==> 5
+cshell> double x = 2.5;
+|  replaced x
+x ==> 2.5
+cshell> int twice(int v) { return v + v; }
+|  defined twice
+cshell> int use(void) { return twice(10); }
+|  defined use
+cshell> use()
+$1 ==> 20
+cshell> int twice(int v) { return v * 3; }
+|  replaced twice
+|  defined twice
+cshell> use()
+$2 ==> 30
+cshell> int twice(int v);
+|  replaced twice
+cshell> use()
+|  fault: no definition for @twice at kept line 3:29
+cshell> int twice(int v) { return v; }
+|  replaced twice
+|  defined twice
+cshell> use()
+$3 ==> 10
+cshell> struct P { int a; };
+cshell> struct P p = { 7 };
+p ==> {.a = 7}
+cshell> struct P { int a; int b; };
+|  replaced struct P
+cshell> p
+$4 ==> {.a = 7, .b = 0}
+cshell> #define N 3
+cshell> N
+$5 ==> 3
+cshell> #define N 4
+|  replaced N
+cshell> N
+$6 ==> 4
+cshell> /list
+|  1 : double x = 2.5;
+|  2 : int twice(int v) { return v; }
+|  3 : int use(void) { return twice(10); }
+|  4 : typeof_unqual((use())) $1;
+|  5 : typeof_unqual((use())) $2;
+|  6 : typeof_unqual((use())) $3;
+|  7 : struct P { int a; int b; };
+|  8 : struct P p = { 7 };
+|  9 : typeof_unqual((p)) $4;
+|  10 : #define N 4
+|  11 : typeof_unqual((N)) $5;
+|  12 : typeof_unqual((N)) $6;
