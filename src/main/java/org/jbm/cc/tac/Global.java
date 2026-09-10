@@ -11,10 +11,15 @@ import java.util.List;
  * zeros, or no initializer for an all-zero object.
  */
 public record Global(@NonNull String name, @NonNull Linkage linkage, @NonNull Type type, int align, boolean readonly,
-                     @Nullable List<Item> init) {
+                     @Nullable List<Item> init) implements Symbol {
 
     public Global {
         if (init != null) init = List.copyOf(init);
+    }
+
+    @Override
+    public boolean isDefined() {
+        return true;
     }
 
     public sealed interface Item permits IntItem, FloatItem, AddrItem, BitItem, BytesItem {

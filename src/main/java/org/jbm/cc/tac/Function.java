@@ -9,7 +9,7 @@ import java.util.List;
  * A defined function: its signature, its parameters and other variables,
  * and its blocks, the first of which is the entry.
  */
-public final class Function {
+public final class Function implements Symbol {
     public final String name;
     public final Linkage linkage;
     public final Type.Func sig;
@@ -27,5 +27,20 @@ public final class Function {
 
     public Block entry() {
         return blocks.get(0);
+    }
+
+    @Override
+    public String name() {
+        return name;
+    }
+
+    @Override
+    public Type type() {
+        return sig;
+    }
+
+    @Override
+    public boolean isDefined() {
+        return true;
     }
 }
