@@ -3,6 +3,7 @@ package org.jbm.cc.lower;
 import org.jbm.cc.arch.Ilp32;
 import org.jbm.cc.arch.X86_64SysV;
 import org.jbm.cc.ast.Decl;
+import org.jbm.cc.cpp.BundledHeaders;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
@@ -33,7 +34,8 @@ class LowerTest {
     static final Types ILP32 = new Types(Ilp32.INSTANCE);
 
     static Module lower(String source, Types types) {
-        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source)))));
+        CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
+        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
         TUnit typed = Typer.type(unit, Resolver.resolve(unit), types);
         Module m = Lower.lower(typed, types);
         TacInvariants.check(m);
@@ -1240,6 +1242,9 @@ class LowerTest {
         assertEquals("""
                 global internal @.str.H : [9 x i8] align 1 readonly = { 0 : bytes "Add: %d\\0a\\00" }
                 global internal @.str.H : [14 x i8] align 1 readonly = { 0 : bytes "Multiply: %d\\0a\\00" }
+                declare @stdin : ptr
+                declare @stdout : ptr
+                declare @stderr : ptr
                 declare @printf(ptr, ...) -> i32
                 define @add(i32 %a, i32 %b) -> i32 {
                   i32 %t0
@@ -1287,7 +1292,7 @@ class LowerTest {
                   ret %t12
                 }
                 """, normalizeStrings(unit("""
-                int printf(const char *, ...);   /* stdio.h: #include is not implemented yet */
+                #include <stdio.h>
 
                 int add(int a, int b)
                 {
