@@ -18,23 +18,23 @@ define @sum(ptr %head) -> i32 {
   ptr %t5
   ptr %t6
 .entry:
-  mov %t0, 0
-  mov %total, %t0
-  mov %it, %head
+  mov.s32 %t0, 0
+  mov.s32 %total, %t0
+  mov.u64 %it, %head
   br .for.cond
 .for.cond:
-  mov %t1, 0
+  mov.u64 %t1, 0
   %t2 = ne %it, %t1
   condbr %t2, .for.body, .for.done
 .for.body:
   %t3 = load.s32 %it
   %t4 = add.s32 %total, %t3
-  mov %total, %t4
+  mov.s32 %total, %t4
   br .for.step
 .for.step:
   %t5 = wadd %it, 8
   %t6 = load.u64 %t5
-  mov %it, %t6
+  mov.u64 %it, %t6
   br .for.cond
 .for.done:
   ret %total
@@ -48,19 +48,19 @@ define @length(ptr %head) -> i32 {
   ptr %t4
   ptr %t5
 .entry:
-  mov %t0, 0
-  mov %n, %t0
+  mov.s32 %t0, 0
+  mov.s32 %n, %t0
   br .while.cond
 .while.cond:
   %t1 = ne %head, 0
   condbr %t1, .while.body, .while.done
 .while.body:
-  mov %t2, 1
+  mov.s32 %t2, 1
   %t3 = add.s32 %n, %t2
-  mov %n, %t3
+  mov.s32 %n, %t3
   %t4 = wadd %head, 8
   %t5 = load.u64 %t4
-  mov %head, %t5
+  mov.u64 %head, %t5
   br .while.cond
 .while.done:
   ret %n
@@ -90,27 +90,27 @@ define @main() -> i32 {
 .entry:
   %t0 = addrof %a
   zero %Node %t0
-  mov %t1, 1
+  mov.s32 %t1, 1
   store.32 %t0, %t1
   %t2 = wadd %t0, 8
-  mov %t3, 0
+  mov.u64 %t3, 0
   store.64 %t2, %t3
   %t4 = addrof %b
   zero %Node %t4
-  mov %t5, 2
+  mov.s32 %t5, 2
   store.32 %t4, %t5
   %t6 = wadd %t4, 8
-  mov %t7, 0
+  mov.u64 %t7, 0
   store.64 %t6, %t7
-  mov %t8, 0
+  mov.u64 %t8, 0
   %t9 = addrof %a
   %t10 = call (ptr, ptr) -> ptr @push(%t8, %t9)
   %t11 = addrof %b
   %t12 = call (ptr, ptr) -> ptr @push(%t10, %t11)
-  mov %list, %t12
+  mov.u64 %list, %t12
   %t13 = call (ptr) -> i32 @sum(%list)
   %t14 = call (ptr) -> i32 @length(%list)
-  mov %t15, 2
+  mov.s32 %t15, 2
   %t16 = mul.s32 %t14, %t15
   %t17 = sub.s32 %t13, %t16
   ret %t17

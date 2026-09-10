@@ -16,12 +16,12 @@ define @apply(u32 %word, i32 %op, u32 %bit) -> u32 {
   i32 %t12
   u32 %t13
 .entry:
-  mov %t0, 1
-  mov %t1, 31
+  mov.u32 %t0, 1
+  mov.s32 %t1, 31
   mov.u32 %t2, %t1
   %t3 = and.u32 %bit, %t2
   %t4 = shl.u32 %t0, %t3
-  mov %mask, %t4
+  mov.u32 %mask, %t4
   switch %op, .switch.done, [ 0 -> .case.0, 1 -> .case.1, 2 -> .case.2, 3 -> .case.3 ]
 .case.0:
   %t5 = or.u32 %word, %mask
@@ -35,7 +35,7 @@ define @apply(u32 %word, i32 %op, u32 %bit) -> u32 {
   ret %t8
 .case.3:
   %t9 = and.u32 %word, %mask
-  mov %t10, 0
+  mov.s32 %t10, 0
   mov.u32 %t11, %t10
   %t12 = ne %t9, %t11
   mov.u32 %t13, %t12
@@ -53,22 +53,22 @@ define @popcount(u64 %x) -> i32 {
   u64 %t5
   u64 %t6
 .entry:
-  mov %t0, 0
-  mov %n, %t0
+  mov.s32 %t0, 0
+  mov.s32 %n, %t0
   br .for.cond
 .for.cond:
   %t1 = ne %x, 0
   condbr %t1, .for.body, .for.done
 .for.body:
-  mov %t2, 1
+  mov.s32 %t2, 1
   %t3 = add.s32 %n, %t2
-  mov %n, %t3
+  mov.s32 %n, %t3
   br .for.step
 .for.step:
-  mov %t4, 1
+  mov.s32 %t4, 1
   %t5 = wsub %x, %t4
   %t6 = and %x, %t5
-  mov %x, %t6
+  mov.u64 %x, %t6
   br .for.cond
 .for.done:
   ret %n

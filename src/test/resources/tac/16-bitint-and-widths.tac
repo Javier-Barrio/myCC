@@ -41,7 +41,7 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   %t6 = addrof @b7
   %t7 = load.s8 %t6
   %t8 = add.s32 %t7, %i
-  mov %i, %t8
+  mov.s32 %i, %t8
   %t9 = addrof @b40
   %t10 = addrof @b40
   %t11 = load.s64 %t10
@@ -52,11 +52,11 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   %t13 = addrof @b40
   %t14 = load.s64 %t13
   %t15 = mul %t14, %l
-  mov %l, %t15
+  mov.s64 %l, %t15
   %t16 = addrof @u3
   %t17 = addrof @u3
   %t18 = load.u8 %t17
-  mov %t19, 1
+  mov.s32 %t19, 1
   %t20 = shl.u8 %t18, %t19
   %t20 = and %t20, 7
   store.8 %t16, %t20

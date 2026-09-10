@@ -34,32 +34,32 @@ define @f() -> void {
   i32 %t18
   i32 %t19
 .entry:
-  mov %t0, 2
+  mov.s32 %t0, 2
   %t1 = call (i32, i32) -> i32 @add(%c, %t0)
-  mov %i, %t1
+  mov.s32 %i, %t1
   %t2 = i2f.64 %c
   %t3 = call (f64) -> f64 @half(%t2)
   %t4 = fcvt.32 %t3
-  mov %fl, %t4
+  mov.32 %fl, %t4
   %t5 = addrof @.str.d153ce427d7ff938
   %t6 = addrof @.str.d98ac5bc9eec51cb
   %t7 = call (ptr, ...) -> i32 @printf(%t5, %c, %fl, %t6)
   call () -> void @noargs()
   %t8 = addrof @table
-  mov %t9, 1
+  mov.s32 %t9, 1
   %t10 = wmul %t9, 8
   %t11 = wadd %t8, %t10
   %t12 = load.u64 %t11
-  mov %t13, 1
-  mov %t14, 2
+  mov.s32 %t13, 1
+  mov.s32 %t14, 2
   %t15 = icall (i32, i32) -> i32 %t12(%t13, %t14)
-  mov %i, %t15
+  mov.s32 %i, %t15
   %t16 = addrof %tmp13
-  mov %t17, 1
+  mov.s32 %t17, 1
   call (i32) -> %S @mk(%t17) into %t16
   %t18 = load.s32 %t16
-  mov %i, %t18
+  mov.s32 %i, %t18
   %t19 = call (i32, i32) -> i32 @add(%i, %i)
-  mov %i, %t19
+  mov.s32 %i, %t19
   ret
 }

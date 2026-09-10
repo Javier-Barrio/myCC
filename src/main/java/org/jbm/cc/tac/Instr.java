@@ -29,14 +29,12 @@ public sealed interface Instr {
     // ---- variables and addresses ---------------------------------------------------------------
 
     /**
-     * {@code mov %dst, src}: a copy of the whole register, or an immediate;
-     * with a modifier {@code mov.sN}/{@code mov.uN}, the low N bits of the
-     * source extended as the modifier says.
+     * {@code mov.sN %dst, src}, {@code mov.uN}, {@code mov.P}: the low N
+     * bits of the source extended as the modifier says, or a floating
+     * value at precision P. Every mov states its width; a 64-bit one is
+     * {@code mov.s64} or {@code mov.u64}.
      */
-    record Mov(@NonNull Var dst, @NonNull Operand src, @Nullable Type.Int mod, @NonNull Token token) implements Instr {
-        public Mov(@NonNull Var dst, @NonNull Operand src, @NonNull Token token) {
-            this(dst, src, null, token);
-        }
+    record Mov(@NonNull Var dst, @NonNull Operand src, @NonNull Type mod, @NonNull Token token) implements Instr {
 
         @Override
         public <R> R accept(TacVisitor<R> v) {

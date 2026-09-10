@@ -82,6 +82,22 @@ final class ExprLower implements TVisitor<Val> {
         return (Type.Float) typeMap.of(floating);
     }
 
+    /** The modifier of a mov into a variable of C type {@code t}: its storage width and signedness, or its precision. */
+    private Type movMod(CType t) {
+        Type tt = typeMap.of(t);
+        if (tt instanceof Type.Float) {
+            return tt;
+        }
+        if (t.isPointer() || t.isNullptr()) {
+            return new Type.Int(types.width(t), false);
+        }
+        return typeMap.integer(t);
+    }
+
+    private void mov(Var dst, Operand src, CType t, Token at) {
+        b.emit(new Instr.Mov(dst, src, movMod(t), at));
+    }
+
     /**
      * A {@code _BitInt} whose width is not its storage width is computed at
      * the storage width; this makes the result extended from its own width.
@@ -302,7 +318,7 @@ final class ExprLower implements TVisitor<Val> {
     /** Stores a value at a place: a mov, or a store. */
     void write(@NonNull Place place, @NonNull Val v, @NonNull Token at) {
         if (place instanceof Place.Variable pv) {
-            b.emit(new Instr.Mov(pv.var(), v.var(), at));
+            mov(pv.var(), v.var(), pv.type(), at);
             return;
         }
         var m = (Place.Memory) place;
@@ -399,21 +415,21 @@ final class ExprLower implements TVisitor<Val> {
     @Override
     public Val visit(TExpr.IntConst e) {
         Var r = temp(e.type());
-        b.emit(new Instr.Mov(r, new Operand.IntImm(e.value()), e.token()));
+        mov(r, new Operand.IntImm(e.value()), e.type(), e.token());
         return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.FloatConst e) {
         Var r = temp(e.type());
-        b.emit(new Instr.Mov(r, new Operand.FloatImm(e.value()), e.token()));
+        mov(r, new Operand.FloatImm(e.value()), e.type(), e.token());
         return new Val(r, e.type());
     }
 
     @Override
     public Val visit(TExpr.NullptrConst e) {
         Var r = b.temp(Type.PTR);
-        b.emit(new Instr.Mov(r, new Operand.IntImm(0), e.token()));
+        mov(r, new Operand.IntImm(0), e.type(), e.token());
         return new Val(r, e.type());
     }
 
@@ -421,7 +437,7 @@ final class ExprLower implements TVisitor<Val> {
     public Val visit(TExpr.AddrConst e) {
         Var r = b.temp(Type.PTR);
         if (e.base().isEmpty()) {
-            b.emit(new Instr.Mov(r, new Operand.IntImm(e.offset()), e.token()));
+            mov(r, new Operand.IntImm(e.offset()), e.type(), e.token());
             return new Val(r, e.type());
         }
         Symbol base = e.base().get();
@@ -534,7 +550,7 @@ final class ExprLower implements TVisitor<Val> {
     @Override
     public Val visit(TExpr.NullToPtr e) {
         Var r = b.temp(Type.PTR);
-        b.emit(new Instr.Mov(r, new Operand.IntImm(0), e.token()));
+        mov(r, new Operand.IntImm(0), e.type(), e.token());
         return new Val(r, e.type());
     }
 
@@ -706,14 +722,14 @@ final class ExprLower implements TVisitor<Val> {
     // starts as 1 and becomes b when a is false. Both operands are bool.
     private Val logical(TExpr.Rvalue left, TExpr.Rvalue right, CType t, Token at, boolean isAnd) {
         Var r = temp(t);
-        b.emit(new Instr.Mov(r, new Operand.IntImm(isAnd ? 0 : 1), at));
+        mov(r, new Operand.IntImm(isAnd ? 0 : 1), t, at);
         Val l = value(left);
         var rhs = b.block(isAnd ? "and" : "or");
         var done = b.block(isAnd ? "and.done" : "or.done");
         b.emit(isAnd ? new Instr.CondBr(l.var(), rhs, done, at) : new Instr.CondBr(l.var(), done, rhs, at));
         b.open(rhs);
         Val rv = value(right);
-        b.emit(new Instr.Mov(r, rv.var(), at));
+        mov(r, rv.var(), t, at);
         b.emit(new Instr.Br(done, at));
         b.open(done);
         return new Val(r, t);
@@ -818,7 +834,7 @@ final class ExprLower implements TVisitor<Val> {
             if (m.type().isArray() || m.type().isRecord()) return new Val(m.ptr(), m.type());
             if (m.bits().isPresent()) {
                 Var r = temp(m.type());
-                b.emit(new Instr.Mov(r, v.var(), at));
+                mov(r, v.var(), m.type(), at);
                 extend(r, types.isSigned(m.type()), m.bits().get().width(), at);
                 return new Val(r, m.type());
             }
@@ -834,7 +850,7 @@ final class ExprLower implements TVisitor<Val> {
         Val old = read(a, at);
         if (yieldOld && a instanceof Place.Variable) {
             Var copy = temp(old.type());
-            b.emit(new Instr.Mov(copy, old.var(), at));
+            mov(copy, old.var(), old.type(), at);
             old = new Val(copy, old.type());
         }
         targetValues.put(target, old);
@@ -892,8 +908,11 @@ final class ExprLower implements TVisitor<Val> {
 
     private void arm(TExpr.Rvalue arm, Var r, boolean aggregate, CType t, Token at) {
         Val v = value(arm);
-        if (aggregate) b.emit(new Instr.Copy(typeMap.of(t), r, v.var(), at));
-        else if (r != null) b.emit(new Instr.Mov(r, v.var(), at));
+        if (aggregate) {
+            b.emit(new Instr.Copy(typeMap.of(t), r, v.var(), at));
+        } else if (r != null) {
+            mov(r, v.var(), t, at);
+        }
     }
 
     @Override

@@ -77,7 +77,7 @@ class TacTest {
         f.locals.add(xv);
         f.locals.add(p);
         var fe = new Block("entry");
-        fe.instrs.add(new Instr.Mov(xv, new Operand.IntImm(1), AT));
+        fe.instrs.add(new Instr.Mov(xv, new Operand.IntImm(1), Type.I32, AT));
         fe.instrs.add(new Instr.AddrOfVar(p, c, AT));
         fe.instrs.add(new Instr.Store(p, new Operand.IntImm(5), 32, false, false, AT));
         fe.instrs.add(new Instr.Ret(xv, AT));
@@ -102,7 +102,7 @@ class TacTest {
                   i32 %x
                   ptr %p
                 .entry:
-                  mov %x, 1
+                  mov.s32 %x, 1
                   %p = addrof %c
                   store.32 %p, 5
                   ret %x
@@ -127,9 +127,9 @@ class TacTest {
         var vsig = new Type.Func(List.of(Type.PTR), true, Type.VOID);
         var asig = new Type.Func(List.of(), false, new Type.Struct("P"));
         List<Instr> all = List.of(
-                new Instr.Mov(a, b, AT),
-                new Instr.Mov(c, a, (Type.Int) Type.U8, AT),
-                new Instr.Mov(d, new Operand.FloatImm(1.5), AT),
+                new Instr.Mov(a, b, Type.I32, AT),
+                new Instr.Mov(c, a, Type.U8, AT),
+                new Instr.Mov(d, new Operand.FloatImm(1.5), Type.F64, AT),
                 new Instr.AddrOfGlobal(p, "g", AT),
                 new Instr.Bin(Instr.BinOp.WADD, a, a, new Operand.IntImm(-1), Type.U32, AT),
                 new Instr.Bin(Instr.BinOp.ASHR, l, l, new Operand.IntImm(32), AT),
@@ -157,9 +157,9 @@ class TacTest {
                 new Instr.Call(null, asig, "mk", List.of(), p, AT),
                 new Instr.ICall(a, sig, q, List.of(b, d), null, AT));
         assertEquals("""
-                mov %a, %b
+                mov.s32 %a, %b
                 mov.u8 %c, %a
-                mov %d, 1.5
+                mov.64 %d, 1.5
                 %p = addrof @g
                 %a = wadd.u32 %a, -1
                 %l = ashr %l, 32

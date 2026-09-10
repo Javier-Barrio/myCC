@@ -34,11 +34,11 @@ define @use() -> void {
   %t0 = addrof @g
   %t1 = load.s32 %t0
   %t2 = addrof @f
-  mov %t3, 42
-  mov %t4, 1.5
-  mov %t5, 97
+  mov.s32 %t3, 42
+  mov.64 %t4, 1.5
+  mov.s32 %t5, 97
   %t6 = addrof @.str.a76ec4e678e95b81
-  mov %t7, 0
-  mov %t8, 1
+  mov.u64 %t7, 0
+  mov.u8 %t8, 1
   ret
 }

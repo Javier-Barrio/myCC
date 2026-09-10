@@ -61,68 +61,68 @@ define @f() -> void {
   i32 %t51
   i32 %t52
 .entry:
-  mov %t0, 2
-  mov %j, %t0
-  mov %i, %t0
-  mov %t1, 300
+  mov.s32 %t0, 2
+  mov.s32 %j, %t0
+  mov.s32 %i, %t0
+  mov.s32 %t1, 300
   mov.s8 %t2, %t1
-  mov %c, %t2
+  mov.s8 %c, %t2
   %t3 = add.s32 %i, %c
-  mov %i, %t3
+  mov.s32 %i, %t3
   %t4 = i2f.64 %c
-  mov %t5, 1.5
+  mov.64 %t5, 1.5
   %t6 = fsub.64 %t4, %t5
   %t7 = f2i.64 %t6
-  mov %c, %t7
+  mov.s8 %c, %t7
   %t8 = wmul %i, 4
   %t9 = wadd %p, %t8
-  mov %p, %t9
-  mov %t10, 1
+  mov.u64 %p, %t9
+  mov.s32 %t10, 1
   %t11 = sub 0, %t10
   %t12 = wmul %t11, 4
   %t13 = wadd %p, %t12
-  mov %p, %t13
+  mov.u64 %p, %t13
   %t14 = shl.u32 %u, %i
-  mov %u, %t14
-  mov %t15, 2
+  mov.u32 %u, %t14
+  mov.s32 %t15, 2
   %t16 = i2f.64 %t15
   %t17 = fmul.64 %d, %t16
-  mov %d, %t17
-  mov %t18, 3
+  mov.64 %d, %t17
+  mov.s32 %t18, 3
   %t19 = srem.s32 %i, %t18
-  mov %i, %t19
-  mov %t20, 1
+  mov.s32 %i, %t19
+  mov.s32 %t20, 1
   %t21 = add.s32 %i, %t20
-  mov %i, %t21
-  mov %t22, 1
+  mov.s32 %i, %t21
+  mov.s32 %t22, 1
   %t23 = add.s32 %i, %t22
-  mov %i, %t23
-  mov %t24, 1
+  mov.s32 %i, %t23
+  mov.s32 %t24, 1
   %t25 = sub 0, %t24
   %t26 = wmul %t25, 4
   %t27 = wadd %p, %t26
-  mov %p, %t27
-  mov %t28, %i
-  mov %t29, 1
+  mov.u64 %p, %t27
+  mov.s32 %t28, %i
+  mov.s32 %t29, 1
   %t30 = add.s32 %t28, %t29
-  mov %i, %t30
-  mov %j, %t28
-  mov %t31, %i
-  mov %t32, 1
+  mov.s32 %i, %t30
+  mov.s32 %j, %t28
+  mov.s32 %t31, %i
+  mov.s32 %t32, 1
   %t33 = sub.s32 %t31, %t32
-  mov %i, %t33
-  mov %j, %t31
-  mov %t34, %p
-  mov %t35, 1
+  mov.s32 %i, %t33
+  mov.s32 %j, %t31
+  mov.u64 %t34, %p
+  mov.s32 %t35, 1
   %t36 = wmul %t35, 4
   %t37 = wadd %t34, %t36
-  mov %p, %t37
-  mov %p, %t34
+  mov.u64 %p, %t37
+  mov.u64 %p, %t34
   %t38 = addrof %a
-  mov %t39, %i
-  mov %t40, 1
+  mov.s32 %t39, %i
+  mov.s32 %t40, 1
   %t41 = add.s32 %t39, %t40
-  mov %i, %t41
+  mov.s32 %i, %t41
   %t42 = wmul %t39, 4
   %t43 = wadd %t38, %t42
   store.32 %t43, %i

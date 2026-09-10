@@ -40,7 +40,7 @@ define @f(i32 %k) -> void {
   zero [2 x i32] %t0
   store.32 %t0, %k
   %t1 = wadd %t0, 4
-  mov %t2, 1
+  mov.s32 %t2, 1
   %t3 = add.s32 %k, %t2
   store.32 %t1, %t3
   %t4 = addrof %in
@@ -52,17 +52,17 @@ define @f(i32 %k) -> void {
   %t7 = addrof %in
   copy %In %t6, %t7
   %t8 = wadd %t6, 8
-  mov %t9, 122
+  mov.s8 %t9, 122
   store.8 %t8, %t9
   %t10 = addrof %name
   zero [4 x i8] %t10
-  mov %t11, 108
+  mov.s8 %t11, 108
   store.8 %t10, %t11
   %t12 = wadd %t10, 1
-  mov %t13, 111
+  mov.s8 %t13, 111
   store.8 %t12, %t13
   %t14 = wadd %t10, 2
-  mov %t15, 99
+  mov.s8 %t15, 99
   store.8 %t14, %t15
   %t16 = addrof %zero
   zero [3 x i32] %t16

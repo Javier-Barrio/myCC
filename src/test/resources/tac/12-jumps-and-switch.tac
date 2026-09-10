@@ -33,34 +33,34 @@ define @f(i32 %c, i8 %ch) -> i32 {
 .case.97:
   br .case.98.102
 .case.98.102:
-  mov %t2, 1
-  mov %c, %t2
+  mov.s32 %t2, 1
+  mov.s32 %c, %t2
   br .switch.done
 .default:
-  mov %t3, 0
-  mov %c, %t3
+  mov.s32 %t3, 0
+  mov.s32 %c, %t3
   br .switch.done
 .switch.done:
-  mov %k, %ch
+  mov.s8 %k, %ch
   switch %k, .switch.done.2, [ 1 -> .case.1 ]
 .case.1:
   ret %k
 .switch.done.2:
   switch %c, .switch.done.3, [ 99 -> .case.99 ]
 .case.99:
-  mov %t4, 0
-  mov %c, %t4
+  mov.s32 %t4, 0
+  mov.s32 %c, %t4
   br .switch.done.3
 .switch.done.3:
   br .retry
 .retry:
-  mov %t5, 3
+  mov.s32 %t5, 3
   %t6 = slt %c, %t5
   condbr %t6, .then, .if.done
 .then:
-  mov %t7, 1
+  mov.s32 %t7, 1
   %t8 = add.s32 %c, %t7
-  mov %c, %t8
+  mov.s32 %c, %t8
   br .retry
 .if.done:
   br .outer
@@ -70,26 +70,26 @@ define @f(i32 %c, i8 %ch) -> i32 {
   %t9 = ne %c, 0
   condbr %t9, .while.body, .while.done
 .while.body:
-  mov %t10, 0
-  mov %i, %t10
+  mov.s32 %t10, 0
+  mov.s32 %i, %t10
   br .for.cond
 .for.cond:
   %t11 = slt %i, %c
   condbr %t11, .for.body, .for.done
 .for.body:
-  mov %t12, 1
+  mov.s32 %t12, 1
   %t13 = eq %i, %t12
   condbr %t13, .then.2, .if.done.2
 .then.2:
   br .for.step
 .if.done.2:
-  mov %t14, 2
+  mov.s32 %t14, 2
   %t15 = eq %i, %t14
   condbr %t15, .then.3, .if.done.3
 .then.3:
   br .while.cond
 .if.done.3:
-  mov %t16, 3
+  mov.s32 %t16, 3
   %t17 = eq %i, %t16
   condbr %t17, .then.4, .if.done.4
 .then.4:
@@ -97,14 +97,14 @@ define @f(i32 %c, i8 %ch) -> i32 {
 .if.done.4:
   br .for.done
 .for.step:
-  mov %t18, 1
+  mov.s32 %t18, 1
   %t19 = add.s32 %i, %t18
-  mov %i, %t19
+  mov.s32 %i, %t19
   br .for.cond
 .for.done:
-  mov %t20, 1
+  mov.s32 %t20, 1
   %t21 = sub.s32 %c, %t20
-  mov %c, %t21
+  mov.s32 %c, %t21
   br .while.cond
 .while.done:
   br .end

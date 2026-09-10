@@ -177,9 +177,10 @@ public final class TacInvariants implements TacVisitor<Void> {
         } else {
             sameClass(c, i.src());
         }
-        if (i.mod() != null) {
-            require(c.isInteger(), "a modifier on a floating mov");
-            integerModifier(i.mod());
+        if (c.isInteger()) {
+            require(i.mod() instanceof Type.Int m && m.width() <= module.target.registerWidth(), "an integer mov needs .sN or .uN");
+        } else {
+            precision(i.mod());
         }
         return null;
     }

@@ -17,6 +17,6 @@ define @f() -> void {
   u64 %t1
 .entry:
   %t0 = addrof @.str.9fc04ac1b91e3774
-  mov %t1, 14
+  mov.u64 %t1, 14
   ret
 }

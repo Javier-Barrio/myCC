@@ -50,7 +50,7 @@ class TacInvariantsTest {
     @Test
     void terminators() {
         accepts(f -> f.entry().instrs.add(new Instr.Ret(x(f), AT)));
-        assertTrue(rejects(f -> f.entry().instrs.add(new Instr.Mov(x(f), new Operand.IntImm(1), AT))).contains("no terminator"));
+        assertTrue(rejects(f -> f.entry().instrs.add(new Instr.Mov(x(f), new Operand.IntImm(1), Type.I32, AT))).contains("no terminator"));
         assertTrue(rejects(f -> {
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
@@ -79,14 +79,14 @@ class TacInvariantsTest {
         }).contains("not of class INT"));
         accepts(f -> {
             var l = local(f, "l", Type.I64);
-            f.entry().instrs.add(new Instr.Mov(l, x(f), AT));
-            f.entry().instrs.add(new Instr.Mov(x(f), l, (Type.Int) Type.I32, AT));
+            f.entry().instrs.add(new Instr.Mov(l, x(f), Type.I64, AT));
+            f.entry().instrs.add(new Instr.Mov(x(f), l, Type.I32, AT));
             f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, l, l, x(f), AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         });
         assertTrue(rejects(f -> {
             var d = local(f, "d", Type.F64);
-            f.entry().instrs.add(new Instr.Mov(d, x(f), AT));
+            f.entry().instrs.add(new Instr.Mov(d, x(f), Type.F64, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("mov between INT and FLOAT"));
         assertTrue(rejects(f -> {
