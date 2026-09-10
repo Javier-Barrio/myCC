@@ -566,8 +566,8 @@ class LowerTest {
     @Test
     void aggregateAssignmentIsACopyYieldingTheTarget() {
         String decls = "struct In { int x, y; }; struct In s, t;";
-        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %t\n  copy %In %t0, %t1", instrs(decls, "s = t;"));
-        assertEquals("  %t0 = addrof %tmpN\n  %t1 = addrof %s\n  %t2 = addrof %t\n  copy %In %t1, %t2\n  copy %In %t0, %t1\n  %t3 = wadd.u64 %t0, 4\n  %t4 = load.s32 %t3",
+        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %t\n  store.%In %t0, %t1", instrs(decls, "s = t;"));
+        assertEquals("  %t0 = addrof %tmpN\n  %t1 = addrof %s\n  %t2 = addrof %t\n  store.%In %t1, %t2\n  store.%In %t0, %t1\n  %t3 = wadd.u64 %t0, 4\n  %t4 = load.s32 %t3",
                 instrsN(decls, "(s = t).y;"));
     }
 
@@ -579,23 +579,23 @@ class LowerTest {
 
     @Test
     void aggregateLocalInitializers() {
-        assertEquals("  %t0 = addrof %v\n  zero [3 x i32] %t0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 1\n  store.32 %t1, %t2\n  %t3 = wadd.u64 %t0, 4\n  mov.s32 %t4, 2\n  store.32 %t3, %t4",
+        assertEquals("  %t0 = addrof %v\n  store.[3 x i32] %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 1\n  store.32 %t1, %t2\n  %t3 = wadd.u64 %t0, 4\n  mov.s32 %t4, 2\n  store.32 %t3, %t4",
                 instrs("", "int v[3] = {1, 2};"));
-        assertEquals("  %t0 = addrof %p\n  zero %P %t0\n  %t1 = wadd.u64 %t0, 4\n  mov.s32 %t2, 2\n  store.32 %t1, %t2",
+        assertEquals("  %t0 = addrof %p\n  store.%P %t0, 0\n  %t1 = wadd.u64 %t0, 4\n  mov.s32 %t2, 2\n  store.32 %t1, %t2",
                 instrs("struct P { int x, y; };", "struct P p = {.y = 2};"));
-        assertEquals("  %t0 = addrof %s\n  zero [3 x i8] %t0\n  %t1 = wadd.u64 %t0, 0\n  mov.s8 %t2, 97\n  store.8 %t1, %t2\n  %t3 = wadd.u64 %t0, 1\n  mov.s8 %t4, 98\n  store.8 %t3, %t4",
+        assertEquals("  %t0 = addrof %s\n  store.[3 x i8] %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  mov.s8 %t2, 97\n  store.8 %t1, %t2\n  %t3 = wadd.u64 %t0, 1\n  mov.s8 %t4, 98\n  store.8 %t3, %t4",
                 instrs("", "char s[] = \"ab\";"));
-        assertEquals("  %t0 = addrof %o\n  zero %Out %t0\n  %t1 = wadd.u64 %t0, 0\n  %t2 = addrof %in\n  copy %In %t1, %t2\n  %t3 = wadd.u64 %t0, 8\n  mov.s8 %t4, 122\n  store.8 %t3, %t4",
+        assertEquals("  %t0 = addrof %o\n  store.%Out %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  %t2 = addrof %in\n  store.%In %t1, %t2\n  %t3 = wadd.u64 %t0, 8\n  mov.s8 %t4, 122\n  store.8 %t3, %t4",
                 instrs("struct In { int x, y; }; struct Out { struct In in; char name[8]; }; struct In in;", "struct Out o = {in, \"z\"};"));
     }
 
     @Test
     void compoundLiterals() {
-        assertEquals("  %t0 = addrof %litN\n  zero %P %t0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 1\n  store.32 %t1, %t2\n  %t3 = wadd.u64 %t0, 4\n  mov.s32 %t4, 2\n  store.32 %t3, %t4\n  %t5 = wadd.u64 %t0, 0\n  %t6 = load.s32 %t5",
+        assertEquals("  %t0 = addrof %litN\n  store.%P %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 1\n  store.32 %t1, %t2\n  %t3 = wadd.u64 %t0, 4\n  mov.s32 %t4, 2\n  store.32 %t3, %t4\n  %t5 = wadd.u64 %t0, 0\n  %t6 = load.s32 %t5",
                 instrsN("struct P { int x, y; };", "(struct P){1, 2}.x;"));
         assertEquals("  mov.s32 %t0, 7\n  mov.s32 %litN, %t0", instrsN("", "(int){7};"));
         assertEquals("  %t0 = addrof @.lit.1\n  %t1 = load.s32 %t0", instrs("", "(static const int){7};"));
-        assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 3\n  store.32 %t1, %t2\n  mov.u64 %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
+        assertEquals("  %t0 = addrof %litN\n  store.[2 x i32] %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 3\n  store.32 %t1, %t2\n  mov.u64 %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
     }
 
     // ---- 16: calls ---------------------------------------------------------------------------
@@ -656,7 +656,7 @@ class LowerTest {
     @Test
     void aggregateArgumentsAndResults() {
         assertEquals("  %t0 = addrof %s\n  call (%P) -> void @g(%t0)", instrs(AGG, "g(s);"));
-        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %call.1\n  call () -> %P @mk() into %t1\n  copy %P %t0, %t1", instrs(AGG, "s = mk();"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = addrof %call.1\n  call () -> %P @mk() into %t1\n  store.%P %t0, %t1", instrs(AGG, "s = mk();"));
         assertEquals("  %t0 = addrof %tmpN\n  call () -> %P @mk() into %t0\n  %t1 = wadd.u64 %t0, 0\n  %t2 = load.s32 %t1", instrsN(AGG, "mk().x;"));
         assertEquals("  %t0 = addrof %call.1\n  call () -> %P @mk() into %t0", instrs(AGG, "mk();"));
         assertEquals("  %t0 = addrof %call.1\n  call () -> %P @mk() into %t0\n  call (%P) -> void @g(%t0)", instrs(AGG, "g(mk());"));
@@ -699,14 +699,14 @@ class LowerTest {
                   condbr %t2, .then, .else
                 .then:
                   %t3 = addrof %s
-                  copy %P %t1, %t3
+                  store.%P %t1, %t3
                   br .cond.done
                 .else:
                   %t4 = addrof %t
-                  copy %P %t1, %t4
+                  store.%P %t1, %t4
                   br .cond.done
                 .cond.done:
-                  copy %P %t0, %t1
+                  store.%P %t0, %t1
                   %t5 = wadd.u64 %t0, 0
                   %t6 = load.s32 %t5""", instrsN(decls, "(c ? s : t).x;"));
         assertTrue(body("", decls + " (c ? s : t).x;").contains("  %P %cond.1\n"));
@@ -1051,7 +1051,7 @@ class LowerTest {
 
     @Test
     void bitFieldInitializersAtRunTime() {
-        assertEquals("  %t0 = addrof %b\n  zero %B %t0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 3\n  mov.u32 %t3, %t2\n  %t4 = load.u32 %t1\n  %t4 = and.u64 %t4, -241\n  %t5 = and.u64 %t3, 15\n  %t5 = shl.u64 %t5, 4\n  %t4 = or.u64 %t4, %t5\n  store.32 %t1, %t4",
+        assertEquals("  %t0 = addrof %b\n  store.%B %t0, 0\n  %t1 = wadd.u64 %t0, 0\n  mov.s32 %t2, 3\n  mov.u32 %t3, %t2\n  %t4 = load.u32 %t1\n  %t4 = and.u64 %t4, -241\n  %t5 = and.u64 %t3, 15\n  %t5 = shl.u64 %t5, 4\n  %t4 = or.u64 %t4, %t5\n  store.32 %t1, %t4",
                 instrs("struct B { unsigned lo : 4; unsigned hi : 4; };", "struct B b = {.hi = 3};"));
     }
 

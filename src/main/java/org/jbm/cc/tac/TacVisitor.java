@@ -10,8 +10,6 @@ public interface TacVisitor<R> {
     R visit(Instr.Cvt i);
     R visit(Instr.Load i);
     R visit(Instr.Store i);
-    R visit(Instr.Copy i);
-    R visit(Instr.Zero i);
     R visit(Instr.Br i);
     R visit(Instr.CondBr i);
     R visit(Instr.Switch i);

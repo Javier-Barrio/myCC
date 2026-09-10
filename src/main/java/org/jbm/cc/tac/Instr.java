@@ -147,25 +147,15 @@ public sealed interface Instr {
         }
     }
 
-    /** {@code store.W ptr, value}: the low {@code width} bits of the value to the address; {@code isFloat} for {@code .fW}. */
-    record Store(@NonNull Var ptr, @NonNull Operand value, int width, boolean isFloat, boolean isVolatile,
-                 @NonNull Token token) implements Instr {
-        @Override
-        public <R> R accept(TacVisitor<R> v) {
-            return v.visit(this);
-        }
-    }
-
-    /** {@code copy T dst, src}: the bytes of aggregate type {@code type} from one address to another. */
-    record Copy(@NonNull Type type, @NonNull Var dst, @NonNull Var src, @NonNull Token token) implements Instr {
-        @Override
-        public <R> R accept(TacVisitor<R> v) {
-            return v.visit(this);
-        }
-    }
-
-    /** {@code zero T ptr}: the bytes of aggregate type {@code type} at the address to zero. */
-    record Zero(@NonNull Type type, @NonNull Var ptr, @NonNull Token token) implements Instr {
+    /**
+     * {@code store.T ptr, value}: the memory type {@code T} written at the
+     * address. For a scalar {@code T} (spelled by its width, {@code .32},
+     * {@code .f64}) the value is a register or an immediate; for an
+     * aggregate {@code T} the value is a {@code ptr} to the bytes to copy,
+     * or the immediate 0 to zero every byte.
+     */
+    record Store(@NonNull Var ptr, @NonNull Operand value, @NonNull Type type, boolean isVolatile, @NonNull Token token)
+            implements Instr {
         @Override
         public <R> R accept(TacVisitor<R> v) {
             return v.visit(this);

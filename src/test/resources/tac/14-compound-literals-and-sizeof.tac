@@ -38,19 +38,19 @@ define @f(i32 %k) -> i32 {
   i32 %t24
 .entry:
   %t0 = addrof %p
-  zero %Pt %t0
+  store.%Pt %t0, 0
   %t1 = wadd.u64 %t0, 0
   %t2 = addrof %lit10
-  zero %Pt %t2
+  store.%Pt %t2, 0
   %t3 = wadd.u64 %t2, 0
   store.32 %t3, %k
   %t4 = wadd.u64 %t2, 4
   mov.s32 %t5, 1
   %t6 = add.s32 %k, %t5
   store.32 %t4, %t6
-  copy %Pt %t1, %t2
+  store.%Pt %t1, %t2
   %t7 = addrof %lit11
-  zero [2 x i32] %t7
+  store.[2 x i32] %t7, 0
   %t8 = wadd.u64 %t7, 0
   store.32 %t8, %k
   %t9 = wadd.u64 %t7, 4
@@ -60,7 +60,7 @@ define @f(i32 %k) -> i32 {
   %t11 = addrof @.lit.3
   %t12 = load.s32 %t11
   %t13 = addrof %lit13
-  zero %Pt %t13
+  store.%Pt %t13, 0
   %t14 = wadd.u64 %t13, 0
   mov.s32 %t15, 1
   store.32 %t14, %t15

@@ -139,11 +139,11 @@ class TacInvariantsTest {
             var d = local(f, "d", Type.F64);
             f.entry().instrs.add(new Instr.AddrOfGlobal(p, "g", AT));
             f.entry().instrs.add(new Instr.Load(c, p, 8, Instr.Ext.SIGNED, false, AT));
-            f.entry().instrs.add(new Instr.Store(p, c, 8, false, false, AT));
-            f.entry().instrs.add(new Instr.Store(p, new Operand.IntImm(1), 32, false, false, AT));
+            f.entry().instrs.add(new Instr.Store(p, c, Type.I8, false, AT));
+            f.entry().instrs.add(new Instr.Store(p, new Operand.IntImm(1), Type.I32, false, AT));
             f.entry().instrs.add(new Instr.Load(d, p, 64, Instr.Ext.FLOAT, false, AT));
-            f.entry().instrs.add(new Instr.Copy(new Type.Struct("P"), p, p, AT));
-            f.entry().instrs.add(new Instr.Zero(new Type.Struct("P"), p, AT));
+            f.entry().instrs.add(new Instr.Store(p, p, new Type.Struct("P"), false, AT));
+            f.entry().instrs.add(new Instr.Store(p, new Operand.IntImm(0), new Type.Struct("P"), false, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         });
         assertTrue(rejects(f -> {
@@ -162,9 +162,9 @@ class TacInvariantsTest {
         }).contains("unknown @nope"));
         assertTrue(rejects(f -> {
             var p = local(f, "p", Type.PTR);
-            f.entry().instrs.add(new Instr.Copy(Type.I32, p, p, AT));
+            f.entry().instrs.add(new Instr.Store(p, x(f), new Type.Struct("P"), false, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("copy of a scalar"));
+        }).contains("aggregate store takes a ptr"));
     }
 
     @Test

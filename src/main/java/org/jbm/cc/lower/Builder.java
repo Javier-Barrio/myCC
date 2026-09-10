@@ -103,8 +103,6 @@ final class Builder {
         else if (i instanceof Instr.Cvt c) add(out, c.dst(), c.src());
         else if (i instanceof Instr.Load l) add(out, l.dst(), l.ptr());
         else if (i instanceof Instr.Store st) add(out, st.ptr(), st.value());
-        else if (i instanceof Instr.Copy c) add(out, c.dst(), c.src());
-        else if (i instanceof Instr.Zero z) add(out, z.ptr());
         else if (i instanceof Instr.CondBr c) add(out, c.cond());
         else if (i instanceof Instr.Switch sw) add(out, sw.value());
         else if (i instanceof Instr.Ret r) add(out, r.value());

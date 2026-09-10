@@ -170,7 +170,7 @@ extended for `t`; an aggregate `Memory` is its pointer. `write(Place,
 Val)`: a `Variable` is `mov %x, %v`; a scalar `Memory` is `store.N %p,
 %v`; a bit-field: `load.uN` the unit, `and` it with the inverted placed
 mask, `and` the value with `2^width - 1`, `shl` it by `bitOffset`, `or`,
-`store.N`; an aggregate is `copy %T %p, %v`. `volatile` is passed through
+`store.N`; an aggregate is `store.%T %p, %v`. `volatile` is passed through
 on every `load` and `store` of a volatile place.
 
 **Conversions**, one row per node, the operand's type `f`, the node's
@@ -283,7 +283,7 @@ evaluated (C evaluates the initializer each time), then `%p`. Both
 symbols are in `TFunction.locals`, so their variables are declared.
 
 **Initialization** (`initialize(%p, TInit)`, `%p` a pointer to the
-object): for an aggregate, `zero %T %p`, then each item in order: `%q = wadd %p,
+object): for an aggregate, `store.%T %p, 0`, then each item in order: `%q = wadd %p,
 item.offset`, then `write(Memory(%q, item's type, ...), value(item))`,
 which is a `store.N`, a bit-field sequence, or a `copy` for an item that
 is itself an aggregate. For a

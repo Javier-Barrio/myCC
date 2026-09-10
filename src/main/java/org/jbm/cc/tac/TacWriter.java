@@ -154,18 +154,17 @@ public final class TacWriter implements TacVisitor<String> {
 
     @Override
     public String visit(Instr.Store i) {
-        return "store." + (i.isFloat() ? "f" : "") + i.width() + " " + i.ptr() + ", " + op(i.value())
-                + (i.isVolatile() ? " volatile" : "");
-    }
-
-    @Override
-    public String visit(Instr.Copy i) {
-        return "copy " + i.type().spelling() + " " + i.dst() + ", " + i.src();
-    }
-
-    @Override
-    public String visit(Instr.Zero i) {
-        return "zero " + i.type().spelling() + " " + i.ptr();
+        String width;
+        if (i.type() instanceof Type.Int t) {
+            width = Integer.toString(t.width());
+        } else if (i.type() instanceof Type.Float f) {
+            width = "f" + f.width();
+        } else if (i.type() instanceof Type.Ptr) {
+            width = "64";
+        } else {
+            width = i.type().spelling();
+        }
+        return "store." + width + " " + i.ptr() + ", " + op(i.value()) + (i.isVolatile() ? " volatile" : "");
     }
 
     @Override

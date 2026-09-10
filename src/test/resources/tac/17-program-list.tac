@@ -93,7 +93,7 @@ define @main() -> i32 {
   i32 %t19
 .entry:
   %t0 = addrof %a
-  zero %Node %t0
+  store.%Node %t0, 0
   %t1 = wadd.u64 %t0, 0
   mov.s32 %t2, 1
   store.32 %t1, %t2
@@ -101,7 +101,7 @@ define @main() -> i32 {
   mov.u64 %t4, 0
   store.64 %t3, %t4
   %t5 = addrof %b
-  zero %Node %t5
+  store.%Node %t5, 0
   %t6 = wadd.u64 %t5, 0
   mov.s32 %t7, 2
   store.32 %t6, %t7

@@ -79,7 +79,7 @@ class TacTest {
         var fe = new Block("entry");
         fe.instrs.add(new Instr.Mov(xv, new Operand.IntImm(1), Type.I32, AT));
         fe.instrs.add(new Instr.AddrOfVar(p, c, AT));
-        fe.instrs.add(new Instr.Store(p, new Operand.IntImm(5), 32, false, false, AT));
+        fe.instrs.add(new Instr.Store(p, new Operand.IntImm(5), Type.I32, false, AT));
         fe.instrs.add(new Instr.Ret(xv, AT));
         f.blocks.add(fe);
         m.functions.add(f);
@@ -141,10 +141,10 @@ class TacTest {
                 new Instr.Load(c, p, 8, Instr.Ext.UNSIGNED, false, AT),
                 new Instr.Load(l, p, 32, Instr.Ext.SIGNED, true, AT),
                 new Instr.Load(d, p, 64, Instr.Ext.FLOAT, false, AT),
-                new Instr.Store(p, d, 64, true, false, AT),
-                new Instr.Store(p, vol, 32, false, true, AT),
-                new Instr.Copy(new Type.Struct("P"), q, p, AT),
-                new Instr.Zero(new Type.Array(Type.I32, 3), p, AT),
+                new Instr.Store(p, d, Type.F64, false, AT),
+                new Instr.Store(p, vol, Type.I32, true, AT),
+                new Instr.Store(q, p, new Type.Struct("P"), false, AT),
+                new Instr.Store(p, new Operand.IntImm(0), new Type.Array(Type.I32, 3), false, AT),
                 new Instr.Br(then, AT),
                 new Instr.CondBr(c, then, els, AT),
                 new Instr.Switch(a, els, List.of(new Instr.Case(1, then), new Instr.Case(-2, els)), AT),
@@ -173,8 +173,8 @@ class TacTest {
                 %d = load.f64 %p
                 store.f64 %p, %d
                 store.32 %p, %v volatile
-                copy %P %q, %p
-                zero [3 x i32] %p
+                store.%P %q, %p
+                store.[3 x i32] %p, 0
                 br .then
                 condbr %c, .then, .else
                 switch %a, .else, [ 1 -> .then, -2 -> .else ]

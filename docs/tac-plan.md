@@ -322,16 +322,24 @@ fne                            unordered or not equal: 1 if either operand is Na
 comparison: two `int`s compare as `slt`, two `unsigned char`s as `ult`.
 
 **Memory**, the only instructions that touch it, always through a `ptr`
-variable, each saying its width:
+variable, each saying what it moves:
 
 ```
 %x = load.s8  %p               one byte, sign-extended into the register; also .s16 .s32 .s64
 %x = load.u8  %p               zero-extended; also .u16 .u32 .u64
 %f = load.f32 %p               single precision; also .f64 .f80
 store.8 %p, %x | N             the low 8 bits of the variable or immediate; also .16 .32 .64 .f32 .f64 .f80
-copy %P %q, %p                 the bytes of the named aggregate type, from %p to %q, non-overlapping
-zero %P %p                     all bytes of the aggregate type to zero
+store.%P %q, %p                the bytes of the named aggregate type found at %p, written at %q; also .[N x T]
+store.%P %q, 0                 every byte of the aggregate type at %q to zero
 ```
+
+A `store` says what it writes, a scalar width or an aggregate type, and
+its value operand is where the value is: a register or an immediate for
+a scalar, a `ptr` to the bytes for an aggregate, or the immediate 0 to
+zero the whole object. There is no separate copy instruction: an
+aggregate value in this TAC is its address, and moving one is a store
+of that type. The source and destination of an aggregate store do not
+overlap.
 
 `align N` and `volatile` may follow a `load` or `store`. `Lower` loads a
 variable of type `i8` with `load.s8` and one of type `u16` with
@@ -340,7 +348,8 @@ variable of type `i8` with `load.s8` and one of type `u16` with
 `int`. Bit-fields are a `load` of the storage unit, `and`/`or`/`shl`/
 `lshr` at the full width, and a `store`, with the masks and shifts
 computed by `Lower` from the typer's placement. A struct assignment is
-`copy`; the zero part of an initializer is `zero` followed by stores.
+`store.%P`; the zero part of an initializer is `store.%P ..., 0`
+followed by stores.
 
 **Control** (each block ends with exactly one of these):
 
@@ -391,7 +400,7 @@ va_start %ap
 %x = va_arg.s32 %ap                             the widths and extensions of load; for an aggregate, va_arg %P %ap into %p
 ```
 
-`va_end` is nothing and `va_copy` is `copy`.
+`va_end` is nothing and `va_copy` is a `store.%va_list`.
 
 ## Functions
 
@@ -459,8 +468,9 @@ except through names.
   every integer arithmetic, logic, shift and `mov` instruction has one; a floating modifier is `.32 .64 .80`, one
   the target has, and every floating instruction and every `i2f`, `u2f`,
   `f2i`, `f2u` and `fcvt` has one;
-- `load` and `store` go through a `ptr` variable; `copy`, `zero`, `into`
-  and an aggregate `ret` take `ptr` variables; `mov` joins two integer
+- `load` and `store` go through a `ptr` variable; an aggregate `store`'s
+  value is a `ptr` or the immediate 0; `into` and an aggregate `ret` take
+  `ptr` variables; `mov` joins two integer
   variables or two floating variables; `i2f`/`f2i` join an integer and a
   floating variable;
 - every block ends with exactly one terminator (`br`, `condbr`, `switch`,
@@ -492,8 +502,8 @@ writes it, so there is no invariant the checker cannot see.
   has a modifier, by one cast: `(long) (int)` for `.s32`, `& 0xffL` for
   `.u8`. `load.s16` is a `short` read, `store.8` writes one byte; the
   width is on the instruction.
-- Memory is touched by `load`, `store`, `copy` and `zero` only, so bounds
-  and alignment checks live in four places.
+- Memory is touched by `load` and `store` only, so bounds and alignment
+  checks live in two places.
 - `addrof` of a variable is its storage address, computed at entry; of a
   global, resolved at load; nothing else names either.
 - Every instruction is a record with resolved operand references, so
