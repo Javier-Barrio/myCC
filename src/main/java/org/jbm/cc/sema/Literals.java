@@ -3,9 +3,9 @@ package org.jbm.cc.sema;
 import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
-import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Types;
 
 import java.math.BigInteger;
 import java.util.ArrayList;

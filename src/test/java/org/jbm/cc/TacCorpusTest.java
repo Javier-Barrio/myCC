@@ -1,12 +1,13 @@
 package org.jbm.cc;
 
 import org.jbm.cc.lower.Lower;
-import org.jbm.cc.tac.Instr;
-import org.jbm.cc.tac.Module;
-import org.jbm.cc.tac.TacInvariants;
-import org.jbm.cc.tac.TacWriter;
-import org.jbm.cc.tast.TUnit;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.lower.arch.X86_64SysV;
+import org.jbm.cc.lower.tac.Instr;
+import org.jbm.cc.lower.tac.Module;
+import org.jbm.cc.lower.tac.TacInvariants;
+import org.jbm.cc.lower.tac.TacWriter;
+import org.jbm.cc.sema.tast.TUnit;
+import org.jbm.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -77,7 +78,7 @@ class TacCorpusTest {
 
     @Test
     void theMainProgramLowers() {
-        var types = new Types(org.jbm.cc.arch.X86_64SysV.INSTANCE);
+        var types = new Types(X86_64SysV.INSTANCE);
         Module m = Lower.lower(TypedCorpusTest.type(org.jbm.Main.SOURCE, "<source>", types), types);
         assertTrue(TacInvariants.check(m) > 0);
         assertTrue(TacWriter.print(m).contains("define @main() -> i32 {"));

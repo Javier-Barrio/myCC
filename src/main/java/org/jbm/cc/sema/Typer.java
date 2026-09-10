@@ -1,21 +1,23 @@
 package org.jbm.cc.sema;
 
 import lombok.NonNull;
-import org.jbm.cc.arch.X86_64SysV;
-import org.jbm.cc.ast.BlockItem;
-import org.jbm.cc.ast.Decl;
-import org.jbm.cc.ast.Expr;
-import org.jbm.cc.ast.Stmt;
+import org.jbm.cc.lower.arch.X86_64SysV;
+import org.jbm.cc.parse.ast.BlockItem;
+import org.jbm.cc.parse.ast.Decl;
+import org.jbm.cc.parse.ast.Expr;
+import org.jbm.cc.parse.ast.Stmt;
 import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.tast.JumpTarget;
-import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.tast.TExpr.Rvalue;
-import org.jbm.cc.tast.TFunction;
-import org.jbm.cc.tast.TInit;
-import org.jbm.cc.tast.TStmt;
-import org.jbm.cc.tast.TUnit;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.parse.ast.Initializer;
+import org.jbm.cc.sema.tast.StringData;
+import org.jbm.cc.sema.tast.JumpTarget;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.tast.TExpr.Rvalue;
+import org.jbm.cc.sema.tast.TFunction;
+import org.jbm.cc.sema.tast.TInit;
+import org.jbm.cc.sema.tast.TStmt;
+import org.jbm.cc.sema.tast.TUnit;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Types;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -142,7 +144,7 @@ public final class Typer {
         return typer;
     }
 
-    List<org.jbm.cc.tast.StringData> strings() {
+    List<StringData> strings() {
         return exprs.strings;
     }
 
@@ -231,7 +233,7 @@ public final class Typer {
     private CType inferred(Decl.Declaration d, Decl.InitDeclarator id, Symbol symbol) {
         if (!d.specifiers().has("auto")) throw new IllegalStateException("declarator without a type");
         if (symbol instanceof Symbol.Typedef) throw new SemaException("typedef cannot be declared with auto", id.name());
-        if (!(id.initializer().orElse(null) instanceof org.jbm.cc.ast.Initializer.Expression e)) {
+        if (!(id.initializer().orElse(null) instanceof Initializer.Expression e)) {
             throw new SemaException("'" + symbol.name + "' declared with auto needs an initializer that is an expression",
                     id.name());
         }

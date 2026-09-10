@@ -1,14 +1,14 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.arch.Ilp32;
-import org.jbm.cc.arch.X86_64SysV;
+import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.cc.lower.arch.X86_64SysV;
 import org.jbm.cc.cpp.CppTokenizer.Token;
 import org.jbm.cc.cpp.CppTokenizer.TokenType;
-import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.tast.TExpr.Constant;
-import org.jbm.cc.tast.TExpr.Rvalue;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.tast.TExpr.Constant;
+import org.jbm.cc.sema.tast.TExpr.Rvalue;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;

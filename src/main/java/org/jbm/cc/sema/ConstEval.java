@@ -2,12 +2,12 @@ package org.jbm.cc.sema;
 
 import lombok.NonNull;
 import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.tast.TExpr;
-import org.jbm.cc.tast.TExpr.Constant;
-import org.jbm.cc.tast.TExpr.Rvalue;
-import org.jbm.cc.tast.TVisitor;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.sema.tast.TExpr;
+import org.jbm.cc.sema.tast.TExpr.Constant;
+import org.jbm.cc.sema.tast.TExpr.Rvalue;
+import org.jbm.cc.sema.tast.TVisitor;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Types;
 import org.jetbrains.annotations.Nullable;
 
 import java.math.BigInteger;

@@ -1,12 +1,12 @@
 package org.jbm.cc;
 
 import org.jbm.Main;
-import org.jbm.cc.ast.AstPrinter;
-import org.jbm.cc.ast.AstWalker;
-import org.jbm.cc.ast.Decl;
-import org.jbm.cc.ast.Expr;
-import org.jbm.cc.ast.Stmt;
-import org.jbm.cc.ast.Type;
+import org.jbm.cc.parse.ast.AstPrinter;
+import org.jbm.cc.parse.ast.AstWalker;
+import org.jbm.cc.parse.ast.Decl;
+import org.jbm.cc.parse.ast.Expr;
+import org.jbm.cc.parse.ast.Stmt;
+import org.jbm.cc.parse.ast.Type;
 import org.jbm.cc.cpp.BundledHeaders;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
@@ -15,7 +15,7 @@ import org.jbm.cc.parse.Parser;
 import org.jbm.cc.sema.Desugar;
 import org.jbm.cc.sema.Resolver;
 import org.jbm.cc.sema.Typer;
-import org.jbm.cc.tast.TypedPrinter;
+import org.jbm.cc.sema.tast.TypedPrinter;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

@@ -1,12 +1,13 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.ast.Decl;
-import org.jbm.cc.ast.Expr;
-import org.jbm.cc.ast.Type;
+import org.jbm.cc.parse.ast.Decl;
+import org.jbm.cc.parse.ast.Expr;
+import org.jbm.cc.parse.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
+import org.jbm.cc.parse.ast.Stmt;
 import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
@@ -312,7 +313,7 @@ class ResolverTest {
         var b = resolve("void f(void) { goto end; { end: return; } }");
         assertEquals(1, b.gotos.size());
         var target = b.gotos.values().iterator().next();
-        assertEquals("end", ((org.jbm.cc.ast.Stmt.NameLabel) target.label()).name().text);
+        assertEquals("end", ((Stmt.NameLabel) target.label()).name().text);
         fails("void f(void) { goto nowhere; }");
         fails("void f(void) { L: ; L: ; }");
         // Labels are per function.
@@ -328,7 +329,7 @@ class ResolverTest {
                     do { continue; } while (x);
                 }
                 """);
-        Comparator<Map.Entry<org.jbm.cc.ast.Stmt, org.jbm.cc.ast.Stmt>> byLine =
+        Comparator<Map.Entry<Stmt, Stmt>> byLine =
                 Comparator.comparingInt(e -> jumpToken(e.getKey()).line);
         var targets = b.jumps.entrySet().stream()
                 .sorted(byLine.thenComparingInt(e -> jumpToken(e.getKey()).column))
@@ -362,9 +363,9 @@ class ResolverTest {
         fails("void f(void) { default: ; }");
     }
 
-    private static org.jbm.cc.cpp.CppTokenizer.Token jumpToken(org.jbm.cc.ast.Stmt s) {
-        if (s instanceof org.jbm.cc.ast.Stmt.Break br) return br.keyword();
-        return ((org.jbm.cc.ast.Stmt.Continue) s).keyword();
+    private static org.jbm.cc.cpp.CppTokenizer.Token jumpToken(Stmt s) {
+        if (s instanceof Stmt.Break br) return br.keyword();
+        return ((Stmt.Continue) s).keyword();
     }
 
     // ---- end to end ------------------------------------------------------------------

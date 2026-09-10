@@ -1,7 +1,7 @@
 package org.jbm.cc.parse;
 
-import org.jbm.cc.ast.AstPrinter;
-import org.jbm.cc.ast.Decl;
+import org.jbm.cc.parse.ast.AstPrinter;
+import org.jbm.cc.parse.ast.Decl;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.CppTokenizer.TokenSet;
 import org.jbm.cc.cpp.Scanner;

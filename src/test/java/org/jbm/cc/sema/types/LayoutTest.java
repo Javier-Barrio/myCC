@@ -1,7 +1,7 @@
 package org.jbm.cc.sema.types;
 
-import org.jbm.cc.arch.Ilp32;
-import org.jbm.cc.arch.X86_64SysV;
+import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.cc.lower.arch.X86_64SysV;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

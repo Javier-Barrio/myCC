@@ -1,12 +1,14 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.ast.AstPrinter;
-import org.jbm.cc.ast.Decl;
-import org.jbm.cc.ast.Stmt;
+import org.jbm.cc.parse.ast.AstPrinter;
+import org.jbm.cc.parse.ast.Decl;
+import org.jbm.cc.parse.ast.Stmt;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.Scanner;
 import org.jbm.cc.cpp.TokenConversion;
 import org.jbm.cc.parse.Parser;
+import org.jbm.cc.parse.ast.Expr;
+import org.jbm.cc.parse.ast.Initializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -105,11 +107,11 @@ class DesugarTest {
     @Test
     void synthesizedTokensPointAtTheOperator() {
         var result = Desugar.desugar(parse("int x = ++i;"));
-        var assign = (org.jbm.cc.ast.Expr.Assign) ((org.jbm.cc.ast.Initializer.Expression)
+        var assign = (Expr.Assign) ((Initializer.Expression)
                 ((Decl.Declaration) result.get(0)).declarators().get(0).initializer().orElseThrow()).expr();
         assertEquals("+=", assign.op().text);
         assertEquals(9, assign.op().column);
-        assertEquals("1", ((org.jbm.cc.ast.Expr.Literal) assign.value()).token().text);
+        assertEquals("1", ((Expr.Literal) assign.value()).token().text);
     }
 
     @Test

@@ -1,13 +1,13 @@
 package org.jbm.cc.lower;
 
 import lombok.NonNull;
-import org.jbm.cc.tac.Module;
-import org.jbm.cc.tac.StructDef;
-import org.jbm.cc.tac.Type;
-import org.jbm.cc.types.CType;
-import org.jbm.cc.types.Layout;
-import org.jbm.cc.types.Tag;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.lower.tac.Module;
+import org.jbm.cc.lower.tac.StructDef;
+import org.jbm.cc.lower.tac.Type;
+import org.jbm.cc.sema.types.CType;
+import org.jbm.cc.sema.types.Layout;
+import org.jbm.cc.sema.types.Tag;
+import org.jbm.cc.sema.types.Types;
 
 import java.util.ArrayList;
 import java.util.HashSet;

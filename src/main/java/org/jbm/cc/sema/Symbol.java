@@ -1,8 +1,8 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.ast.Type;
+import org.jbm.cc.parse.ast.Type;
 import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.types.CType;
+import org.jbm.cc.sema.types.CType;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;

@@ -1,7 +1,7 @@
 package org.jbm;
 
-import org.jbm.cc.arch.X86_64SysV;
-import org.jbm.cc.ast.AstPrinter;
+import org.jbm.cc.lower.arch.X86_64SysV;
+import org.jbm.cc.parse.ast.AstPrinter;
 import org.jbm.cc.cpp.CppTokenizer;
 import org.jbm.cc.cpp.HeaderProvider;
 import org.jbm.cc.cpp.Scanner;
@@ -11,9 +11,9 @@ import org.jbm.cc.parse.Parser;
 import org.jbm.cc.sema.Desugar;
 import org.jbm.cc.sema.Resolver;
 import org.jbm.cc.sema.Typer;
-import org.jbm.cc.tac.TacWriter;
-import org.jbm.cc.tast.TypedPrinter;
-import org.jbm.cc.types.Types;
+import org.jbm.cc.lower.tac.TacWriter;
+import org.jbm.cc.sema.tast.TypedPrinter;
+import org.jbm.cc.sema.types.Types;
 
 import java.io.IOException;
 import java.nio.file.Files;

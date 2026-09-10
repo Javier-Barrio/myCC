@@ -2,8 +2,8 @@ package org.jbm.cc.lower;
 
 import lombok.NonNull;
 import org.jbm.cc.sema.Symbol;
-import org.jbm.cc.tast.StringData;
-import org.jbm.cc.tast.TUnit;
+import org.jbm.cc.sema.tast.StringData;
+import org.jbm.cc.sema.tast.TUnit;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
