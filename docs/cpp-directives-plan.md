@@ -43,16 +43,16 @@ appear, because the macro table is built in scan order and a skipped
 
 ## Steps
 
-1. [ ] `PpExpr` with tests per operator, constant form and error.
-2. [ ] Conditionals in the tokenizer; end-to-end tests per directive,
+1. [x] `PpExpr` with tests per operator, constant form and error.
+2. [x] Conditionals in the tokenizer; end-to-end tests per directive,
    nesting, skipped `#define`, unevaluated nested `#if`, macros in
    conditions, each error.
-3. [ ] `HeaderProvider`, `Token.file`, the strip by file and line.
-4. [ ] `#include` with the nested tokenizer, depth limit, errors.
-5. [ ] `BundledHeaders` and the headers; each parses on both targets;
+3. [x] `HeaderProvider`, `Token.file`, the strip by file and line.
+4. [x] `#include` with the nested tokenizer, depth limit, errors.
+5. [x] `BundledHeaders` and the headers; each parses on both targets;
    `LowerTest`'s function-pointer program from `#include <stdio.h>`.
-6. [ ] `FileHeaders`, the chain, and the entry `Main` and the tests use.
-7. [ ] Diagnostics with the file.
+6. [x] `FileHeaders`, the chain, and the entry `Main` and the tests use.
+7. [x] Diagnostics with the file.
 
 Deferred: `#include MACRO`, `#error`, `#line`, `__FILE__`, `__LINE__`,
 `#pragma`.

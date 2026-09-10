@@ -46,7 +46,7 @@ public final class PpExpr {
     }
 
     private LexException error(String message, Token t) {
-        return new LexException(message, t.line, t.column);
+        return new LexException(message, t);
     }
 
     private Token peek() {
@@ -54,7 +54,9 @@ public final class PpExpr {
             return tokens.get(pos);
         }
         Token last = tokens.isEmpty() ? at : tokens.get(tokens.size() - 1);
-        return new Token(TokenType.EOF, "", last.line, last.column + last.text.length());
+        Token end = new Token(TokenType.EOF, "", last.line, last.column + last.text.length());
+        end.file = last.file;
+        return end;
     }
 
     private boolean accept(String punctuator) {

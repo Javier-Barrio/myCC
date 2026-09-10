@@ -22,7 +22,7 @@ public final class TokenConversion {
 
     public static final class ConversionException extends RuntimeException {
         public ConversionException(String message, Token token) {
-            super(message + ": '" + token.text + "' at " + token.line + ":" + token.column);
+            super(message + ": '" + token.text + "' at " + token.location());
         }
     }
 

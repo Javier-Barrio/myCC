@@ -121,6 +121,14 @@ public class CppTokenizer {
             this.column = column;
         }
 
+        /** {@code file:line:column}, or {@code line:column} for a token without a file. */
+        public String location() {
+            if (file.isEmpty()) {
+                return line + ":" + column;
+            }
+            return file + ":" + line + ":" + column;
+        }
+
         @Override
         public String toString() {
             return type + "(" + text + ") @" + line + ":" + column;
@@ -141,8 +149,19 @@ public class CppTokenizer {
     }
 
     public static final class LexException extends RuntimeException {
-        public LexException(String message, int line, int column) {
-            super(message + " at " + line + ":" + column);
+        public LexException(String message, String file, int line, int column) {
+            super(message + " at " + location(file, line, column));
+        }
+
+        public LexException(String message, Token at) {
+            super(message + " at " + at.location());
+        }
+
+        private static String location(String file, int line, int column) {
+            if (file.isEmpty()) {
+                return line + ":" + column;
+            }
+            return file + ":" + line + ":" + column;
         }
     }
 
@@ -349,6 +368,10 @@ public class CppTokenizer {
         return true;
     }
 
+    private LexException error(String message, int line, int column) {
+        return new LexException(message, file, line, column);
+    }
+
     private boolean active() {
         if (groups.isEmpty()) {
             return true;
@@ -373,7 +396,7 @@ public class CppTokenizer {
             }
             if (t.type == TokenType.EOF && !groups.isEmpty()) {
                 Token open = groups.peek().at;
-                throw new LexException("unterminated #if", open.line, open.column);
+                throw error("unterminated #if", open.line, open.column);
             }
             t.spaceBefore = separated;
             t.file = file;
@@ -505,7 +528,7 @@ public class CppTokenizer {
             }
             advance();
         }
-        throw new LexException("Unterminated block comment", startLine, startCol);
+        throw error("Unterminated block comment", startLine, startCol);
     }
 
     // ---- #include ---------------------------------------------------------------------------------
@@ -524,7 +547,7 @@ public class CppTokenizer {
         char close = open == '"' ? '"' : '>';
         boolean quoted = open == '"';
         if (open != '"' && open != '<') {
-            throw new LexException("expected \"file\" or <file> after #include", hash.line, hash.column);
+            throw error("expected \"file\" or <file> after #include", hash.line, hash.column);
         }
         advance();
         int start = pos;
@@ -532,7 +555,7 @@ public class CppTokenizer {
             advance();
         }
         if (peek() != close) {
-            throw new LexException("expected \"file\" or <file> after #include", hash.line, hash.column);
+            throw error("expected \"file\" or <file> after #include", hash.line, hash.column);
         }
         String name = src.substring(start, pos);
         advance();
@@ -541,14 +564,14 @@ public class CppTokenizer {
         }
         String spelled = open + name + close;
         if (headers == null) {
-            throw new LexException("no headers are available to #include " + spelled, hash.line, hash.column);
+            throw error("no headers are available to #include " + spelled, hash.line, hash.column);
         }
         if (depth >= MAX_INCLUDE_DEPTH) {
-            throw new LexException("#include nested too deeply at " + spelled, hash.line, hash.column);
+            throw error("#include nested too deeply at " + spelled, hash.line, hash.column);
         }
         Optional<Header> header = headers.find(name, quoted, file);
         if (header.isEmpty()) {
-            throw new LexException("header not found: " + spelled, hash.line, hash.column);
+            throw error("header not found: " + spelled, hash.line, hash.column);
         }
         String text = splice(header.get().text());
         CppTokenizer nested = new CppTokenizer(text, header.get().name(), headers, macroTable, depth + 1);
@@ -639,7 +662,7 @@ public class CppTokenizer {
             case "elif", "elifdef", "elifndef" -> {
                 Group group = top(name);
                 if (group.elseSeen) {
-                    throw new LexException("#elif after #else", name.line, name.column);
+                    throw error("#elif after #else", name.line, name.column);
                 }
                 boolean evaluate = group.parentActive && !group.taken;
                 boolean holds = false;
@@ -652,7 +675,7 @@ public class CppTokenizer {
             case "else" -> {
                 Group group = top(name);
                 if (group.elseSeen) {
-                    throw new LexException("#else after #else", name.line, name.column);
+                    throw error("#else after #else", name.line, name.column);
                 }
                 group.elseSeen = true;
                 group.active = group.parentActive && !group.taken;
@@ -672,7 +695,7 @@ public class CppTokenizer {
     private Group top(Token name) {
         if (groups.isEmpty()) {
             String directive = name.text.startsWith("elif") ? "#elif" : "#" + name.text;
-            throw new LexException(directive + " without #if", name.line, name.column);
+            throw error(directive + " without #if", name.line, name.column);
         }
         return groups.peek();
     }
@@ -686,7 +709,7 @@ public class CppTokenizer {
         }
         boolean oneName = rest.size() == 1 && isName(rest.get(0));
         if (!oneName) {
-            throw new LexException("expected a macro name after #" + name.text, name.line, name.column);
+            throw error("expected a macro name after #" + name.text, name.line, name.column);
         }
         boolean defined = macroTable.containsKey(rest.get(0).text);
         if (name.text.endsWith("ndef")) {
@@ -735,13 +758,13 @@ public class CppTokenizer {
                 j++;
             }
             if (j >= rest.size() || !isName(rest.get(j))) {
-                throw new LexException("expected an identifier after 'defined'", t.line, t.column);
+                throw error("expected an identifier after 'defined'", t.line, t.column);
             }
             boolean defined = macroTable.containsKey(rest.get(j).text);
             j++;
             if (paren) {
                 if (j >= rest.size() || !isPunctuator(rest.get(j), ")")) {
-                    throw new LexException("expected ')' after 'defined(" + rest.get(j - 1).text + "'", t.line, t.column);
+                    throw error("expected ')' after 'defined(" + rest.get(j - 1).text + "'", t.line, t.column);
                 }
                 j++;
             }
@@ -1003,7 +1026,7 @@ public class CppTokenizer {
     private Token scanString(int start, int startLine, int startCol) {
         while (true) {
             if (pos >= src.length() || peek() == '\n') {
-                throw new LexException("Unterminated string literal", startLine, startCol);
+                throw error("Unterminated string literal", startLine, startCol);
             }
             char c = advance();
             if (c == '\\' && pos < src.length()) {
@@ -1019,7 +1042,7 @@ public class CppTokenizer {
     private Token scanChar(int start, int startLine, int startCol) {
         while (true) {
             if (pos >= src.length() || peek() == '\n') {
-                throw new LexException("Unterminated character literal", startLine, startCol);
+                throw error("Unterminated character literal", startLine, startCol);
             }
             char c = advance();
             if (c == '\\' && pos < src.length()) {
@@ -1039,14 +1062,14 @@ public class CppTokenizer {
             advance();
         }
         if (pos >= src.length()) {
-            throw new LexException("Unterminated raw string literal", startLine, startCol);
+            throw error("Unterminated raw string literal", startLine, startCol);
         }
         String delim = src.substring(delimStart, pos);
         String terminator = ")" + delim + "\"";
         advance(); // consume '('
         int closeIdx = src.indexOf(terminator, pos);
         if (closeIdx < 0) {
-            throw new LexException("Unterminated raw string literal", startLine, startCol);
+            throw error("Unterminated raw string literal", startLine, startCol);
         }
         while (pos < closeIdx + terminator.length()) {
             advance();
