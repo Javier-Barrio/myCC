@@ -73,25 +73,27 @@ define @f() -> void {
   ptr %t58
   u32 %t59
   i32 %t60
-  i32 %t61
-  u32 %t62
+  i64 %t61
+  i32 %t62
   u32 %t63
-  ptr %t64
+  u32 %t64
   ptr %t65
   ptr %t66
   ptr %t67
-  u32 %t68
-  i32 %t69
-  u8 %t70
-  u8 %t71
+  ptr %t68
+  u32 %t69
+  i32 %t70
+  i64 %t71
   u8 %t72
-  ptr %t73
-  ptr %t74
-  u64 %t75
-  u64 %t76
+  u8 %t73
+  u8 %t74
+  ptr %t75
+  ptr %t76
   u64 %t77
   u64 %t78
   u64 %t79
+  u64 %t80
+  u64 %t81
 .entry:
   %t0 = addrof %p
   mov.u64 %pp, %t0
@@ -101,19 +103,19 @@ define @f() -> void {
   mov.s32 %t3, 3
   mov.u32 %t4, %t3
   %t5 = load.u32 %t2
-  %t5 = and.u64 %t5, -241
-  %t6 = and.u64 %t4, 15
-  %t6 = shl.u64 %t6, 4
-  %t5 = or.u64 %t5, %t6
+  %t5 = and.u32 %t5, -241
+  %t6 = and.u32 %t4, 15
+  %t6 = shl.u32 %t6, 4
+  %t5 = or.u32 %t5, %t6
   store.32 %t2, %t5
   %t7 = wadd.u64 %t1, 3
   mov.s32 %t8, 1
   %t9 = ne %t8, 0
   %t10 = load.u8 %t7
-  %t10 = and.u64 %t10, -17
-  %t11 = and.u64 %t9, 1
-  %t11 = shl.u64 %t11, 4
-  %t10 = or.u64 %t10, %t11
+  %t10 = and.u8 %t10, -17
+  %t11 = and.u8 %t9, 1
+  %t11 = shl.u8 %t11, 4
+  %t10 = or.u8 %t10, %t11
   store.8 %t7, %t10
   %t12 = addrof %p
   %t13 = wadd.u64 %t12, 0
@@ -152,64 +154,66 @@ define @f() -> void {
   mov.s32 %t39, 15
   mov.u32 %t40, %t39
   %t41 = load.u32 %t38
-  %t41 = and.u64 %t41, -16
-  %t42 = and.u64 %t40, 15
-  %t42 = shl.u64 %t42, 0
-  %t41 = or.u64 %t41, %t42
+  %t41 = and.u32 %t41, -16
+  %t42 = and.u32 %t40, 15
+  %t42 = shl.u32 %t42, 0
+  %t41 = or.u32 %t41, %t42
   store.32 %t38, %t41
   %t43 = addrof %b
   %t44 = wadd.u64 %t43, 0
   %t45 = addrof %b
   %t46 = wadd.u64 %t45, 0
   %t47 = load.u32 %t46
-  %t48 = lshr.u64 %t47, 0
-  %t48 = and.u64 %t48, 15
+  %t48 = lshr.u32 %t47, 0
+  %t48 = and.u32 %t48, 15
   mov.s32 %t49, %t48
   mov.s32 %t50, 1
   %t51 = add.s32 %t49, %t50
   mov.u32 %t52, %t51
   %t53 = load.u32 %t44
-  %t53 = and.u64 %t53, -241
-  %t54 = and.u64 %t52, 15
-  %t54 = shl.u64 %t54, 4
-  %t53 = or.u64 %t53, %t54
+  %t53 = and.u32 %t53, -241
+  %t54 = and.u32 %t52, 15
+  %t54 = shl.u32 %t54, 4
+  %t53 = or.u32 %t53, %t54
   store.32 %t44, %t53
   %t55 = addrof %b
   %t56 = wadd.u64 %t55, 0
   %t57 = addrof %b
   %t58 = wadd.u64 %t57, 0
   %t59 = load.u32 %t58
-  %t60 = shl.s64 %t59, 36
-  %t60 = ashr.s64 %t60, 44
-  %t61 = sub.s32 0, %t60
-  %t62 = load.u32 %t56
-  %t62 = and.u64 %t62, -268435201
-  %t63 = and.u64 %t61, 1048575
-  %t63 = shl.u64 %t63, 8
-  %t62 = or.u64 %t62, %t63
-  store.32 %t56, %t62
-  %t64 = addrof %b
-  %t65 = wadd.u64 %t64, 3
-  %t66 = addrof %b
-  %t67 = wadd.u64 %t66, 0
-  %t68 = load.u32 %t67
-  %t69 = shl.s64 %t68, 36
-  %t69 = ashr.s64 %t69, 44
-  %t70 = ne %t69, 0
-  %t71 = load.u8 %t65
-  %t71 = and.u64 %t71, -17
-  %t72 = and.u64 %t70, 1
-  %t72 = shl.u64 %t72, 4
-  %t71 = or.u64 %t71, %t72
-  store.8 %t65, %t71
-  mov.u64 %t73, 0
-  %t74 = wadd.u64 %t73, 8
-  mov.s64 %o, %t74
-  mov.u64 %t75, 12
-  mov.u64 %t76, 4
-  %t77 = wadd.u64 %t75, %t76
+  %t61 = shl.s64 %t59, 36
+  %t61 = ashr.s64 %t61, 44
+  mov.s32 %t60, %t61
+  %t62 = sub.s32 0, %t60
+  %t63 = load.u32 %t56
+  %t63 = and.u32 %t63, -268435201
+  %t64 = and.u32 %t62, 1048575
+  %t64 = shl.u32 %t64, 8
+  %t63 = or.u32 %t63, %t64
+  store.32 %t56, %t63
+  %t65 = addrof %b
+  %t66 = wadd.u64 %t65, 3
+  %t67 = addrof %b
+  %t68 = wadd.u64 %t67, 0
+  %t69 = load.u32 %t68
+  %t71 = shl.s64 %t69, 36
+  %t71 = ashr.s64 %t71, 44
+  mov.s32 %t70, %t71
+  %t72 = ne %t70, 0
+  %t73 = load.u8 %t66
+  %t73 = and.u8 %t73, -17
+  %t74 = and.u8 %t72, 1
+  %t74 = shl.u8 %t74, 4
+  %t73 = or.u8 %t73, %t74
+  store.8 %t66, %t73
+  mov.u64 %t75, 0
+  %t76 = wadd.u64 %t75, 8
+  mov.s64 %o, %t76
+  mov.u64 %t77, 12
   mov.u64 %t78, 4
   %t79 = wadd.u64 %t77, %t78
-  mov.u64 %s, %t79
+  mov.u64 %t80, 4
+  %t81 = wadd.u64 %t79, %t80
+  mov.u64 %s, %t81
   ret
 }
