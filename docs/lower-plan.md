@@ -34,10 +34,9 @@ define @f(i32 %c, ptr %s) -> i32 {
 ## Decision: one direct pass, values carry their C type while being lowered
 
 Alternatives considered: (a) lower to a typed intermediate form and
-then "legalize" it into the register machine's classes and canonical
-form; (b) one pass whose working value is a TAC variable **plus the C
-type it holds**, so that canonical form and classes are decided locally
-at each node. We chose (b):
+then "legalize" it into the register machine's widths; (b) one pass
+whose working value is a TAC variable **plus the C type it holds**, so
+that the modifier of every instruction is decided locally at each node. We chose (b):
 
 1. [ ] **Every decision is local.** Whether a `wadd` needs a mask, whether
    an `int` to `long` needs a sign extension after its `mov`, whether a
@@ -45,9 +44,9 @@ at each node. We chose (b):
    type and the node's C type, both of which the tree already carries.
    There is nothing to infer across nodes.
 2. [ ] **Canonical form is an invariant of the working value.** A `Val(var,
-   type)` promises that `var` holds `type` canonically. Nodes that can
-   break the promise restore it before returning; every other node
-   inherits it. That is a rule per node kind, not a pass.
+   type)` promises that `var` holds `type` extended as the type implies,
+   and every instruction `Lower` emits keeps that true by construction,
+   since the instruction that writes a value extends it.
 3. [ ] **No second IR to maintain**, and the TAC printer is the pass's
    only debugging aid, which is enough because the output of every node is
    a few instructions next to each other.
@@ -90,7 +89,7 @@ therefore reachable from the entry or from a `goto`.
 org.jbm.cc.lower
   Lower          the unit: names, string literals, globals and declarations in order, then each function
   Builder        the function under construction: blocks, the current block or closed, variables, emit
-  Val            (Var var, CType type): a canonical scalar, or a pointer to an aggregate
+  Val            (Var var, CType type): a scalar held as its type implies, or a pointer to an aggregate
   Place          sealed: Variable(Var, CType) | Memory(Var pointer, CType type, Optional<BitField> bits, boolean isVolatile)
   ExprLower      TVisitor<Val>: value(Rvalue); place(Lvalue); read(Place); write(Place, Val); pointer(Place);
                  initialize(Var pointer, TInit) for locals and compound literals
@@ -104,40 +103,36 @@ target descriptor of the module comes from `types.target()`. There is
 no data lowering: a global's `TInit` items are already the TAC's items
 (see Data).
 
-## Types, classes and canonical form
+## Types, classes and modifiers
 
 `tacType(CType)` maps a C type to a TAC type: an integer to `iN`/`uN` by
 `width` and `isSigned` (`bool` to `u8`, an enum to its underlying type, a
 `_BitInt(N)` to the integer of its storage width); `float`, `double`,
 `long double` to `f32`, `f64`, `f80` (or `f64` on a target without
-`x`); every pointer to `ptr`; a struct or union to its named `%tag` type,
-arrays to `[N x elem]`. The **class** of a scalar is the TAC's: 8-, 16- and 32-bit
-integers `w`, 64-bit `l`, pointers the target's pointer class, `f32` `s`,
-`f64` `d`, `f80` `x`.
+`x87`); every pointer to `ptr`; a struct or union to its named `%tag`
+type, arrays to `[N x elem]`. Integers and pointers are the integer
+class, floats the floating class.
 
-| C type | on x86-64 | on ILP32 |
-|---|---|---|
-| `bool`, `char`, `short`, `int`, enums, `_BitInt(N)` with `N <= 32` | `w` | `w` |
-| `long` | `l` | `w` |
-| `long long`, `_BitInt(N)` with `32 < N <= 64` | `l` | `l` |
-| pointers, `nullptr_t` | `l` | `w` |
+`mod(CType)` gives the modifier of an operation performed in a C type:
+for an integer type narrower than the register, the TAC integer type of
+its width and signedness (`.s32` for `int`, `.u8` for `unsigned char`,
+`.u32` for a pointer on a 32-bit target); for a 64-bit integer or a
+pointer on a 64-bit target, none; for a floating type, its precision
+(`.64` for `double`).
 
-A value of type `t` in its class is **canonical** when it is
-sign-extended from `width(t)` to the class width if `t` is signed, and
-zero-extended if unsigned. For a type as wide as its class that says
-nothing; for `char`, `short`, `bool`, narrow enums and `_BitInt`, it is
-a real condition. `canon(var, t)` emits what restores it:
+Every value is held extended as its type implies, and every instruction
+`Lower` emits keeps that true by construction: a `.sN`/`.uN` result is
+extended by the instruction, a load by its `s`/`u`, a comparison result
+is 0 or 1. Because C promotes every operand of arithmetic to at least
+`int`, the typed tree's `Arithmetic`, `Shift` and `Unary` nodes have
+`int` or wider types and get `.s32`, `.u32` or no modifier. The one
+type whose width is not a register width, `_BitInt(N)`, is computed at
+its storage width and then made canonical for `N` by `canon`:
 
 ```
-signed t, width N < class width:    %v = shl %v, C-N ; %v = ashr %v, C-N
-unsigned t, width N < class width:  %v = and %v, 2^N - 1
-otherwise:                          nothing
+signed, N < storage width:    %v = shl %v, 64-N ; %v = ashr %v, 64-N
+unsigned, N < storage width:  %v = and %v, 2^N - 1
 ```
-
-Because C promotes every operand of arithmetic to at least `int`, the
-typed tree's `Arithmetic`, `Shift`, `Comparison` and `Unary` nodes have
-`int` or wider types except for `_BitInt`, so `canon` follows arithmetic
-only there. Everywhere else it appears at conversions and bit-fields.
 
 ## Expressions
 
@@ -147,8 +142,8 @@ instruction wants them in the other order (`Gt`), only the operands are
 swapped. The sequences below are what each node kind emits; `%r` is a
 fresh variable of the node's TAC type unless stated.
 
-**Constants.** `IntConst`: `mov %r, N`, canonical because the typer
-converted it. `FloatConst`: `mov` of the immediate. `NullptrConst`: `mov
+**Constants.** `IntConst`: `mov %r, N`, the immediate already being the
+value the typer converted. `FloatConst`: `mov` of the immediate. `NullptrConst`: `mov
 %r, 0` in a `ptr`. `AddrConst(base, offset)`: `%r = addrof @name`
 then, if the offset is not zero, `%r = wadd %r, offset`; a null base is
 `mov %r, offset`.
@@ -165,12 +160,11 @@ of a `Memory` place, or `addrof` of a `Variable` place.
 
 **Reads and writes.** `read(Place)`: a `Variable` is the variable; a
 scalar `Memory` of type `t` is `%r = load.sN %p` or `load.uN` by
-`isSigned(t)` and `N = width(t)`, or `load.fN`, canonical by
-construction; a bit-field `(bitOffset, width)` of declared type `t`:
+`isSigned(t)` and `N = width(t)`, or `load.fN`, extended by the load; a bit-field `(bitOffset, width)` of declared type `t`:
 `load.uN` the storage unit, then for an unsigned field `lshr` by
 `bitOffset` and `and` with `2^width - 1`, for a signed one `shl` by `C -
 bitOffset - width` then `ashr` by `C - width`, which lands the value
-canonical for `t`; an aggregate `Memory` is its pointer. `write(Place,
+extended for `t`; an aggregate `Memory` is its pointer. `write(Place,
 Val)`: a `Variable` is `mov %x, %v`; a scalar `Memory` is `store.N %p,
 %v`; a bit-field: `load.uN` the unit, `and` it with the inverted placed
 mask, `and` the value with `2^width - 1`, `shl` it by `bitOffset`, `or`,
@@ -184,35 +178,37 @@ type `t`:
 |---|---|
 | `LvalueToRvalue` | `read(place(operand))` |
 | `ArrayDecay`, `FunctionDecay` | `pointer(place(operand))`, or `addrof @f` for a function |
-| `IntToInt`, same class | `mov %r, %v` into a variable of `t`'s type, then nothing when `f`'s canonical form implies `t`'s (`t` wider than `f` and `f` unsigned or `t` signed, or `t` and `f` of one width and signedness), otherwise `canon(%r, t)` |
-| `IntToInt`, `w` to `l` | `mov %r, %v` (zero-extends), then `shl`/`ashr` by `L - W` when `f` is signed |
-| `IntToInt`, `l` to `w` | `mov %r, %v` (the low `W` bits), then `canon(%r, t)` |
-| `IntToFloat` | `i2f` or `u2f` by `isSigned(f)` |
-| `FloatToInt` | `f2i` or `f2u` by `isSigned(t)`, then `canon(%r, t)` |
-| `FloatToFloat` | `fcvt`, or `mov` when the classes agree |
-| `ToBool` | `%r = ne %v, 0` or `fne %v, 0.0`, a `u8` holding 0 or 1 |
+| `IntToInt` | nothing when `t` is 64 bits wide, or `t` is wider than `f` and `f` is unsigned, or `t` is wider than `f` and both are signed, or `t` and `f` have one width and signedness; otherwise `mov.sN`/`mov.uN` by `t`'s signedness and width |
+| `IntToFloat` | `i2f.P` or `u2f.P` by `isSigned(f)`, `P` the precision of `t` |
+| `FloatToInt` | `f2i.P` or `f2u.P` by `isSigned(t)`, `P` the precision of `f`; a `_BitInt` result gets `canon` |
+| `FloatToFloat` | `fcvt.P` when `t` is narrower than `f`; nothing when wider or equal |
+| `ToBool` | `%r = ne %v, 0` or `fne %v, 0.0`; nothing when the operand is a comparison, a logical operator or `!`, which already yield 0 or 1 |
 | `ToVoid` | evaluate the operand, return no value |
-| `PtrToPtr`, `NullToPtr` | nothing: a `ptr` is a `ptr` |
-| `IntToPtr`, `PtrToInt` | as `IntToInt` between the integer's type and an unsigned integer of the pointer width, the `ptr` itself needing no instruction |
+| `PtrToPtr`, `NullToPtr` | nothing, a `ptr` is a `ptr`; `NullToPtr` of a constant is `mov %r, 0` |
+| `IntToPtr`, `PtrToInt` | as `IntToInt` between the integer's type and an unsigned integer of the pointer width |
 
-The `IntToInt` rule covers the cases a simpler rule misses: `short` to
-`unsigned short` is the same width and needs a mask, `signed char` to
-`unsigned short` is wider and still needs a mask because the value may
-be negative, and `unsigned char` to `short` needs nothing.
+The `IntToInt` rule is the whole story of extension: a value is already
+held the way its type implies, so only a conversion whose destination
+needs different bits above its width costs an instruction. `signed char`
+to `unsigned short` needs `mov.u16` because a negative source is
+sign-extended and the destination must be zero-extended; `unsigned char`
+to `short` needs nothing because the source is zero-extended and
+non-negative; `int` to `unsigned` needs `mov.u32`; `int` to `unsigned
+long` needs nothing, since the sign extension is the 64-bit value.
 
 **Arithmetic** (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `BitAnd`, `BitOr`,
 `BitXor`), operands already of the node's type: `wadd`/`wsub`/`wmul` when
 the type is unsigned, `add`/`sub`/`mul` when signed, `fadd`/`fsub`/`fmul`
 for floating; `sdiv`/`udiv`/`srem`/`urem` by signedness, `fdiv`;
 `and`/`or`/`xor`. `PtrAdd(p, i)`: the index is already `ptrdiff_t`, which
-is in the pointer class, so `%o = wmul %i, size` unless the element size
-is 1, then `%r = wadd %p, %o`. `PtrDiff(a, b)`: `wsub`, then `sdiv` by the
+so `%o = wmul %i, size` unless the element size is 1, then `%r = wadd
+%p, %o`, both with the pointer's modifier. `PtrDiff(a, b)`: `wsub`, then `sdiv` by the
 element size unless it is 1. `_BitInt` results get `canon`.
 
 **Shifts.** `Shl`: `shl`; `Shr`: `ashr` when the left type is signed,
-`lshr` otherwise. The right operand was promoted on its own by the typer
-and is `int` or `unsigned` in `w`; when the left is in `l` it is
-`mov`ed into an `l` first. `_BitInt` results get `canon`.
+`lshr` otherwise, with the left type's modifier. The right operand was
+promoted on its own by the typer and is used as it is. `_BitInt` results
+get `canon`.
 
 **Comparisons**, operands of one type, the result a `u8`: `eq`, `ne`;
 `slt`/`sle` when the operand type is signed, `ult`/`ule` when unsigned or
@@ -241,7 +237,7 @@ variable; an aggregate as its pointer. `DirectCall` emits `call sig
 @name (...)`, `IndirectCall` evaluates the callee to a pointer variable
 and emits `icall sig %f (...)`; `sig` is the function type of the callee
 symbol or of the pointer's target. A scalar result lands in a fresh
-variable of the result type, canonical because the callee returned its
+variable of the result type, extended because the callee returned its
 declared type. An aggregate result needs a destination: if the call is
 the value of a `Materialize`, `addrof` of that node's variable; otherwise
 `addrof` of a fresh anonymous aggregate variable the builder adds; the
