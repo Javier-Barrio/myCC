@@ -5,8 +5,10 @@ import org.jbm.cc.tac.Function;
 import org.jbm.cc.tac.Instr;
 import org.jbm.cc.tac.Module;
 import org.jbm.cc.tac.Operand;
+import org.jbm.cc.tac.StructDef;
 import org.jbm.cc.tac.Symbol;
 import org.jbm.cc.tac.TacVisitor;
+import org.jbm.cc.tac.TargetDesc;
 import org.jbm.cc.tac.Type;
 import org.jbm.cc.tac.Var;
 
@@ -44,10 +46,47 @@ public class VM implements TacVisitor<Void> {
 
     Memory memory = new Memory();
 
+    // The target the loaded modules were compiled for, and their
+    // structure layouts by name: what a store of a pointer or of an
+    // aggregate needs to know its size.
+    private TargetDesc target;
+    private final LinkedHashMap<String, StructDef> structs = new LinkedHashMap<>();
+
     private void load(Module mod) {
+        if (target != null && !target.equals(mod.target)) {
+            throw new IllegalStateException("module for " + mod.target.name() + " loaded into a VM running " + target.name());
+        }
+        target = mod.target;
+        for (var s : mod.structs) {
+            structs.put(s.name(), s);
+        }
         for (var s : mod.symbols()) {
             symbolTable.symbols.put(s.name(), s);
         }
+    }
+
+    // The size in bytes of a memory type, as the compiler laid it out.
+    long size(Type t) {
+        if (t instanceof Type.Int i) {
+            return i.width() / 8;
+        }
+        if (t instanceof Type.Float f) {
+            return f.width() <= 64 ? f.width() / 8 : 16;
+        }
+        if (t instanceof Type.Ptr) {
+            return target.pointerWidth() / 8;
+        }
+        if (t instanceof Type.Array a) {
+            return size(a.element()) * a.count();
+        }
+        if (t instanceof Type.Struct st) {
+            StructDef def = structs.get(st.name());
+            if (def == null) {
+                throw new IllegalStateException("unknown structure %" + st.name());
+            }
+            return def.size();
+        }
+        throw new IllegalStateException("no size for " + t.spelling());
     }
 
     sealed interface Value permits IntValue, FloatValue {
@@ -386,7 +425,23 @@ public class VM implements TacVisitor<Void> {
     }
 
     @Override
+    // The type on the instruction says what is written: an integer or
+    // pointer's bits, a floating value, or for an aggregate the bytes
+    // found at the pointer the value holds, or zeros for the immediate 0.
     public Void visit(Instr.Store i) {
+        long address = integer(i.ptr());
+        Type type = i.type();
+        if (type instanceof Type.Int t) {
+            memory.storeInt(address, t.width(), getInt(i.value()));
+        } else if (type instanceof Type.Ptr) {
+            memory.storeInt(address, target.pointerWidth(), getInt(i.value()));
+        } else if (type instanceof Type.Float f) {
+            memory.storeFloat(address, f.width(), getFloat(i.value()));
+        } else if (i.value() instanceof Operand.IntImm) {
+            memory.fill(address, size(type), (byte) 0);
+        } else {
+            memory.copy(address, integer((Var) i.value()), size(type));
+        }
         return null;
     }
 
