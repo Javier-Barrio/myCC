@@ -199,20 +199,49 @@ public class CppTokenizer {
     private int col = 1;
     private boolean atLineStart = true;
     private DirectiveState directiveState = DirectiveState.NONE;
-    private final Map<String, Token> macroTable = new LinkedHashMap<>();
+    private final Map<String, Token> macroTable;
+
+    // The conditional directives (6.10.1): each `#if`, `#ifdef` or
+    // `#ifndef` opens a group that its `#endif` closes. A group is active
+    // when its enclosing group is and the branch we are in was the first
+    // one whose condition held; tokens are emitted, macros defined and
+    // conditions evaluated only in active groups. Inactive groups are
+    // skipped by line without lexing them, looking only for the
+    // conditional directives that nest or close them.
+    private static final Set<String> CONDITIONALS = Set.of(
+            "if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif");
+
+    private static final class Group {
+        final Token at;
+        final boolean parentActive;
+        boolean taken;
+        boolean elseSeen;
+        boolean active;
+
+        Group(Token at, boolean parentActive) {
+            this.at = at;
+            this.parentActive = parentActive;
+        }
+    }
+
+    private final ArrayDeque<Group> groups = new ArrayDeque<>();
 
     public CppTokenizer(@NonNull String source) {
         this.src = splice(source);
+        this.macroTable = new LinkedHashMap<>();
     }
 
-    // Used to lex a lookahead slice (the rest of a #define line) without
+    // Used to lex a lookahead slice (the rest of a directive line) without
     // disturbing this tokenizer's own position; the slice is never at the
-    // start of a physical line.
-    private CppTokenizer(String source, int startLine, int startCol) {
+    // start of a physical line. A `#define`'s replacement list is lexed
+    // against an empty table, so its macro names stay unresolved until
+    // expansion; an `#if` condition shares this tokenizer's table.
+    private CppTokenizer(String source, int startLine, int startCol, Map<String, Token> macroTable) {
         this.src = source;
         this.line = startLine;
         this.col = startCol;
         this.atLineStart = false;
+        this.macroTable = macroTable;
     }
 
     private static String splice(String source) {
@@ -290,16 +319,37 @@ public class CppTokenizer {
         return true;
     }
 
-    private Token next() {
-        int before = pos;
-        skipWhitespaceAndComments();
-        boolean separated = pos > before;
-        Token t = scanToken();
-        t.spaceBefore = separated;
-        return t;
+    private boolean active() {
+        if (groups.isEmpty()) {
+            return true;
+        }
+        return groups.peek().active;
     }
 
-    private Token scanToken() {
+    private Token next() {
+        while (true) {
+            if (!active()) {
+                skipGroup();
+            }
+            int before = pos;
+            skipWhitespaceAndComments();
+            boolean separated = pos > before;
+            Token t = scanToken();
+            if (t == null) {
+                continue;
+            }
+            if (t.type == TokenType.EOF && !groups.isEmpty()) {
+                Token open = groups.peek().at;
+                throw new LexException("unterminated #if", open.line, open.column);
+            }
+            t.spaceBefore = separated;
+            return t;
+        }
+    }
+
+    // Null for a directive line this tokenizer executed itself, which
+    // leaves no token behind.
+    private @Nullable Token scanToken() {
         if (pos >= src.length()) {
             return new Token(TokenType.EOF, "", line, col);
         }
@@ -312,8 +362,13 @@ public class CppTokenizer {
 
         if (c == '#' && isLineStart && peek(1) != '#') {
             advance();
+            Token hash = new Token(TokenType.PUNCTUATOR, "#", startLine, startCol);
+            if (CONDITIONALS.contains(directiveNameAhead(pos))) {
+                conditional(hash);
+                return null;
+            }
             directiveState = DirectiveState.HASH;
-            return new Token(TokenType.PUNCTUATOR, "#", startLine, startCol);
+            return hash;
         }
 
         String prefix = matchLiteralPrefix();
@@ -391,26 +446,219 @@ public class CppTokenizer {
                     advance();
                 }
             } else if (c == '/' && peek(1) == '*') {
-                int startLine = line, startCol = col;
-                advance();
-                advance();
-                boolean closed = false;
-                while (pos < src.length()) {
-                    if (peek() == '*' && peek(1) == '/') {
-                        advance();
-                        advance();
-                        closed = true;
-                        break;
-                    }
-                    advance();
-                }
-                if (!closed) {
-                    throw new LexException("Unterminated block comment", startLine, startCol);
-                }
+                skipBlockComment();
             } else {
                 break;
             }
         }
+    }
+
+    private void skipBlockComment() {
+        int startLine = line;
+        int startCol = col;
+        advance();
+        advance();
+        while (pos < src.length()) {
+            if (peek() == '*' && peek(1) == '/') {
+                advance();
+                advance();
+                return;
+            }
+            advance();
+        }
+        throw new LexException("Unterminated block comment", startLine, startCol);
+    }
+
+    // ---- conditional directives -------------------------------------------------------------------
+
+    // The identifier that follows blanks at `from`, or "" if none; does
+    // not move.
+    private String directiveNameAhead(int from) {
+        int p = from;
+        while (p < src.length() && isBlank(src.charAt(p))) {
+            p++;
+        }
+        int start = p;
+        while (p < src.length() && isIdentifierPart(src.charAt(p))) {
+            p++;
+        }
+        return src.substring(start, p);
+    }
+
+    private static boolean isBlank(char c) {
+        return c == ' ' || c == '\t' || c == '\f' || c == 11;
+    }
+
+    // Consumes the rest of a line, including its new-line; a block
+    // comment is skipped whole, even across lines.
+    private void skipLine() {
+        while (pos < src.length()) {
+            char c = peek();
+            if (c == '\n') {
+                advance();
+                return;
+            }
+            if (c == '/' && peek(1) == '*') {
+                skipBlockComment();
+                continue;
+            }
+            advance();
+        }
+    }
+
+    // From the end of the directive line that made the group inactive,
+    // past every line up to the next conditional directive, which is left
+    // for scanToken to execute.
+    private void skipGroup() {
+        skipLine();
+        while (pos < src.length()) {
+            while (pos < src.length() && isBlank(peek())) {
+                advance();
+            }
+            if (peek() == '#' && peek(1) != '#' && CONDITIONALS.contains(directiveNameAhead(pos + 1))) {
+                atLineStart = true;
+                return;
+            }
+            skipLine();
+        }
+    }
+
+    // Executes a conditional directive whose `#` was just consumed,
+    // leaving the position at the end of its line.
+    private void conditional(Token hash) {
+        while (isBlank(peek())) {
+            advance();
+        }
+        Token name = scanIdentifier(line, col);
+        switch (name.text) {
+            case "if", "ifdef", "ifndef" -> {
+                boolean parentActive = active();
+                Group group = new Group(hash, parentActive);
+                if (parentActive) {
+                    group.taken = condition(name);
+                }
+                group.active = parentActive && group.taken;
+                groups.push(group);
+            }
+            case "elif", "elifdef", "elifndef" -> {
+                Group group = top(name);
+                if (group.elseSeen) {
+                    throw new LexException("#elif after #else", name.line, name.column);
+                }
+                boolean evaluate = group.parentActive && !group.taken;
+                boolean holds = false;
+                if (evaluate) {
+                    holds = condition(name);
+                }
+                group.taken = group.taken || holds;
+                group.active = evaluate && holds;
+            }
+            case "else" -> {
+                Group group = top(name);
+                if (group.elseSeen) {
+                    throw new LexException("#else after #else", name.line, name.column);
+                }
+                group.elseSeen = true;
+                group.active = group.parentActive && !group.taken;
+                group.taken = true;
+            }
+            case "endif" -> {
+                top(name);
+                groups.pop();
+            }
+            default -> throw new IllegalStateException(name.text);
+        }
+        while (pos < src.length() && peek() != '\n') {
+            advance();
+        }
+    }
+
+    private Group top(Token name) {
+        if (groups.isEmpty()) {
+            String directive = name.text.startsWith("elif") ? "#elif" : "#" + name.text;
+            throw new LexException(directive + " without #if", name.line, name.column);
+        }
+        return groups.peek();
+    }
+
+    // The condition of an `if`-family directive at `pos`: a macro name for
+    // the `def` forms, otherwise a constant expression.
+    private boolean condition(Token name) {
+        List<Token> rest = scanConditionTokens(pos);
+        if (!name.text.endsWith("def")) {
+            return evaluate(rest, name);
+        }
+        boolean oneName = rest.size() == 1 && isName(rest.get(0));
+        if (!oneName) {
+            throw new LexException("expected a macro name after #" + name.text, name.line, name.column);
+        }
+        boolean defined = macroTable.containsKey(rest.get(0).text);
+        if (name.text.endsWith("ndef")) {
+            return !defined;
+        }
+        return defined;
+    }
+
+    private static boolean isName(Token t) {
+        return switch (t.type) {
+            case IDENTIFIER, KEYWORD, OBJECT_MACRO, CALL_MACRO -> true;
+            default -> false;
+        };
+    }
+
+    // `defined X` and `defined(X)` become 1 or 0, the rest is macro
+    // expanded, and the result is evaluated as a constant expression.
+    private boolean evaluate(List<Token> rest, Token name) {
+        List<Token> rewritten = rewriteDefined(rest);
+        TokenSet set = TokenSet.fromTokens(rewritten);
+        set.macros = macroTable;
+        TokenSet expanded = new Scanner().expand(set);
+        List<Token> tokens = new ArrayList<>();
+        for (CppToken t : expanded.tokens) {
+            if (t.token.type != TokenType.EOF) {
+                tokens.add(t.token);
+            }
+        }
+        return PpExpr.evaluate(tokens, name).isTrue();
+    }
+
+    private List<Token> rewriteDefined(List<Token> rest) {
+        List<Token> out = new ArrayList<>();
+        int i = 0;
+        while (i < rest.size()) {
+            Token t = rest.get(i);
+            boolean isDefined = t.type == TokenType.IDENTIFIER && t.text.equals("defined");
+            if (!isDefined) {
+                out.add(t);
+                i++;
+                continue;
+            }
+            int j = i + 1;
+            boolean paren = j < rest.size() && isPunctuator(rest.get(j), "(");
+            if (paren) {
+                j++;
+            }
+            if (j >= rest.size() || !isName(rest.get(j))) {
+                throw new LexException("expected an identifier after 'defined'", t.line, t.column);
+            }
+            boolean defined = macroTable.containsKey(rest.get(j).text);
+            j++;
+            if (paren) {
+                if (j >= rest.size() || !isPunctuator(rest.get(j), ")")) {
+                    throw new LexException("expected ')' after 'defined(" + rest.get(j - 1).text + "'", t.line, t.column);
+                }
+                j++;
+            }
+            Token value = new Token(TokenType.PP_NUMBER, defined ? "1" : "0", t.line, t.column);
+            value.spaceBefore = t.spaceBefore;
+            out.add(value);
+            i = j;
+        }
+        return out;
+    }
+
+    private static boolean isPunctuator(Token t, String text) {
+        return t.type == TokenType.PUNCTUATOR && t.text.equals(text);
     }
 
     private static boolean isIdentifierStart(char c) {
@@ -557,7 +805,7 @@ public class CppTokenizer {
             return List.of();
         }
 
-        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos)).scan();
+        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos), new LinkedHashMap<>()).scan();
         List<List<Token>> arguments = new ArrayList<>();
         List<Token> current = new ArrayList<>();
         int depth = 0;
@@ -586,7 +834,7 @@ public class CppTokenizer {
     // a variadic "...", i.e. dropping the separating commas.
     private List<Token> scanParamListTokens(int from, int to) {
         String inner = src.substring(from, to);
-        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos)).scan();
+        List<Token> raw = new CppTokenizer(inner, line, col + (from - pos), new LinkedHashMap<>()).scan();
         List<Token> params = new ArrayList<>();
         for (Token t : raw) {
             if (t.type == TokenType.IDENTIFIER || (t.type == TokenType.PUNCTUATOR && t.text.equals("..."))) {
@@ -600,12 +848,22 @@ public class CppTokenizer {
     // consuming it from `this`) to capture a macro's replacement-list
     // tokens.
     private List<Token> scanExpansionTokens(int from) {
+        return scanRestOfLine(from, new LinkedHashMap<>());
+    }
+
+    // The rest of an `#if` line, with macro occurrences resolved against
+    // this tokenizer's table as in ordinary code.
+    private List<Token> scanConditionTokens(int from) {
+        return scanRestOfLine(from, macroTable);
+    }
+
+    private List<Token> scanRestOfLine(int from, Map<String, Token> table) {
         int end = from;
         while (end < src.length() && src.charAt(end) != '\n') {
             end++;
         }
         String rest = src.substring(from, end);
-        List<Token> raw = new CppTokenizer(rest, line, col + (from - pos)).scan();
+        List<Token> raw = new CppTokenizer(rest, line, col + (from - pos), table).scan();
         List<Token> expansion = new ArrayList<>();
         for (Token t : raw) {
             if (t.type != TokenType.EOF) {
