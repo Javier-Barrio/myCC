@@ -85,22 +85,62 @@ final class ExprLower implements TVisitor<Val> {
      */
     private Val convertInt(Val v, CType to, Type dest, Token at) {
         CType from = v.type();
-        if (typeMap.of(from).equals(dest)) return new Val(v.var(), to);
-        int wf = types.width(from), wt = types.width(to);
-        boolean sf = from.isInteger() && types.isSigned(from), st = types.isSigned(to);
+        if (typeMap.of(from).equals(dest)) {
+            return new Val(v.var(), to);
+        }
+        int fromClass = classWidth(from);
+        int toClass = classWidth(to);
+        if (fromClass == toClass && isImplied(from, to)) {
+            // The value is already canonical for the destination: the same
+            // variable, read at the new type.
+            return new Val(v.var(), to);
+        }
         Var r = b.temp(dest);
         b.emit(new Instr.Mov(r, v.var(), at));
-        int cf = classWidth(from), ct = classWidth(to);
-        if (cf < ct) {
-            if (sf) {
-                b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(ct - cf), at));
-                b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(ct - cf), at));
+        if (fromClass < toClass) {
+            // Widening across classes: mov zero-extends; a signed source is
+            // then sign-extended from the narrower class's width.
+            boolean fromSigned = isSignedInteger(from);
+            if (fromSigned) {
+                int shift = toClass - fromClass;
+                b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(shift), at));
+                b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(shift), at));
             }
             return new Val(r, to);
         }
-        boolean implied = cf == ct && (wt > wf && (!sf || st) || wt == wf && sf == st);
-        if (!implied) canon(r, to, at);
+        canon(r, to, at);
         return new Val(r, to);
+    }
+
+    // A pointer converts as an unsigned integer of its width.
+    private boolean isSignedInteger(CType t) {
+        if (!t.isInteger()) {
+            return false;
+        }
+        return types.isSigned(t);
+    }
+
+    /**
+     * Whether a value canonical for {@code from} is already canonical for
+     * {@code to}, both in one class: the destination is as wide as the
+     * class, or wider than the source and the sign cannot change, or of
+     * the same width and signedness.
+     */
+    private boolean isImplied(CType from, CType to) {
+        int fromWidth = types.width(from);
+        int toWidth = types.width(to);
+        boolean fromSigned = isSignedInteger(from);
+        boolean toSigned = isSignedInteger(to);
+        if (toWidth >= classWidth(to)) {
+            return true;
+        }
+        if (toWidth > fromWidth) {
+            return !fromSigned || toSigned;
+        }
+        if (toWidth == fromWidth) {
+            return fromSigned == toSigned;
+        }
+        return false;
     }
 
     Val value(@NonNull TExpr.Rvalue e) {

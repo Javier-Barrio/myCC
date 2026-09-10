@@ -10,36 +10,30 @@ define @apply(u32 %word, i32 %op, u32 %bit) -> u32 {
   u32 %t6
   u32 %t7
   u32 %t8
-  u32 %t9
+  i32 %t9
   i32 %t10
-  u32 %t11
-  i32 %t12
-  u32 %t13
 .entry:
   mov %t0, 1
   mov %t1, 31
-  mov %t2, %t1
-  %t3 = and %bit, %t2
-  %t4 = shl %t0, %t3
-  mov %mask, %t4
+  %t2 = and %bit, %t1
+  %t3 = shl %t0, %t2
+  mov %mask, %t3
   switch %op, .switch.done, [ 0 -> .case.0, 1 -> .case.1, 2 -> .case.2, 3 -> .case.3 ]
 .case.0:
-  %t5 = or %word, %mask
-  ret %t5
+  %t4 = or %word, %mask
+  ret %t4
 .case.1:
-  %t6 = xor %mask, -1
-  %t7 = and %word, %t6
-  ret %t7
+  %t5 = xor %mask, -1
+  %t6 = and %word, %t5
+  ret %t6
 .case.2:
-  %t8 = xor %word, %mask
-  ret %t8
+  %t7 = xor %word, %mask
+  ret %t7
 .case.3:
-  %t9 = and %word, %mask
-  mov %t10, 0
-  mov %t11, %t10
-  %t12 = ne %t9, %t11
-  mov %t13, %t12
-  ret %t13
+  %t8 = and %word, %mask
+  mov %t9, 0
+  %t10 = ne %t8, %t9
+  ret %t10
 .switch.done:
   ret %word
 }

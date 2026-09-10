@@ -10,104 +10,76 @@ define @f() -> void {
   f32 %fl
   f64 %d
   i32 %t0
-  i32 %t1
-  i32 %t2
-  u32 %t3
-  u32 %t4
-  i64 %t5
-  i64 %t6
-  u64 %t7
-  u64 %t8
-  i32 %t9
+  u32 %t1
+  i64 %t2
+  i64 %t3
+  u64 %t4
+  i32 %t5
+  u32 %t6
+  i32 %t7
+  i64 %t8
+  i64 %t9
   i32 %t10
-  u32 %t11
-  u32 %t12
+  i32 %t11
+  i32 %t12
   i32 %t13
-  i64 %t14
-  i64 %t15
-  i32 %t16
-  i32 %t17
-  i32 %t18
-  i32 %t19
-  i32 %t20
+  u64 %t14
+  u64 %t15
+  f32 %t16
+  f32 %t17
+  f64 %t18
+  f64 %t19
+  f64 %t20
   i32 %t21
-  i32 %t22
-  u64 %t23
-  u64 %t24
-  f32 %t25
-  f32 %t26
-  f64 %t27
-  f64 %t28
-  f64 %t29
-  i32 %t30
-  i32 %t31
-  u32 %t32
-  i32 %t33
-  i32 %t34
-  i32 %t35
-  i32 %t36
-  i32 %t37
-  i32 %t38
+  u32 %t22
+  i32 %t23
+  i32 %t24
 .entry:
-  mov %t0, %c
-  mov %t1, %s
-  %t2 = add %t0, %t1
-  mov %i, %t2
-  mov %t3, %i
-  %t4 = wsub %t3, %u
-  mov %u, %t4
-  mov %t5, %i
-  %t5 = shl %t5, 32
-  %t5 = ashr %t5, 32
-  %t6 = mul %l, %t5
-  mov %l, %t6
-  mov %t7, %l
-  %t8 = udiv %t7, %ul
-  mov %ul, %t8
-  mov %t9, %c
-  %t10 = srem %i, %t9
+  %t0 = add %c, %s
+  mov %i, %t0
+  %t1 = wsub %i, %u
+  mov %u, %t1
+  mov %t2, %i
+  %t2 = shl %t2, 32
+  %t2 = ashr %t2, 32
+  %t3 = mul %l, %t2
+  mov %l, %t3
+  %t4 = udiv %l, %ul
+  mov %ul, %t4
+  %t5 = srem %i, %c
+  mov %i, %t5
+  %t6 = and %u, %i
+  mov %u, %t6
+  mov %t7, 1
+  mov %t8, %t7
+  %t8 = shl %t8, 32
+  %t8 = ashr %t8, 32
+  %t9 = or %l, %t8
+  mov %l, %t9
+  %t10 = xor %uc, %c
   mov %i, %t10
-  mov %t11, %i
-  %t12 = and %u, %t11
-  mov %u, %t12
-  mov %t13, 1
+  mov %t11, %l
+  %t12 = shl %c, %t11
+  mov %i, %t12
+  mov %t13, 3
   mov %t14, %t13
-  %t14 = shl %t14, 32
-  %t14 = ashr %t14, 32
-  %t15 = or %l, %t14
-  mov %l, %t15
-  mov %t16, %uc
-  mov %t17, %c
-  %t18 = xor %t16, %t17
-  mov %i, %t18
-  mov %t19, %c
-  mov %t20, %l
-  %t21 = shl %t19, %t20
+  %t15 = lshr %ul, %t14
+  mov %ul, %t15
+  %t16 = i2f %i
+  %t17 = fadd %fl, %t16
+  %t18 = fcvt %t17
+  mov %d, %t18
+  %t19 = fcvt %fl
+  %t20 = fsub %d, %t19
+  mov %d, %t20
+  %t21 = sub 0, %c
   mov %i, %t21
-  mov %t22, 3
-  mov %t23, %t22
-  %t24 = lshr %ul, %t23
-  mov %ul, %t24
-  %t25 = i2f %i
-  %t26 = fadd %fl, %t25
-  %t27 = fcvt %t26
-  mov %d, %t27
-  %t28 = fcvt %fl
-  %t29 = fsub %d, %t28
-  mov %d, %t29
-  mov %t30, %c
-  %t31 = sub 0, %t30
-  mov %i, %t31
-  %t32 = wsub 0, %u
-  mov %u, %t32
-  mov %t33, %uc
-  %t34 = xor %t33, -1
-  mov %i, %t34
-  mov %t35, %c
-  mov %i, %t35
-  mov %t36, %c
-  mov %t37, %c
-  %t38 = mul %t36, %t37
-  mov %i, %t38
+  %t22 = wsub 0, %u
+  mov %u, %t22
+  %t23 = xor %uc, -1
+  mov %i, %t23
+  mov %i, %c
+  %t24 = mul %c, %c
+  mov %i, %t24
   ret
 }

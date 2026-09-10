@@ -48,12 +48,10 @@ define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
   u8 %t29
   u32 %t30
   u32 %t31
-  u32 %t32
-  u32 %t33
-  f32 %t34
-  f32 %t35
-  u32 %t36
-  u32 %t37
+  f32 %t32
+  f32 %t33
+  u32 %t34
+  u32 %t35
 .entry:
   %t0 = udiv %a, %b
   %t1 = urem %a, %b
@@ -115,13 +113,11 @@ define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
   %t29 = f2u %e
   %t29 = and %t29, 255
   mov %back, %t29
-  mov %t30, %r
-  %t31 = xor %q, %t30
-  mov %t32, %back
-  %t33 = xor %t31, %t32
-  mov %t34, 1.0
-  %t35 = fsub %f, %t34
-  %t36 = f2u %t35
-  %t37 = xor %t33, %t36
-  ret %t37
+  %t30 = xor %q, %r
+  %t31 = xor %t30, %back
+  mov %t32, 1.0
+  %t33 = fsub %f, %t32
+  %t34 = f2u %t33
+  %t35 = xor %t31, %t34
+  ret %t35
 }
