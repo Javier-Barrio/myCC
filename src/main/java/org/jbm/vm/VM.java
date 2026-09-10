@@ -17,9 +17,7 @@ import org.jbm.cc.tac.Var;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -38,19 +36,14 @@ public class VM implements TacVisitor<Void> {
     private Block block;
     private int pc;
 
-    // Per function frame: the caller's return point, the callee's
-    // registers, the addresses of its memory-resident variables (every
-    // aggregate, and every scalar named in an addrof), the stack pointer
-    // to restore, and the call being served.
-    private record Frame(Block block, int pc, LinkedHashMap<Var, Value> vars, LinkedHashMap<Var, Long> slots,
-                         long savedSp, Instr.Call caller) {}
+    // Per function frame: the caller's return point, the address of each
+    // of the callee's variables in the arena, the stack pointer to
+    // restore, and the call being served. Every variable, parameter or
+    // local, scalar or aggregate, has storage; a scalar is read and
+    // written at its type's width, which keeps it extended per its type.
+    private record Frame(Block block, int pc, LinkedHashMap<Var, Long> slots, long savedSp, Instr.Call caller) {}
 
     private final Deque<Frame> frames = new ArrayDeque<>();
-
-    private LinkedHashMap<Var, Value> vars() {
-        assert frames.peek() != null;
-        return frames.peek().vars();
-    }
 
     Memory memory = new Memory();
 
@@ -179,27 +172,21 @@ public class VM implements TacVisitor<Void> {
     record FloatValue(double value) implements Value {
     }
 
-    // A variable's value: from its slot in the arena when it has one,
-    // otherwise from the registers.
-    private Value value(Var v) {
+    // The address of a variable of the running function.
+    private long slot(Var v) {
         Long slot = frames.peek().slots().get(v);
-        if (slot != null) {
-            return loadVar(slot, v.type);
+        if (slot == null) {
+            throw new IllegalStateException(v + " is not a variable of the running function");
         }
-        Value value = vars().get(v);
-        if (value == null) {
-            throw new IllegalStateException("unbound variable " + v);
-        }
-        return value;
+        return slot;
+    }
+
+    private Value value(Var v) {
+        return loadVar(slot(v), v.type);
     }
 
     private void set(Var v, Value value) {
-        Long slot = frames.peek().slots().get(v);
-        if (slot != null) {
-            storeVar(slot, v.type, value);
-            return;
-        }
-        vars().put(v, value);
+        storeVar(slot(v), v.type, value);
     }
 
     private Value loadVar(long address, Type type) {
@@ -292,68 +279,36 @@ public class VM implements TacVisitor<Void> {
         return result;
     }
 
-    // The variables of a function that live in memory: every aggregate,
-    // and every scalar whose address is taken somewhere in it.
-    private final IdentityHashMap<Function, List<Var>> memoryResident = new IdentityHashMap<>();
-
-    private List<Var> memoryResident(Function function) {
-        List<Var> cached = memoryResident.get(function);
-        if (cached != null) {
-            return cached;
-        }
-        LinkedHashSet<Var> resident = new LinkedHashSet<>();
-        for (Var v : function.params) {
-            if (target.classOf(v.type) == RegClass.NONE) {
-                resident.add(v);
-            }
-        }
-        for (Var v : function.locals) {
-            if (target.classOf(v.type) == RegClass.NONE) {
-                resident.add(v);
-            }
-        }
-        for (Block b : function.blocks) {
-            for (Instr instr : b.instrs) {
-                if (instr instanceof Instr.AddrOfVar a) {
-                    resident.add(a.var());
-                }
-            }
-        }
-        List<Var> list = new ArrayList<>(resident);
-        memoryResident.put(function, list);
-        return list;
-    }
-
-    // A frame for a call: slots for the memory-resident variables, zeroed,
-    // and the parameters bound; an aggregate parameter's bytes are copied
-    // from the pointer the caller passed.
     private static final int MAX_FRAMES = 100_000;
 
+    // A frame for a call: a zeroed slot on the stack for every parameter
+    // and local, and the parameters bound; an aggregate parameter's bytes
+    // are copied from the pointer the caller passed.
     private Frame enter(Function function, List<Value> args, Block returnBlock, int returnPc, Instr.Call caller) {
         if (frames.size() >= MAX_FRAMES) {
             throw new IllegalStateException("stack overflow: " + MAX_FRAMES + " frames deep in @" + function.name);
         }
         long savedSp = memory.stackPointer();
         var slots = new LinkedHashMap<Var, Long>();
-        for (Var v : memoryResident(function)) {
+        List<Var> all = new ArrayList<>(function.params);
+        all.addAll(function.locals);
+        for (Var v : all) {
             long size = size(v.type);
             long slot = memory.push(size, align(v.type));
             memory.fill(slot, size, (byte) 0);
             slots.put(v, slot);
         }
-        Frame frame = new Frame(returnBlock, returnPc, new LinkedHashMap<>(), slots, savedSp, caller);
-        frames.push(frame);
         for (int i = 0; i < function.params.size(); i++) {
             Var p = function.params.get(i);
+            long slot = slots.get(p);
             if (target.classOf(p.type) == RegClass.NONE) {
                 long from = ((IntValue) args.get(i)).value();
-                memory.copy(slots.get(p), from, size(p.type));
+                memory.copy(slot, from, size(p.type));
             } else {
-                set(p, args.get(i));
+                storeVar(slot, p.type, args.get(i));
             }
         }
-        frames.pop();
-        return frame;
+        return new Frame(returnBlock, returnPc, slots, savedSp, caller);
     }
 
     private void jump(Block target) {
@@ -398,11 +353,7 @@ public class VM implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.AddrOfVar i) {
-        Long slot = frames.peek().slots().get(i.var());
-        if (slot == null) {
-            throw new IllegalStateException(i.var() + " has no address at " + i.token().location());
-        }
-        set(i.dst(), new IntValue(slot));
+        set(i.dst(), new IntValue(slot(i.var())));
         return null;
     }
 
