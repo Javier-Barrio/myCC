@@ -223,12 +223,11 @@ final class ExprLower implements TVisitor<Val> {
         }
         if (e instanceof TExpr.Deref d) return memory(value(d.pointer()).var(), d.type());
         if (e instanceof TExpr.Member m) {
+            // The member's address is always computed, offset 0 included:
+            // the TAC shows every step the expression implies.
             Var base = pointer(place(m.base()), m.token());
-            Var p = base;
-            if (m.member().offset() != 0) {
-                p = b.temp(Type.PTR);
-                b.emit(new Instr.Bin(Instr.BinOp.WADD, p, base, new Operand.IntImm(m.member().offset()), m.token()));
-            }
+            Var p = b.temp(Type.PTR);
+            b.emit(new Instr.Bin(Instr.BinOp.WADD, p, base, new Operand.IntImm(m.member().offset()), pointerMod(), m.token()));
             return new Place.Memory(p, m.type(), m.member().bits(), m.type().quals().isVolatile());
         }
         if (e instanceof TExpr.Materialize m) return materialize(m);
@@ -441,9 +440,11 @@ final class ExprLower implements TVisitor<Val> {
             return new Val(r, e.type());
         }
         Symbol base = e.base().get();
-        if (base instanceof Symbol.Function) lower.referenced(base);
+        if (base instanceof Symbol.Function) {
+            lower.referenced(base);
+        }
         b.emit(new Instr.AddrOfGlobal(r, names.of(base), e.token()));
-        if (e.offset() != 0) b.emit(new Instr.Bin(Instr.BinOp.WADD, r, r, new Operand.IntImm(e.offset()), e.token()));
+        b.emit(new Instr.Bin(Instr.BinOp.WADD, r, r, new Operand.IntImm(e.offset()), pointerMod(), e.token()));
         return new Val(r, e.type());
     }
 
@@ -565,18 +566,15 @@ final class ExprLower implements TVisitor<Val> {
         return types.size(((CType.Pointer) pointerType).target());
     }
 
-    // The index is already ptrdiff_t, in the pointer's class: scale it by
-    // the element size unless that is 1, then add.
+    // The index is already ptrdiff_t: it is scaled by the element size,
+    // 1 included, then added.
     @Override
     public Val visit(TExpr.PtrAdd e) {
         Val p = value(e.pointer());
         Val i = value(e.index());
-        Var offset = i.var();
         long size = elementSize(e.type());
-        if (size != 1) {
-            offset = b.temp(typeMap.of(i.type()));
-            b.emit(new Instr.Bin(Instr.BinOp.WMUL, offset, i.var(), new Operand.IntImm(size), mod(i.type()), e.token()));
-        }
+        Var offset = b.temp(typeMap.of(i.type()));
+        b.emit(new Instr.Bin(Instr.BinOp.WMUL, offset, i.var(), new Operand.IntImm(size), mod(i.type()), e.token()));
         Var r = b.temp(Type.PTR);
         b.emit(new Instr.Bin(Instr.BinOp.WADD, r, p.var(), offset, mod(e.type()), e.token()));
         return new Val(r, e.type());
@@ -589,10 +587,13 @@ final class ExprLower implements TVisitor<Val> {
         Var d = temp(e.type());
         b.emit(new Instr.Bin(Instr.BinOp.WSUB, d, l.var(), r.var(), mod(e.type()), e.token()));
         long size = elementSize(l.type());
-        if (size != 1) {
-            b.emit(new Instr.Bin(Instr.BinOp.SDIV, d, d, new Operand.IntImm(size), mod(e.type()), e.token()));
-        }
+        b.emit(new Instr.Bin(Instr.BinOp.SDIV, d, d, new Operand.IntImm(size), mod(e.type()), e.token()));
         return new Val(d, e.type());
+    }
+
+    /** The modifier of pointer arithmetic: none on a 64-bit target, {@code .u32} on a 32-bit one. */
+    private Type pointerMod() {
+        return mod(types.pointer(types.void_()));
     }
 
     /**
@@ -937,11 +938,8 @@ final class ExprLower implements TVisitor<Val> {
     void initialize(@NonNull Var ptr, @NonNull CType type, @NonNull TInit init, @NonNull Token at) {
         b.emit(new Instr.Zero(typeMap.of(type), ptr, at));
         for (TInit.Item item : init.items()) {
-            Var q = ptr;
-            if (item.offset() != 0) {
-                q = b.temp(Type.PTR);
-                b.emit(new Instr.Bin(Instr.BinOp.WADD, q, ptr, new Operand.IntImm(item.offset()), at));
-            }
+            Var q = b.temp(Type.PTR);
+            b.emit(new Instr.Bin(Instr.BinOp.WADD, q, ptr, new Operand.IntImm(item.offset()), pointerMod(), at));
             Val v = value(item.value());
             CType t = types.unqualified(v.type());
             write(new Place.Memory(q, t, item.bits(), t.quals().isVolatile()), v, at);

@@ -152,9 +152,11 @@ then, if the offset is not zero, `%r = wadd %r, offset`; a null base is
 `VarRef` of a local of aggregate type, a global, a static local or a
 string literal: `Memory` with `%p = addrof %x` or `addrof @name`.
 `Deref(p)`: `Memory` with the pointer's variable. `Member(base, m)`:
-`pointer(place(base))`, then `Memory` with `%q = wadd %p, m.offset()`
-(the same pointer when the offset is zero), `bits = m.bits()`, volatile
-if the member's type is. `Materialize` and `CompoundLit`: `Memory` with `addrof` of their
+`pointer(place(base))`, then `Memory` with `%q = wadd %p, m.offset()`,
+emitted for an offset of zero too, `bits = m.bits()`, volatile if the
+member's type is. `Lower` folds nothing: every step the expression
+implies is an instruction, and a consumer that wants to drop a `wadd 0`
+or a `wmul 1` may. `Materialize` and `CompoundLit`: `Memory` with `addrof` of their
 variable, after evaluating them (below). `pointer(Place)` is the pointer
 of a `Memory` place, or `addrof` of a `Variable` place.
 
@@ -201,9 +203,9 @@ long` needs nothing, since the sign extension is the 64-bit value.
 the type is unsigned, `add`/`sub`/`mul` when signed, `fadd`/`fsub`/`fmul`
 for floating; `sdiv`/`udiv`/`srem`/`urem` by signedness, `fdiv`;
 `and`/`or`/`xor`. `PtrAdd(p, i)`: the index is already `ptrdiff_t`, which
-so `%o = wmul %i, size` unless the element size is 1, then `%r = wadd
-%p, %o`, both with the pointer's modifier. `PtrDiff(a, b)`: `wsub`, then `sdiv` by the
-element size unless it is 1. `_BitInt` results get `canon`.
+so `%o = wmul %i, size` (size 1 included) then `%r = wadd %p, %o`, both
+with the pointer's modifier. `PtrDiff(a, b)`: `wsub`, then `sdiv` by the
+element size, 1 included. `_BitInt` results get `canon`.
 
 **Shifts.** `Shl`: `shl`; `Shr`: `ashr` when the left type is signed,
 `lshr` otherwise, with the left type's modifier. The right operand was
