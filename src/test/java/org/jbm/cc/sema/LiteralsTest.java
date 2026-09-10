@@ -1,11 +1,13 @@
 package org.jbm.cc.sema;
 
 import org.jbm.cc.lower.arch.Ilp32;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.cpp.CppTokenizer.TokenType;
-import org.jbm.cc.sema.tast.TExpr;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
+import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.sema.SemaException;
+import org.jbm.mycc.repl.cc.sema.Literals;
+import org.jbm.mycc.cc.sema.tast.TExpr;
+import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;

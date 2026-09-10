@@ -1,17 +1,19 @@
 package org.jbm.cc.sema;
 
 import org.jbm.cc.lower.arch.Ilp32;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.parse.ast.Decl;
-import org.jbm.cc.cpp.CppTokenizer;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.sema.tast.StringData;
-import org.jbm.cc.sema.tast.TExpr;
-import org.jbm.cc.sema.tast.TStmt;
-import org.jbm.cc.sema.tast.TypedPrinter;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.parse.ParseException;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.sema.*;
+import org.jbm.mycc.cc.sema.tast.StringData;
+import org.jbm.mycc.cc.sema.tast.TExpr;
+import org.jbm.mycc.cc.sema.tast.TStmt;
+import org.jbm.mycc.cc.sema.tast.TypedPrinter;
+import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
@@ -1372,7 +1374,7 @@ class TyperTest {
         assertEquals("(block (local x:int 1:int) (local y:double (int-to-float:double (rv:int x:int))))", body("", "auto x = 1; auto y = x + 0.5;")
                 .replace("(add:double (int-to-float:double (rv:int x:int)) 0.5:double)", "(int-to-float:double (rv:int x:int))"));
         assertEquals("(global v:int)\n(global p:int * &v:int *)", unit("int v; auto p = &v;"));
-        assertThrows(org.jbm.cc.parse.ParseException.class, () -> parse("auto x;"), "the parser already requires an initializer");
+        assertThrows(ParseException.class, () -> parse("auto x;"), "the parser already requires an initializer");
         assertTrue(fails("auto x = {1};").getMessage().contains("needs an initializer that is an expression"));
         assertTrue(fails("void f(void); auto x = f();").getMessage().contains("cannot infer 'void'"));
         assertTrue(fails("auto x = x;").getMessage().contains("own auto initializer"));

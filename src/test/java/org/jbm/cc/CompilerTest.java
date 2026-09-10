@@ -1,13 +1,14 @@
 package org.jbm.cc;
 
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.cpp.BundledHeaders;
-import org.jbm.cc.parse.ParseException;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.parse.ast.AstPrinter;
-import org.jbm.cc.lower.tac.Function;
-import org.jbm.cc.lower.tac.TacWriter;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.Compiler;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.cpp.BundledHeaders;
+import org.jbm.mycc.cc.parse.ParseException;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.parse.ast.AstPrinter;
+import org.jbm.mycc.cc.lower.tac.Function;
+import org.jbm.mycc.cc.lower.tac.TacWriter;
+import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -21,17 +22,17 @@ class CompilerTest {
 
     static final Types X64 = new Types(X86_64SysV.INSTANCE);
 
-    static Compiler.Compiled script(String source) {
-        return Compiler.compileScript(source, BundledHeaders.INSTANCE, "line", X64);
+    static org.jbm.mycc.cc.Compiler.Compiled script(String source) {
+        return org.jbm.mycc.cc.Compiler.compileScript(source, BundledHeaders.INSTANCE, "line", X64);
     }
 
-    static List<String> functionNames(Compiler.Compiled c) {
+    static List<String> functionNames(org.jbm.mycc.cc.Compiler.Compiled c) {
         return c.tac().functions.stream().map(f -> f.name).toList();
     }
 
     @Test
     void compileIsTheWholePipeline() {
-        Compiler.Compiled c = Compiler.compile("int sq(int x) { return x * x; }", BundledHeaders.INSTANCE, "t.c", X64);
+        org.jbm.mycc.cc.Compiler.Compiled c = org.jbm.mycc.cc.Compiler.compile("int sq(int x) { return x * x; }", BundledHeaders.INSTANCE, "t.c", X64);
         assertEquals(1, c.ast().size());
         assertEquals(1, c.typed().functions().size());
         assertEquals(List.of("sq"), functionNames(c));
@@ -40,7 +41,7 @@ class CompilerTest {
 
     @Test
     void aStatementAtFileScopeIsRejectedOutsideScriptMode() {
-        assertThrows(ParseException.class, () -> Compiler.compile("int x; x = 1;", BundledHeaders.INSTANCE, "t.c", X64));
+        assertThrows(ParseException.class, () -> org.jbm.mycc.cc.Compiler.compile("int x; x = 1;", BundledHeaders.INSTANCE, "t.c", X64));
     }
 
     @Test
@@ -51,7 +52,7 @@ class CompilerTest {
 
     @Test
     void fileScopeStatementsBecomeTheFileFunction() {
-        Compiler.Compiled c = script("int x = 1; x++; if (x > 1) { x = 10; } x");
+        org.jbm.mycc.cc.Compiler.Compiled c = script("int x = 1; x++; if (x > 1) { x = 10; } x");
         assertEquals(List.of(Parser.FILE_FUNCTION), functionNames(c));
         Function file = c.tac().functions.get(0);
         assertEquals("() -> void", file.sig.spelling());
@@ -69,7 +70,7 @@ class CompilerTest {
 
     @Test
     void statementsAndDeclarationsInterleave() {
-        Compiler.Compiled c = script("int a = 1; a += 2; int b = 5; b = a; b++; struct P { int x; } p; p.x = b;");
+        org.jbm.mycc.cc.Compiler.Compiled c = script("int a = 1; a += 2; int b = 5; b = a; b++; struct P { int x; } p; p.x = b;");
         assertEquals(List.of(".file"), functionNames(c));
         assertEquals(3, c.typed().globals().size(), "a, b, p");
         String ast = AstPrinter.print(c.ast());
@@ -78,7 +79,7 @@ class CompilerTest {
 
     @Test
     void labelsAndBlocksAtFileScope() {
-        Compiler.Compiled c = script("int n = 0; again: n++; if (n < 3) goto again; { int local = n; n = local * 2; }");
+        org.jbm.mycc.cc.Compiler.Compiled c = script("int n = 0; again: n++; if (n < 3) goto again; { int local = n; n = local * 2; }");
         assertEquals(List.of(".file"), functionNames(c));
     }
 

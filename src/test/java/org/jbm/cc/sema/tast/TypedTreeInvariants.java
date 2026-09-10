@@ -1,9 +1,10 @@
 package org.jbm.cc.sema.tast;
 
-import org.jbm.cc.sema.Symbol;
-import org.jbm.cc.sema.types.CType;
-import org.jbm.cc.sema.types.Layout;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.sema.Symbol;
+import org.jbm.mycc.cc.sema.tast.*;
+import org.jbm.mycc.cc.sema.types.CType;
+import org.jbm.mycc.cc.sema.types.Layout;
+import org.jbm.mycc.cc.sema.types.Types;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

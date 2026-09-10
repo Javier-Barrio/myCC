@@ -1,8 +1,8 @@
 package org.jbm.cc.lower.arch;
 
-import org.jbm.cc.sema.types.CType.Float;
-import org.jbm.cc.sema.types.CType.Int.Rank;
-import org.jbm.cc.sema.types.Target;
+import org.jbm.mycc.cc.sema.types.CType.Float;
+import org.jbm.mycc.cc.sema.types.CType.Int.Rank;
+import org.jbm.mycc.cc.sema.types.Target;
 
 /**
  * A test-only 32-bit target (ILP32, unsigned plain char, 4-byte

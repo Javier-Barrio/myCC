@@ -1,8 +1,10 @@
 package org.jbm.repl;
 
-import org.jbm.cc.cpp.BundledHeaders;
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.sema.types.Types;
+import org.jbm.mycc.cc.cpp.BundledHeaders;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.sema.types.Types;
+import org.jbm.mycc.repl.Repl;
+import org.jbm.mycc.repl.ScriptConsole;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;

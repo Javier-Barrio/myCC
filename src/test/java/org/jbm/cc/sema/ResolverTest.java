@@ -1,13 +1,17 @@
 package org.jbm.cc.sema;
 
-import org.jbm.cc.parse.ast.Decl;
-import org.jbm.cc.parse.ast.Expr;
-import org.jbm.cc.parse.ast.Type;
-import org.jbm.cc.cpp.CppTokenizer;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.parse.ast.Stmt;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.parse.ast.Expr;
+import org.jbm.mycc.cc.parse.ast.Type;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.parse.ast.Stmt;
+import org.jbm.mycc.cc.sema.Bindings;
+import org.jbm.mycc.cc.sema.Resolver;
+import org.jbm.mycc.cc.sema.SemaException;
+import org.jbm.mycc.cc.sema.Symbol;
 import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
@@ -363,7 +367,7 @@ class ResolverTest {
         fails("void f(void) { default: ; }");
     }
 
-    private static org.jbm.cc.cpp.CppTokenizer.Token jumpToken(Stmt s) {
+    private static CppTokenizer.Token jumpToken(Stmt s) {
         if (s instanceof Stmt.Break br) return br.keyword();
         return ((Stmt.Continue) s).keyword();
     }

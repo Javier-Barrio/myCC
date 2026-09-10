@@ -1,20 +1,21 @@
 package org.jbm.vm;
 
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.parse.ast.Decl;
-import org.jbm.cc.cpp.BundledHeaders;
-import org.jbm.cc.cpp.CppTokenizer;
-import org.jbm.cc.cpp.Scanner;
-import org.jbm.cc.cpp.TokenConversion;
-import org.jbm.cc.lower.Lower;
-import org.jbm.cc.parse.Parser;
-import org.jbm.cc.sema.Desugar;
-import org.jbm.cc.sema.Resolver;
-import org.jbm.cc.sema.Typer;
-import org.jbm.cc.lower.tac.Module;
-import org.jbm.cc.sema.tast.TUnit;
-import org.jbm.cc.sema.types.Types;
-import org.jbm.repl.vm.VM;
+import org.jbm.mycc.cc.Compiler;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.cpp.BundledHeaders;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.lower.Lower;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.sema.Desugar;
+import org.jbm.mycc.cc.sema.Resolver;
+import org.jbm.mycc.cc.sema.Typer;
+import org.jbm.mycc.cc.lower.tac.Module;
+import org.jbm.mycc.cc.sema.tast.TUnit;
+import org.jbm.mycc.cc.sema.types.Types;
+import org.jbm.mycc.repl.vm.VM;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -340,11 +341,11 @@ class VmTest {
     void aScriptRunsItsFileFunctionThroughStep() {
         Types types = new Types(X86_64SysV.INSTANCE);
         VM vm = new VM();
-        assertNull(vm.step(org.jbm.cc.Compiler.compileScript("int x = 1;", BundledHeaders.INSTANCE, "line", types).tac()));
+        assertNull(vm.step(Compiler.compileScript("int x = 1;", BundledHeaders.INSTANCE, "line", types).tac()));
         assertEquals(1, vm.memory.loadInt(vm.addressOf("x"), 32, true));
-        assertNull(vm.step(org.jbm.cc.Compiler.compileScript("int x = 1; x += 41;", BundledHeaders.INSTANCE, "line", types).tac()));
+        assertNull(vm.step(Compiler.compileScript("int x = 1; x += 41;", BundledHeaders.INSTANCE, "line", types).tac()));
         assertEquals(42, vm.memory.loadInt(vm.addressOf("x"), 32, true), "the statement ran; x kept its storage");
-        vm.step(org.jbm.cc.Compiler.compileScript("int x = 1; int $1; $1 = x * 2", BundledHeaders.INSTANCE, "line", types).tac());
+        vm.step(Compiler.compileScript("int x = 1; int $1; $1 = x * 2", BundledHeaders.INSTANCE, "line", types).tac());
         assertEquals(84, vm.memory.loadInt(vm.addressOf("$1"), 32, true));
     }
 
@@ -368,7 +369,7 @@ class VmTest {
         assertEquals(42 + 2 + 4, ((VM.IntValue) vm.call("main", List.of())).value());
         assertEquals(List.of(7, 8), seen);
         assertEquals(java.util.Set.of("twice", "note", "half", "viaPointer", "main"), vm.symbols().keySet());
-        assertTrue(vm.symbols().get("twice") instanceof org.jbm.cc.lower.tac.Module.FuncDecl);
+        assertTrue(vm.symbols().get("twice") instanceof Module.FuncDecl);
     }
 
     @Test

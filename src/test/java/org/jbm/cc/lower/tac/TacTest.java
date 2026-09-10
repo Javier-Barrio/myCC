@@ -1,8 +1,10 @@
 package org.jbm.cc.lower.tac;
 
-import org.jbm.cc.lower.arch.X86_64SysV;
-import org.jbm.cc.cpp.CppTokenizer.Token;
-import org.jbm.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
+import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
+import org.jbm.mycc.cc.lower.tac.*;
+import org.jbm.mycc.cc.lower.tac.Module;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -51,11 +53,11 @@ class TacTest {
 
     @Test
     void everyNamedThingIsASymbol() {
-        var m = new Module(X64);
+        var m = new org.jbm.mycc.cc.lower.tac.Module(X64);
         m.globals.add(new Global("g", Linkage.EXTERNAL, Type.I32, 4, false, null));
-        m.globalDecls.add(new Module.GlobalDecl("errno", Type.I32));
+        m.globalDecls.add(new org.jbm.mycc.cc.lower.tac.Module.GlobalDecl("errno", Type.I32));
         var sig = new Type.Func(List.of(Type.PTR), true, Type.I32);
-        m.funcDecls.add(new Module.FuncDecl("printf", sig));
+        m.funcDecls.add(new org.jbm.mycc.cc.lower.tac.Module.FuncDecl("printf", sig));
         m.functions.add(new Function("f", Linkage.INTERNAL, sig, List.of(new Var("s", Type.PTR))));
 
         List<String> names = m.symbols().stream().map(Symbol::name).toList();
@@ -71,13 +73,13 @@ class TacTest {
 
     @Test
     void theExampleModulePrints() {
-        var m = new Module(X64);
+        var m = new org.jbm.mycc.cc.lower.tac.Module(X64);
         m.structs.add(new StructDef("P", List.of(new StructDef.Member(Type.I32, 0), new StructDef.Member(Type.I32, 4)), 8, 4));
         m.globals.add(new Global("counter", Linkage.EXTERNAL, Type.I32, 4, false, List.of(new Global.IntItem(0, (Type.Int) Type.I32, 0))));
         m.globals.add(new Global("greeting", Linkage.EXTERNAL, new Type.Array(Type.I8, 6), 1, true,
                 List.of(new Global.BytesItem(0, "hello\0".getBytes()))));
         m.globals.add(new Global("bss", Linkage.INTERNAL, new Type.Array(Type.I32, 4), 4, false, null));
-        m.funcDecls.add(new Module.FuncDecl("printf", new Type.Func(List.of(Type.PTR), true, Type.I32)));
+        m.funcDecls.add(new org.jbm.mycc.cc.lower.tac.Module.FuncDecl("printf", new Type.Func(List.of(Type.PTR), true, Type.I32)));
         m.globalDecls.add(new Module.GlobalDecl("errno", Type.I32));
 
         var x = new Var("x", Type.I32);
