@@ -8,7 +8,55 @@ public class Memory {
 
     static final long NULL_PAGE = 4096;
 
+    public long size() {
+        return bytes.length;
+    }
+
     private final byte[] bytes = new byte[16 << 20];
+
+    // Static data grows up from the null page; the stack grows down from
+    // the top; they fault where they would meet.
+    private long dataTop = NULL_PAGE;
+    private long sp = bytes.length;
+
+    /** Static storage, never released: globals, strings, code addresses. */
+    public long allocate(long size, int align) {
+        long start = alignUp(dataTop, align);
+        long end = start + Math.max(size, 1);
+        if (end > sp) {
+            throw new IllegalStateException("out of memory allocating " + size + " bytes");
+        }
+        dataTop = end;
+        return start;
+    }
+
+    /** Stack storage for a frame, released by restoring {@link #stackPointer()} to its value before. */
+    public long push(long size, int align) {
+        long start = alignDown(sp - Math.max(size, 1), align);
+        if (start < dataTop) {
+            throw new IllegalStateException("stack overflow");
+        }
+        sp = start;
+        return start;
+    }
+
+    public long stackPointer() {
+        return sp;
+    }
+
+    public void stackPointer(long value) {
+        sp = value;
+    }
+
+    private static long alignUp(long value, int align) {
+        long a = Math.max(align, 1);
+        return (value + a - 1) / a * a;
+    }
+
+    private static long alignDown(long value, int align) {
+        long a = Math.max(align, 1);
+        return value / a * a;
+    }
 
     // The index of `count` bytes at `address`, or a fault.
     private int index(long address, int count) {
@@ -53,6 +101,12 @@ public class Memory {
             return Float.intBitsToFloat((int) loadInt(address, 32, false));
         }
         return Double.longBitsToDouble(loadInt(address, 64, false));
+    }
+
+    /** The bytes written at the address. */
+    public void write(long address, byte[] data) {
+        int i = index(address, data.length);
+        System.arraycopy(data, 0, bytes, i, data.length);
     }
 
     /** {@code count} bytes from one address to another; the ranges may overlap. */
