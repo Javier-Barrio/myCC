@@ -1,5 +1,6 @@
 package org.jbm.cc;
 
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.lower.Lower;
 import org.jbm.mycc.cc.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.lower.tac.Instr;
@@ -79,7 +80,7 @@ class TacCorpusTest {
     @Test
     void theMainProgramLowers() {
         var types = new Types(X86_64SysV.INSTANCE);
-        Module m = Lower.lower(TypedCorpusTest.type(org.jbm.Main.SOURCE, "<source>", types), types);
+        Module m = Lower.lower(TypedCorpusTest.type(Main.SOURCE, "<source>", types), types);
         assertTrue(TacInvariants.check(m) > 0);
         assertTrue(TacWriter.print(m).contains("define @main() -> i32 {"));
     }

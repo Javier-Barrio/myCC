@@ -1,6 +1,6 @@
 package org.jbm.cc;
 
-import org.jbm.Main;
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
 import org.jbm.mycc.cc.parse.ast.AstWalker;
 import org.jbm.mycc.cc.parse.ast.Decl;

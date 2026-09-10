@@ -1,6 +1,7 @@
 package org.jbm.vm;
 
 import org.jbm.cc.lower.arch.Ilp32;
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.jbm.mycc.repl.vm.VM;
 import org.junit.jupiter.api.Test;
@@ -196,7 +197,7 @@ class VmProgramsTest {
 
     @Test
     void theMainProgramExitsWith49() {
-        assertEquals(49, ((VM.IntValue) run(org.jbm.Main.SOURCE)).value());
+        assertEquals(49, ((VM.IntValue) run(Main.SOURCE)).value());
     }
 
     @Test

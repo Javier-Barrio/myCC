@@ -1,5 +1,6 @@
 package org.jbm.cc.sema;
 
+import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.parse.ast.Stmt;
@@ -118,7 +119,7 @@ class DesugarTest {
 
     @Test
     void desugaredTreeStillResolves() {
-        var result = Desugar.desugar(parse(org.jbm.Main.SOURCE + "\nvoid g(void) { for (int k = 0; k < 3; k++) ++values[k]; }"));
+        var result = Desugar.desugar(parse(Main.SOURCE + "\nvoid g(void) { for (int k = 0; k < 3; k++) ++values[k]; }"));
         var bindings = Resolver.resolve(result);
         assertEquals(List.of("values", "size_str", "get_count", "main", "g"),
                 bindings.fileScope.stream().map(s -> s.name).toList());
