@@ -66,8 +66,8 @@ define @popcount(u64 %x) -> i32 {
   br .for.step
 .for.step:
   mov.s32 %t4, 1
-  %t5 = wsub %x, %t4
-  %t6 = and %x, %t5
+  %t5 = wsub.u64 %x, %t4
+  %t6 = and.u64 %x, %t5
   mov.u64 %x, %t6
   br .for.cond
 .for.done:

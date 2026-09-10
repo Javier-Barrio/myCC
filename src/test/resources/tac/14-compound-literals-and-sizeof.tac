@@ -39,21 +39,21 @@ define @f(i32 %k) -> i32 {
 .entry:
   %t0 = addrof %p
   zero %Pt %t0
-  %t1 = wadd %t0, 0
+  %t1 = wadd.u64 %t0, 0
   %t2 = addrof %lit10
   zero %Pt %t2
-  %t3 = wadd %t2, 0
+  %t3 = wadd.u64 %t2, 0
   store.32 %t3, %k
-  %t4 = wadd %t2, 4
+  %t4 = wadd.u64 %t2, 4
   mov.s32 %t5, 1
   %t6 = add.s32 %k, %t5
   store.32 %t4, %t6
   copy %Pt %t1, %t2
   %t7 = addrof %lit11
   zero [2 x i32] %t7
-  %t8 = wadd %t7, 0
+  %t8 = wadd.u64 %t7, 0
   store.32 %t8, %k
-  %t9 = wadd %t7, 4
+  %t9 = wadd.u64 %t7, 4
   mov.s32 %t10, 2
   store.32 %t9, %t10
   mov.u64 %q, %t7
@@ -61,18 +61,18 @@ define @f(i32 %k) -> i32 {
   %t12 = load.s32 %t11
   %t13 = addrof %lit13
   zero %Pt %t13
-  %t14 = wadd %t13, 0
+  %t14 = wadd.u64 %t13, 0
   mov.s32 %t15, 1
   store.32 %t14, %t15
-  %t16 = wadd %t13, 4
+  %t16 = wadd.u64 %t13, 4
   mov.s32 %t17, 2
   store.32 %t16, %t17
-  %t18 = wadd %t13, 4
+  %t18 = wadd.u64 %t13, 4
   %t19 = load.s32 %t18
   mov.u64 %t20, 8
-  %t21 = wadd %t19, %t20
+  %t21 = wadd.u64 %t19, %t20
   mov.u64 %t22, 8
-  %t23 = wadd %t21, %t22
+  %t23 = wadd.u64 %t21, %t22
   mov.s32 %t24, %t23
   ret %t24
 }

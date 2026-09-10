@@ -35,8 +35,8 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   %t3 = addrof @b7
   %t4 = load.s8 %t3
   %t5 = add.s8 %t2, %t4
-  %t5 = shl %t5, 57
-  %t5 = ashr %t5, 57
+  %t5 = shl.s64 %t5, 57
+  %t5 = ashr.s64 %t5, 57
   store.8 %t0, %t5
   %t6 = addrof @b7
   %t7 = load.s8 %t6
@@ -45,27 +45,27 @@ define @f(i32 %i, u32 %u, i64 %l) -> void {
   %t9 = addrof @b40
   %t10 = addrof @b40
   %t11 = load.s64 %t10
-  %t12 = add %t11, %u
-  %t12 = shl %t12, 24
-  %t12 = ashr %t12, 24
+  %t12 = add.s64 %t11, %u
+  %t12 = shl.s64 %t12, 24
+  %t12 = ashr.s64 %t12, 24
   store.64 %t9, %t12
   %t13 = addrof @b40
   %t14 = load.s64 %t13
-  %t15 = mul %t14, %l
+  %t15 = mul.s64 %t14, %l
   mov.s64 %l, %t15
   %t16 = addrof @u3
   %t17 = addrof @u3
   %t18 = load.u8 %t17
   mov.s32 %t19, 1
   %t20 = shl.u8 %t18, %t19
-  %t20 = and %t20, 7
+  %t20 = and.u64 %t20, 7
   store.8 %t16, %t20
   %t21 = addrof @b7
   %t22 = addrof @b7
   %t23 = load.s8 %t22
   %t24 = sub.s8 0, %t23
-  %t24 = shl %t24, 57
-  %t24 = ashr %t24, 57
+  %t24 = shl.s64 %t24, 57
+  %t24 = ashr.s64 %t24, 57
   store.8 %t21, %t24
   ret
 }

@@ -45,7 +45,7 @@ define @f() -> void {
   mov.64 %d, %t13
   mov.u64 %t14, 8
   mov.u64 %t15, 8
-  %t16 = wadd %t14, %t15
+  %t16 = wadd.u64 %t14, %t15
   mov.u64 %z, %t16
   ret
 }

@@ -69,19 +69,19 @@ class TacInvariantsTest {
         }).contains("declared twice"));
         assertTrue(rejects(f -> {
             var d = local(f, "d", Type.F64);
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, d, d, d, AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, d, d, d, Type.F64, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("add on a FLOAT"));
         assertTrue(rejects(f -> {
             var d = local(f, "d", Type.F64);
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), d, AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), d, Type.I32, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("not of class INT"));
         accepts(f -> {
             var l = local(f, "l", Type.I64);
             f.entry().instrs.add(new Instr.Mov(l, x(f), Type.I64, AT));
             f.entry().instrs.add(new Instr.Mov(x(f), l, Type.I32, AT));
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, l, l, x(f), AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, l, l, x(f), Type.I64, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         });
         assertTrue(rejects(f -> {
@@ -90,12 +90,12 @@ class TacInvariantsTest {
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("mov between INT and FLOAT"));
         assertTrue(rejects(f -> {
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), x(f), Type.I64, AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.ADD, x(f), x(f), x(f), Type.F64, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("modifier .i64"));
+        }).contains("needs .sN or .uN"));
         assertTrue(rejects(f -> {
             var d = local(f, "d", Type.F64);
-            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.FADD, d, d, d, AT));
+            f.entry().instrs.add(new Instr.Bin(Instr.BinOp.FADD, d, d, d, Type.I32, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
         }).contains("needs a precision"));
         assertTrue(rejects(f -> {

@@ -132,7 +132,7 @@ class TacTest {
                 new Instr.Mov(d, new Operand.FloatImm(1.5), Type.F64, AT),
                 new Instr.AddrOfGlobal(p, "g", AT),
                 new Instr.Bin(Instr.BinOp.WADD, a, a, new Operand.IntImm(-1), Type.U32, AT),
-                new Instr.Bin(Instr.BinOp.ASHR, l, l, new Operand.IntImm(32), AT),
+                new Instr.Bin(Instr.BinOp.ASHR, l, l, new Operand.IntImm(32), Type.I64, AT),
                 new Instr.Bin(Instr.BinOp.FADD, d, d, d, Type.F64, AT),
                 new Instr.Cmp(Instr.CmpOp.ULT, c, a, b, AT),
                 new Instr.Cmp(Instr.CmpOp.FNE, c, d, new Operand.FloatImm(0.0), AT),
@@ -162,7 +162,7 @@ class TacTest {
                 mov.64 %d, 1.5
                 %p = addrof @g
                 %a = wadd.u32 %a, -1
-                %l = ashr %l, 32
+                %l = ashr.s64 %l, 32
                 %d = fadd.64 %d, %d
                 %c = ult %a, %b
                 %c = fne %d, 0.0

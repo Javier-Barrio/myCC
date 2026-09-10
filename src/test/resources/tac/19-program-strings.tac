@@ -21,13 +21,13 @@ define @strlen_(ptr %s) -> u64 {
   condbr %t1, .while.body, .while.done
 .while.body:
   mov.s32 %t2, 1
-  %t3 = wmul %t2, 1
-  %t4 = wadd %p, %t3
+  %t3 = wmul.s64 %t2, 1
+  %t4 = wadd.u64 %p, %t3
   mov.u64 %p, %t4
   br .while.cond
 .while.done:
-  %t5 = wsub %p, %s
-  %t5 = sdiv %t5, 1
+  %t5 = wsub.s64 %p, %s
+  %t5 = sdiv.s64 %t5, 1
   ret %t5
 }
 define @atoi_(ptr %s) -> i32 {
@@ -74,8 +74,8 @@ define @atoi_(ptr %s) -> i32 {
   %t6 = sub.s32 0, %t5
   mov.s32 %sign, %t6
   mov.s32 %t7, 1
-  %t8 = wmul %t7, 1
-  %t9 = wadd %s, %t8
+  %t8 = wmul.s64 %t7, 1
+  %t9 = wadd.u64 %s, %t8
   mov.u64 %s, %t9
   br .if.done
 .if.done:
@@ -105,8 +105,8 @@ define @atoi_(ptr %s) -> i32 {
   br .for.step
 .for.step:
   mov.s32 %t23, 1
-  %t24 = wmul %t23, 1
-  %t25 = wadd %s, %t24
+  %t24 = wmul.s64 %t23, 1
+  %t25 = wadd.u64 %s, %t24
   mov.u64 %s, %t25
   br .for.cond
 .for.done:
@@ -141,8 +141,8 @@ define @name(i32 %n) -> ptr {
   condbr %t1, .then, .else
 .then:
   %t7 = addrof @names
-  %t8 = wmul %n, 8
-  %t9 = wadd %t7, %t8
+  %t8 = wmul.s64 %n, 8
+  %t9 = wadd.u64 %t7, %t8
   %t10 = load.u64 %t9
   mov.u64 %t0, %t10
   br .cond.done

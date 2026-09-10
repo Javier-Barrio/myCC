@@ -41,33 +41,33 @@ define @f(i32 %k) -> void {
 .entry:
   %t0 = addrof %loc
   zero [2 x i32] %t0
-  %t1 = wadd %t0, 0
+  %t1 = wadd.u64 %t0, 0
   store.32 %t1, %k
-  %t2 = wadd %t0, 4
+  %t2 = wadd.u64 %t0, 4
   mov.s32 %t3, 1
   %t4 = add.s32 %k, %t3
   store.32 %t2, %t4
   %t5 = addrof %in
   zero %In %t5
-  %t6 = wadd %t5, 4
+  %t6 = wadd.u64 %t5, 4
   store.32 %t6, %k
   %t7 = addrof %out
   zero %Out %t7
-  %t8 = wadd %t7, 0
+  %t8 = wadd.u64 %t7, 0
   %t9 = addrof %in
   copy %In %t8, %t9
-  %t10 = wadd %t7, 8
+  %t10 = wadd.u64 %t7, 8
   mov.s8 %t11, 122
   store.8 %t10, %t11
   %t12 = addrof %name
   zero [4 x i8] %t12
-  %t13 = wadd %t12, 0
+  %t13 = wadd.u64 %t12, 0
   mov.s8 %t14, 108
   store.8 %t13, %t14
-  %t15 = wadd %t12, 1
+  %t15 = wadd.u64 %t12, 1
   mov.s8 %t16, 111
   store.8 %t15, %t16
-  %t17 = wadd %t12, 2
+  %t17 = wadd.u64 %t12, 2
   mov.s8 %t18, 99
   store.8 %t17, %t18
   %t19 = addrof %zero

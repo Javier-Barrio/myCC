@@ -60,8 +60,8 @@ final class ExprLower implements TVisitor<Val> {
 
     /**
      * The modifier of an operation performed in C type {@code t}: its
-     * storage type when that is narrower than the register, the precision
-     * for a floating type, none for a 64-bit integer.
+     * storage width and signedness, or the precision for a floating type.
+     * A pointer is an unsigned integer of the pointer width.
      */
     private Type mod(CType t) {
         Type tt = typeMap.of(t);
@@ -69,13 +69,14 @@ final class ExprLower implements TVisitor<Val> {
             return tt;
         }
         if (t.isPointer() || t.isNullptr()) {
-            tt = typeMap.integer(types.sizeT());
+            return new Type.Int(types.width(t), false);
         }
-        Type.Int it = (Type.Int) tt;
-        if (it.width() >= registerWidth()) {
-            return null;
-        }
-        return it;
+        return tt;
+    }
+
+    /** The modifier of an operation on the whole register, signed or not. */
+    private Type.Int full(boolean signed) {
+        return new Type.Int(registerWidth(), signed);
     }
 
     private Type.Float precision(CType floating) {
@@ -116,10 +117,10 @@ final class ExprLower implements TVisitor<Val> {
             return;
         }
         if (signed) {
-            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(shift), at));
-            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(shift), at));
+            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, r, new Operand.IntImm(shift), full(true), at));
+            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(shift), full(true), at));
         } else {
-            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm(mask(n)), at));
+            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm(mask(n)), full(false), at));
         }
     }
 
@@ -297,15 +298,11 @@ final class ExprLower implements TVisitor<Val> {
         b.emit(new Instr.Load(u, m.ptr(), unit, Instr.Ext.UNSIGNED, m.isVolatile(), at));
         Var r = temp(t);
         if (types.isSigned(t)) {
-            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, u, new Operand.IntImm(c - bits.bitOffset() - bits.width()), at));
-            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - bits.width()), at));
+            b.emit(new Instr.Bin(Instr.BinOp.SHL, r, u, new Operand.IntImm(c - bits.bitOffset() - bits.width()), full(true), at));
+            b.emit(new Instr.Bin(Instr.BinOp.ASHR, r, r, new Operand.IntImm(c - bits.width()), full(true), at));
         } else {
-            Var shifted = u;
-            if (bits.bitOffset() != 0) {
-                b.emit(new Instr.Bin(Instr.BinOp.LSHR, r, u, new Operand.IntImm(bits.bitOffset()), at));
-                shifted = r;
-            }
-            b.emit(new Instr.Bin(Instr.BinOp.AND, r, shifted, new Operand.IntImm(mask(bits.width())), at));
+            b.emit(new Instr.Bin(Instr.BinOp.LSHR, r, u, new Operand.IntImm(bits.bitOffset()), full(false), at));
+            b.emit(new Instr.Bin(Instr.BinOp.AND, r, r, new Operand.IntImm(mask(bits.width())), full(false), at));
         }
         return new Val(r, t);
     }
@@ -341,11 +338,11 @@ final class ExprLower implements TVisitor<Val> {
         Type ut = typeMap.integer(types.unsignedOf(t));
         Var u = b.temp(ut);
         b.emit(new Instr.Load(u, m.ptr(), unit, Instr.Ext.UNSIGNED, m.isVolatile(), at));
-        b.emit(new Instr.Bin(Instr.BinOp.AND, u, u, new Operand.IntImm(~(mask(bits.width()) << bits.bitOffset())), at));
+        b.emit(new Instr.Bin(Instr.BinOp.AND, u, u, new Operand.IntImm(~(mask(bits.width()) << bits.bitOffset())), full(false), at));
         Var f = b.temp(ut);
-        b.emit(new Instr.Bin(Instr.BinOp.AND, f, v.var(), new Operand.IntImm(mask(bits.width())), at));
-        if (bits.bitOffset() != 0) b.emit(new Instr.Bin(Instr.BinOp.SHL, f, f, new Operand.IntImm(bits.bitOffset()), at));
-        b.emit(new Instr.Bin(Instr.BinOp.OR, u, u, f, at));
+        b.emit(new Instr.Bin(Instr.BinOp.AND, f, v.var(), new Operand.IntImm(mask(bits.width())), full(false), at));
+        b.emit(new Instr.Bin(Instr.BinOp.SHL, f, f, new Operand.IntImm(bits.bitOffset()), full(false), at));
+        b.emit(new Instr.Bin(Instr.BinOp.OR, u, u, f, full(false), at));
         b.emit(new Instr.Store(m.ptr(), u, unit, false, m.isVolatile(), at));
     }
 

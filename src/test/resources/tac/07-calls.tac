@@ -48,8 +48,8 @@ define @f() -> void {
   call () -> void @noargs()
   %t8 = addrof @table
   mov.s32 %t9, 1
-  %t10 = wmul %t9, 8
-  %t11 = wadd %t8, %t10
+  %t10 = wmul.s64 %t9, 8
+  %t11 = wadd.u64 %t8, %t10
   %t12 = load.u64 %t11
   mov.s32 %t13, 1
   mov.s32 %t14, 2
@@ -58,7 +58,7 @@ define @f() -> void {
   %t16 = addrof %tmp13
   mov.s32 %t17, 1
   call (i32) -> %S @mk(%t17) into %t16
-  %t18 = wadd %t16, 0
+  %t18 = wadd.u64 %t16, 0
   %t19 = load.s32 %t18
   mov.s32 %i, %t19
   %t20 = call (i32, i32) -> i32 @add(%i, %i)

@@ -66,46 +66,46 @@ define @g() -> void {
   store.32 %p, %t3
   %t4 = addrof @arr
   mov.s32 %t5, 2
-  %t6 = wmul %t5, 4
-  %t7 = wadd %t4, %t6
+  %t6 = wmul.s64 %t5, 4
+  %t7 = wadd.u64 %t4, %t6
   mov.u64 %p, %t7
   %t8 = addrof @arr
-  %t9 = wmul %n, 4
-  %t10 = wadd %t8, %t9
+  %t9 = wmul.s64 %n, 4
+  %t10 = wadd.u64 %t8, %t9
   mov.u64 %p, %t10
   mov.s32 %t11, 2
-  %t12 = sub 0, %t11
-  %t13 = wmul %t12, 4
-  %t14 = wadd %p, %t13
+  %t12 = sub.s64 0, %t11
+  %t13 = wmul.s64 %t12, 4
+  %t14 = wadd.u64 %p, %t13
   mov.u64 %p, %t14
   %t15 = addrof @arr
-  %t16 = wsub %p, %t15
-  %t16 = sdiv %t16, 4
+  %t16 = wsub.s64 %p, %t15
+  %t16 = sdiv.s64 %t16, 4
   mov.s64 %n, %t16
   %t17 = addrof @arr
   mov.s32 %t18, 1
-  %t19 = wmul %t18, 4
-  %t20 = wadd %t17, %t19
+  %t19 = wmul.s64 %t18, 4
+  %t20 = wadd.u64 %t17, %t19
   %t21 = addrof @arr
   mov.s32 %t22, 3
-  %t23 = wmul %t22, 4
-  %t24 = wadd %t21, %t23
+  %t23 = wmul.s64 %t22, 4
+  %t24 = wadd.u64 %t21, %t23
   %t25 = load.s32 %t24
   store.32 %t20, %t25
   %t26 = addrof @m
   mov.s32 %t27, 1
-  %t28 = wmul %t27, 12
-  %t29 = wadd %t26, %t28
+  %t28 = wmul.s64 %t27, 12
+  %t29 = wadd.u64 %t26, %t28
   mov.s32 %t30, 2
-  %t31 = wmul %t30, 4
-  %t32 = wadd %t29, %t31
+  %t31 = wmul.s64 %t30, 4
+  %t32 = wadd.u64 %t29, %t31
   %t33 = load.u64 %pp
   %t34 = load.s32 %t33
   store.32 %t32, %t34
   %t35 = addrof @m
   mov.s32 %t36, 1
-  %t37 = wmul %t36, 12
-  %t38 = wadd %t35, %t37
+  %t37 = wmul.s64 %t36, 12
+  %t38 = wadd.u64 %t35, %t37
   mov.u64 %p, %t38
   mov.s32 %t39, 3
   %t40 = icall (i32) -> i32 %fp(%t39)
@@ -116,7 +116,7 @@ define @g() -> void {
   mov.u64 %p, %p
   mov.u64 %t45, 16
   mov.u64 %t46, 4
-  %t47 = udiv %t45, %t46
+  %t47 = udiv.u64 %t45, %t46
   mov.s64 %n, %t47
   ret
 }
