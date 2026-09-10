@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The model and its text form on hand-built modules. */
 class TacTest {
@@ -19,16 +20,17 @@ class TacTest {
     void targetDescriptorAndClasses() {
         assertEquals("x86_64-sysv", X64.name());
         assertEquals(32, X64.wordWidth());
-        assertEquals(64, X64.longWidth());
+        assertEquals(64, X64.registerWidth());
         assertEquals(64, X64.pointerWidth());
         assertEquals(80, X64.longDoubleWidth());
-        assertEquals(RegClass.W, X64.classOf(Type.I8));
-        assertEquals(RegClass.W, X64.classOf(Type.U32));
-        assertEquals(RegClass.L, X64.classOf(Type.I64));
-        assertEquals(RegClass.L, X64.classOf(Type.PTR));
-        assertEquals(RegClass.S, X64.classOf(Type.F32));
-        assertEquals(RegClass.D, X64.classOf(Type.F64));
-        assertEquals(RegClass.X, X64.classOf(Type.F80));
+        assertTrue(X64.hasPrecision(32) && X64.hasPrecision(64) && X64.hasPrecision(80) && !X64.hasPrecision(128));
+        assertEquals(RegClass.INT, X64.classOf(Type.I8));
+        assertEquals(RegClass.INT, X64.classOf(Type.U32));
+        assertEquals(RegClass.INT, X64.classOf(Type.I64));
+        assertEquals(RegClass.INT, X64.classOf(Type.PTR));
+        assertEquals(RegClass.FLOAT, X64.classOf(Type.F32));
+        assertEquals(RegClass.FLOAT, X64.classOf(Type.F64));
+        assertEquals(RegClass.FLOAT, X64.classOf(Type.F80));
         assertEquals(RegClass.NONE, X64.classOf(new Type.Struct("P")));
         assertEquals(RegClass.NONE, X64.classOf(new Type.Array(Type.I32, 3)));
     }
@@ -63,7 +65,7 @@ class TacTest {
         var sq = new Function("sq", Linkage.EXTERNAL, new Type.Func(List.of(Type.I32), false, Type.I32), List.of(x));
         sq.locals.add(t0);
         var entry = new Block("entry");
-        entry.instrs.add(new Instr.Bin(Instr.BinOp.MUL, t0, x, x, AT));
+        entry.instrs.add(new Instr.Bin(Instr.BinOp.MUL, t0, x, x, Type.I32, AT));
         entry.instrs.add(new Instr.Ret(t0, AT));
         sq.blocks.add(entry);
         m.functions.add(sq);
@@ -93,7 +95,7 @@ class TacTest {
                 define @sq(i32 %x) -> i32 {
                   i32 %t0
                 .entry:
-                  %t0 = mul %x, %x
+                  %t0 = mul.s32 %x, %x
                   ret %t0
                 }
                 define @f(i32 %c) -> i32 {
@@ -126,15 +128,16 @@ class TacTest {
         var asig = new Type.Func(List.of(), false, new Type.Struct("P"));
         List<Instr> all = List.of(
                 new Instr.Mov(a, b, AT),
+                new Instr.Mov(c, a, (Type.Int) Type.U8, AT),
                 new Instr.Mov(d, new Operand.FloatImm(1.5), AT),
                 new Instr.AddrOfGlobal(p, "g", AT),
-                new Instr.Bin(Instr.BinOp.WADD, a, a, new Operand.IntImm(-1), AT),
+                new Instr.Bin(Instr.BinOp.WADD, a, a, new Operand.IntImm(-1), Type.U32, AT),
                 new Instr.Bin(Instr.BinOp.ASHR, l, l, new Operand.IntImm(32), AT),
-                new Instr.Bin(Instr.BinOp.FADD, d, d, d, AT),
+                new Instr.Bin(Instr.BinOp.FADD, d, d, d, Type.F64, AT),
                 new Instr.Cmp(Instr.CmpOp.ULT, c, a, b, AT),
                 new Instr.Cmp(Instr.CmpOp.FNE, c, d, new Operand.FloatImm(0.0), AT),
-                new Instr.Cvt(Instr.CvtOp.I2F, d, a, AT),
-                new Instr.Cvt(Instr.CvtOp.FCVT, s, d, AT),
+                new Instr.Cvt(Instr.CvtOp.I2F, d, a, (Type.Float) Type.F64, AT),
+                new Instr.Cvt(Instr.CvtOp.FCVT, s, d, (Type.Float) Type.F32, AT),
                 new Instr.Load(c, p, 8, Instr.Ext.UNSIGNED, false, AT),
                 new Instr.Load(l, p, 32, Instr.Ext.SIGNED, true, AT),
                 new Instr.Load(d, p, 64, Instr.Ext.FLOAT, false, AT),
@@ -155,15 +158,16 @@ class TacTest {
                 new Instr.ICall(a, sig, q, List.of(b, d), null, AT));
         assertEquals("""
                 mov %a, %b
+                mov.u8 %c, %a
                 mov %d, 1.5
                 %p = addrof @g
-                %a = wadd %a, -1
+                %a = wadd.u32 %a, -1
                 %l = ashr %l, 32
-                %d = fadd %d, %d
+                %d = fadd.64 %d, %d
                 %c = ult %a, %b
                 %c = fne %d, 0.0
-                %d = i2f %a
-                %s = fcvt %d
+                %d = i2f.64 %a
+                %s = fcvt.32 %d
                 %c = load.u8 %p
                 %l = load.s32 %p volatile
                 %d = load.f64 %p

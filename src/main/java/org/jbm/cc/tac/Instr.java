@@ -9,9 +9,12 @@ import java.util.List;
 /**
  * One instruction. Every instruction carries the C token it came from,
  * for diagnostics. Families that differ only by operation ({@link Bin},
- * {@link Cmp}, {@link Cvt}) carry an operation code; the rest are one
- * record each. The width of a memory instruction is on the instruction;
- * the class of every other instruction is the class of its variables.
+ * {@link Cmp}, {@link Cvt}) carry an operation code. An integer
+ * instruction that computes narrower than the register carries a
+ * modifier, an {@link Type.Int} narrower than the register whose width
+ * and signedness say how the result is extended; a floating instruction
+ * carries its precision as a {@link Type.Float}. The width of a memory
+ * instruction is on the instruction.
  */
 public sealed interface Instr {
 
@@ -25,8 +28,16 @@ public sealed interface Instr {
 
     // ---- variables and addresses ---------------------------------------------------------------
 
-    /** {@code mov %dst, src}: a copy, or an immediate. */
-    record Mov(@NonNull Var dst, @NonNull Operand src, @NonNull Token token) implements Instr {
+    /**
+     * {@code mov %dst, src}: a copy of the whole register, or an immediate;
+     * with a modifier {@code mov.sN}/{@code mov.uN}, the low N bits of the
+     * source extended as the modifier says.
+     */
+    record Mov(@NonNull Var dst, @NonNull Operand src, @Nullable Type.Int mod, @NonNull Token token) implements Instr {
+        public Mov(@NonNull Var dst, @NonNull Operand src, @NonNull Token token) {
+            this(dst, src, null, token);
+        }
+
         @Override
         public <R> R accept(TacVisitor<R> v) {
             return v.visit(this);
@@ -64,9 +75,17 @@ public sealed interface Instr {
         }
     }
 
-    /** {@code %dst = op a, b} in the class of the variables. */
-    record Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @NonNull Token token)
-            implements Instr {
+    /**
+     * {@code %dst = op[.mod] a, b}: an integer operation at the width of
+     * its modifier (the whole register without one), or a floating
+     * operation at the precision of its modifier.
+     */
+    record Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @Nullable Type mod,
+               @NonNull Token token) implements Instr {
+        public Bin(@NonNull BinOp op, @NonNull Var dst, @NonNull Operand a, @NonNull Operand b, @NonNull Token token) {
+            this(op, dst, a, b, null, token);
+        }
+
         @Override
         public <R> R accept(TacVisitor<R> v) {
             return v.visit(this);
@@ -102,8 +121,9 @@ public sealed interface Instr {
         }
     }
 
-    /** {@code %dst = op src}: between an integer and a floating class, or between floating classes. */
-    record Cvt(@NonNull CvtOp op, @NonNull Var dst, @NonNull Var src, @NonNull Token token) implements Instr {
+    /** {@code %dst = op.P src}: between an integer and a floating value, or a rounding to precision P. */
+    record Cvt(@NonNull CvtOp op, @NonNull Var dst, @NonNull Var src, @NonNull Type.Float precision, @NonNull Token token)
+            implements Instr {
         @Override
         public <R> R accept(TacVisitor<R> v) {
             return v.visit(this);

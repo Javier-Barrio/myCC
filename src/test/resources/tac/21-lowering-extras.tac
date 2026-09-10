@@ -31,36 +31,31 @@ define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
   i32 %t12
   i32 %t13
   i32 %t14
-  f64 %t15
+  i32 %t15
   i32 %t16
-  f64 %t17
+  i32 %t17
   i32 %t18
   f64 %t19
-  i32 %t20
+  f64 %t20
   f64 %t21
-  i32 %t22
+  f64 %t22
   f64 %t23
-  f64 %t24
-  f64 %t25
-  f64 %t26
-  f64 %t27
-  f64 %t28
-  u8 %t29
+  u8 %t24
+  u32 %t25
+  u32 %t26
+  f32 %t27
+  f32 %t28
+  u32 %t29
   u32 %t30
-  u32 %t31
-  f32 %t32
-  f32 %t33
-  u32 %t34
-  u32 %t35
 .entry:
-  %t0 = udiv %a, %b
-  %t1 = urem %a, %b
-  %t2 = wadd %t0, %t1
+  %t0 = udiv.u32 %a, %b
+  %t1 = urem.u32 %a, %b
+  %t2 = wadd.u32 %t0, %t1
   mov %t3, 3
-  %t4 = lshr %a, %t3
-  %t5 = wadd %t2, %t4
-  %t6 = wmul %a, %b
-  %t7 = wsub %t5, %t6
+  %t4 = lshr.u32 %a, %t3
+  %t5 = wadd.u32 %t2, %t4
+  %t6 = wmul.u32 %a, %b
+  %t7 = wsub.u32 %t5, %t6
   mov %q, %t7
   mov %t8, 1
   mov %t9, 1
@@ -76,48 +71,42 @@ define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
 .or.done:
   condbr %t12, .or.done.2, .or.2
 .or.2:
-  %t15 = fcvt %f
-  %t16 = feq %d, %t15
-  mov %t11, %t16
+  %t15 = feq %d, %f
+  mov %t11, %t15
   br .or.done.2
 .or.done.2:
   condbr %t11, .or.done.3, .or.3
 .or.3:
-  %t17 = fcvt %f
-  %t18 = fne %d, %t17
-  mov %t10, %t18
+  %t16 = fne %d, %f
+  mov %t10, %t16
   br .or.done.3
 .or.done.3:
   condbr %t10, .or.done.4, .or.4
 .or.4:
-  %t19 = fcvt %f
-  %t20 = flt %d, %t19
-  mov %t9, %t20
+  %t17 = flt %d, %f
+  mov %t9, %t17
   br .or.done.4
 .or.done.4:
   condbr %t9, .or.done.5, .or.5
 .or.5:
-  %t21 = fcvt %f
-  %t22 = fle %d, %t21
-  mov %t8, %t22
+  %t18 = fle %d, %f
+  mov %t8, %t18
   br .or.done.5
 .or.done.5:
   mov %r, %t8
-  %t23 = u2f %a
-  %t24 = fcvt %f
-  %t25 = fadd %t23, %t24
-  mov %t26, 2.0
-  %t27 = fdiv %d, %t26
-  %t28 = fsub %t25, %t27
-  mov %e, %t28
-  %t29 = f2u %e
-  %t29 = and %t29, 255
-  mov %back, %t29
-  %t30 = xor %q, %r
-  %t31 = xor %t30, %back
-  mov %t32, 1.0
-  %t33 = fsub %f, %t32
-  %t34 = f2u %t33
-  %t35 = xor %t31, %t34
-  ret %t35
+  %t19 = u2f.64 %a
+  %t20 = fadd.64 %t19, %f
+  mov %t21, 2.0
+  %t22 = fdiv.64 %d, %t21
+  %t23 = fsub.64 %t20, %t22
+  mov %e, %t23
+  %t24 = f2u.64 %e
+  mov %back, %t24
+  %t25 = xor.u32 %q, %r
+  %t26 = xor.u32 %t25, %back
+  mov %t27, 1.0
+  %t28 = fsub.32 %f, %t27
+  %t29 = f2u.32 %t28
+  %t30 = xor.u32 %t26, %t29
+  ret %t30
 }

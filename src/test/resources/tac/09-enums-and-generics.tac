@@ -28,22 +28,20 @@ define @f() -> void {
 .entry:
   mov %t0, 1
   mov %t1, 3
-  %t2 = add %t0, %t1
+  %t2 = add.s32 %t0, %t1
   mov %t3, 2
-  %t4 = add %t2, %t3
+  %t4 = add.s32 %t2, %t3
   mov %t5, 0
-  %t6 = add %t4, %t5
+  %t6 = add.s32 %t4, %t5
   mov %i, %t6
-  %t7 = f2i %d
-  mov %t8, %i
-  %t8 = shl %t8, 24
-  %t8 = ashr %t8, 24
-  %t9 = add %t7, %t8
-  mov %t10, %p
-  %t11 = add %t9, %t10
+  %t7 = f2i.64 %d
+  mov.s8 %t8, %i
+  %t9 = add.s32 %t7, %t8
+  mov.s32 %t10, %p
+  %t11 = add.s32 %t9, %t10
   mov %i, %t11
   mov %t12, 1099511627776
-  %t13 = i2f %t12
+  %t13 = i2f.64 %t12
   mov %d, %t13
   mov %t14, 8
   mov %t15, 8

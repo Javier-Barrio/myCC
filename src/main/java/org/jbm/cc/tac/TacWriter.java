@@ -106,9 +106,20 @@ public final class TacWriter implements TacVisitor<String> {
         return sb.append(')').toString();
     }
 
+    private static String mod(Type mod) {
+        if (mod == null) {
+            return "";
+        }
+        if (mod instanceof Type.Float f) {
+            return "." + f.width();
+        }
+        Type.Int i = (Type.Int) mod;
+        return "." + (i.signed() ? "s" : "u") + i.width();
+    }
+
     @Override
     public String visit(Instr.Mov i) {
-        return "mov " + i.dst() + ", " + op(i.src());
+        return "mov" + mod(i.mod()) + " " + i.dst() + ", " + op(i.src());
     }
 
     @Override
@@ -123,7 +134,7 @@ public final class TacWriter implements TacVisitor<String> {
 
     @Override
     public String visit(Instr.Bin i) {
-        return i.dst() + " = " + i.op().spelling() + " " + op(i.a()) + ", " + op(i.b());
+        return i.dst() + " = " + i.op().spelling() + mod(i.mod()) + " " + op(i.a()) + ", " + op(i.b());
     }
 
     @Override
@@ -133,7 +144,7 @@ public final class TacWriter implements TacVisitor<String> {
 
     @Override
     public String visit(Instr.Cvt i) {
-        return i.dst() + " = " + i.op().spelling() + " " + i.src();
+        return i.dst() + " = " + i.op().spelling() + "." + i.precision().width() + " " + i.src();
     }
 
     @Override

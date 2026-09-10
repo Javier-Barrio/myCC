@@ -6,11 +6,11 @@ import org.jbm.cc.types.Target;
 
 /**
  * What a module records about the target it was compiled for, and what
- * a consumer checks against what it implements: the two integer class
- * widths, the pointer width, the byte order and the {@code long double}
- * format. Widths are in bits.
+ * a consumer checks against what it implements: the width of {@code int}
+ * and of the integer register, the pointer width, the byte order and
+ * the {@code long double} format. Widths are in bits.
  */
-public record TargetDesc(@NonNull String name, int wordWidth, int longWidth, int pointerWidth, boolean littleEndian,
+public record TargetDesc(@NonNull String name, int wordWidth, int registerWidth, int pointerWidth, boolean littleEndian,
                          int longDoubleWidth) {
 
     public static TargetDesc of(@NonNull Target target) {
@@ -21,27 +21,20 @@ public record TargetDesc(@NonNull String name, int wordWidth, int longWidth, int
 
     /** The class of a scalar type; {@link RegClass#NONE} for an aggregate or void. */
     public RegClass classOf(@NonNull Type t) {
-        if (t instanceof Type.Int i) return i.width() <= wordWidth ? RegClass.W : RegClass.L;
-        if (t instanceof Type.Ptr) return pointerWidth <= wordWidth ? RegClass.W : RegClass.L;
-        if (t instanceof Type.Float f) {
-            return switch (f.width()) {
-                case 32 -> RegClass.S;
-                case 64 -> RegClass.D;
-                default -> longDoubleWidth == 80 ? RegClass.X : RegClass.D;
-            };
+        if (t instanceof Type.Int || t instanceof Type.Ptr) {
+            return RegClass.INT;
+        }
+        if (t instanceof Type.Float) {
+            return RegClass.FLOAT;
         }
         return RegClass.NONE;
     }
 
-    /** The width in bits of a class's register. */
-    public int widthOf(@NonNull RegClass c) {
-        return switch (c) {
-            case W -> wordWidth;
-            case L -> longWidth;
-            case S -> 32;
-            case D -> 64;
-            case X -> 80;
-            case NONE -> throw new IllegalArgumentException("no width: NONE");
-        };
+    /** Whether a floating precision is one this target computes in. */
+    public boolean hasPrecision(int width) {
+        if (width == 32 || width == 64) {
+            return true;
+        }
+        return width == longDoubleWidth;
     }
 }

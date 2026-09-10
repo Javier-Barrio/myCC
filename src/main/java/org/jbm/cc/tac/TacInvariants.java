@@ -137,9 +137,26 @@ public final class TacInvariants implements TacVisitor<Void> {
     }
 
     private void sameClass(RegClass c, Operand o) {
-        if (o instanceof Var v) require(classOf(v) == c, v + " is not of class " + c);
-        else if (o instanceof Operand.FloatImm) require(c.isFloating(), "a floating immediate in an integer instruction");
-        else require(c.isInteger(), "an integer immediate in a floating instruction");
+        if (o instanceof Var v) {
+            require(classOf(v) == c, v + " is not of class " + c);
+        } else if (o instanceof Operand.FloatImm) {
+            require(c.isFloating(), "a floating immediate in an integer instruction");
+        } else {
+            require(c.isInteger(), "an integer immediate in a floating instruction");
+        }
+    }
+
+    // An integer modifier is an Int narrower than the register: .s8 .u8 .s16 .u16 .s32 .u32.
+    private void integerModifier(Type mod) {
+        if (mod == null) {
+            return;
+        }
+        require(mod instanceof Type.Int i && i.width() < module.target.registerWidth(), "modifier ." + mod.spelling() + " on an integer instruction");
+    }
+
+    // A floating modifier is a precision the target computes in.
+    private void precision(Type mod) {
+        require(mod instanceof Type.Float f && module.target.hasPrecision(f.width()), "a floating instruction needs a precision the target has");
     }
 
     private void isPointer(Var v) {
@@ -156,9 +173,13 @@ public final class TacInvariants implements TacVisitor<Void> {
         require(c != RegClass.NONE, i.dst() + " is an aggregate");
         if (i.src() instanceof Var s) {
             RegClass sc = classOf(s);
-            require(c.isInteger() ? sc.isInteger() : sc == c, "mov between " + sc + " and " + c);
+            require(sc == c, "mov between " + sc + " and " + c);
         } else {
             sameClass(c, i.src());
+        }
+        if (i.mod() != null) {
+            require(c.isInteger(), "a modifier on a floating mov");
+            integerModifier(i.mod());
         }
         return null;
     }
@@ -183,12 +204,17 @@ public final class TacInvariants implements TacVisitor<Void> {
         require(i.op().isFloating() ? c.isFloating() : c.isInteger(), i.op().spelling() + " on a " + c + " variable");
         sameClass(c, i.a());
         sameClass(c, i.b());
+        if (i.op().isFloating()) {
+            precision(i.mod());
+        } else {
+            integerModifier(i.mod());
+        }
         return null;
     }
 
     @Override
     public Void visit(Instr.Cmp i) {
-        require(classOf(i.dst()) == RegClass.W, "a comparison result must be a W");
+        require(classOf(i.dst()) == RegClass.INT, "a comparison result must be an integer");
         RegClass c = i.a() instanceof Var v ? classOf(v) : i.b() instanceof Var w ? classOf(w) : null;
         require(c != null, "a comparison of two immediates");
         require(i.op().isFloating() ? c.isFloating() : c.isInteger(), i.op().spelling() + " on " + c + " operands");
@@ -199,11 +225,13 @@ public final class TacInvariants implements TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Cvt i) {
-        RegClass d = classOf(i.dst()), s = classOf(i.src());
+        RegClass d = classOf(i.dst());
+        RegClass s = classOf(i.src());
+        precision(i.precision());
         switch (i.op()) {
             case I2F, U2F -> require(s.isInteger() && d.isFloating(), "i2f/u2f needs an integer source and a floating destination");
             case F2I, F2U -> require(s.isFloating() && d.isInteger(), "f2i/f2u needs a floating source and an integer destination");
-            case FCVT -> require(s.isFloating() && d.isFloating() && s != d, "fcvt needs two different floating classes");
+            case FCVT -> require(s.isFloating() && d.isFloating(), "fcvt needs floating operands");
         }
         return null;
     }
@@ -215,12 +243,11 @@ public final class TacInvariants implements TacVisitor<Void> {
         int w = i.width();
         if (i.ext() == Instr.Ext.FLOAT) {
             require(c.isFloating(), "load.f into a " + c);
-            require(w == 32 || w == 64 || w == 80, "load.f" + w);
-            require(w == module.target.widthOf(c), "load.f" + w + " into a " + c);
+            require(module.target.hasPrecision(w), "load.f" + w);
         } else {
             require(c.isInteger(), "an integer load into a " + c);
             require(w == 8 || w == 16 || w == 32 || w == 64, "load." + w);
-            require(w <= module.target.widthOf(c), "load." + w + " into a " + c);
+            require(w <= module.target.registerWidth(), "load." + w + " is wider than the register");
         }
         return null;
     }
@@ -230,13 +257,19 @@ public final class TacInvariants implements TacVisitor<Void> {
         isPointer(i.ptr());
         int w = i.width();
         if (i.isFloat()) {
-            require(w == 32 || w == 64 || w == 80, "store.f" + w);
-            if (i.value() instanceof Var v) require(classOf(v).isFloating() && module.target.widthOf(classOf(v)) == w, "store.f" + w + " of " + v);
-            else require(i.value() instanceof Operand.FloatImm, "store.f of an integer immediate");
+            require(module.target.hasPrecision(w), "store.f" + w);
+            if (i.value() instanceof Var v) {
+                require(classOf(v).isFloating(), "store.f" + w + " of " + v);
+            } else {
+                require(i.value() instanceof Operand.FloatImm, "store.f of an integer immediate");
+            }
         } else {
             require(w == 8 || w == 16 || w == 32 || w == 64, "store." + w);
-            if (i.value() instanceof Var v) require(classOf(v).isInteger() && w <= module.target.widthOf(classOf(v)), "store." + w + " of " + v);
-            else require(i.value() instanceof Operand.IntImm, "store of a floating immediate");
+            if (i.value() instanceof Var v) {
+                require(classOf(v).isInteger(), "store." + w + " of " + v);
+            } else {
+                require(i.value() instanceof Operand.IntImm, "store of a floating immediate");
+            }
         }
         return null;
     }

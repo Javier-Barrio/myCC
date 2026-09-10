@@ -9,9 +9,8 @@ define @strlen_(ptr %s) -> u64 {
   i8 %t0
   u8 %t1
   i32 %t2
-  i64 %t3
-  ptr %t4
-  i64 %t5
+  ptr %t3
+  i64 %t4
 .entry:
   mov %p, %s
   br .while.cond
@@ -21,15 +20,12 @@ define @strlen_(ptr %s) -> u64 {
   condbr %t1, .while.body, .while.done
 .while.body:
   mov %t2, 1
-  mov %t3, %t2
-  %t3 = shl %t3, 32
-  %t3 = ashr %t3, 32
-  %t4 = wadd %p, %t3
-  mov %p, %t4
+  %t3 = wadd %p, %t2
+  mov %p, %t3
   br .while.cond
 .while.done:
-  %t5 = wsub %p, %s
-  ret %t5
+  %t4 = wsub %p, %s
+  ret %t4
 }
 define @atoi_(ptr %s) -> i32 {
   i32 %sign
@@ -42,25 +38,23 @@ define @atoi_(ptr %s) -> i32 {
   i32 %t5
   i32 %t6
   i32 %t7
-  i64 %t8
-  ptr %t9
-  i32 %t10
-  i8 %t11
+  ptr %t8
+  i32 %t9
+  i8 %t10
+  i32 %t11
   i32 %t12
-  i32 %t13
-  i8 %t14
+  i8 %t13
+  i32 %t14
   i32 %t15
   i32 %t16
   i32 %t17
-  i32 %t18
-  i8 %t19
+  i8 %t18
+  i32 %t19
   i32 %t20
   i32 %t21
   i32 %t22
-  i32 %t23
-  i64 %t24
-  ptr %t25
-  i32 %t26
+  ptr %t23
+  i32 %t24
 .entry:
   mov %t0, 1
   mov %sign, %t0
@@ -72,51 +66,45 @@ define @atoi_(ptr %s) -> i32 {
   condbr %t4, .then, .if.done
 .then:
   mov %t5, 1
-  %t6 = sub 0, %t5
+  %t6 = sub.s32 0, %t5
   mov %sign, %t6
   mov %t7, 1
-  mov %t8, %t7
-  %t8 = shl %t8, 32
-  %t8 = ashr %t8, 32
-  %t9 = wadd %s, %t8
-  mov %s, %t9
+  %t8 = wadd %s, %t7
+  mov %s, %t8
   br .if.done
 .if.done:
   br .for.cond
 .for.cond:
-  mov %t10, 0
-  %t11 = load.s8 %s
-  mov %t12, 48
-  %t13 = sle %t12, %t11
-  condbr %t13, .and, .and.done
+  mov %t9, 0
+  %t10 = load.s8 %s
+  mov %t11, 48
+  %t12 = sle %t11, %t10
+  condbr %t12, .and, .and.done
 .and:
-  %t14 = load.s8 %s
-  mov %t15, 57
-  %t16 = sle %t14, %t15
-  mov %t10, %t16
+  %t13 = load.s8 %s
+  mov %t14, 57
+  %t15 = sle %t13, %t14
+  mov %t9, %t15
   br .and.done
 .and.done:
-  condbr %t10, .for.body, .for.done
+  condbr %t9, .for.body, .for.done
 .for.body:
-  mov %t17, 10
-  %t18 = mul %value, %t17
-  %t19 = load.s8 %s
-  mov %t20, 48
-  %t21 = sub %t19, %t20
-  %t22 = add %t18, %t21
-  mov %value, %t22
+  mov %t16, 10
+  %t17 = mul.s32 %value, %t16
+  %t18 = load.s8 %s
+  mov %t19, 48
+  %t20 = sub.s32 %t18, %t19
+  %t21 = add.s32 %t17, %t20
+  mov %value, %t21
   br .for.step
 .for.step:
-  mov %t23, 1
-  mov %t24, %t23
-  %t24 = shl %t24, 32
-  %t24 = ashr %t24, 32
-  %t25 = wadd %s, %t24
-  mov %s, %t25
+  mov %t22, 1
+  %t23 = wadd %s, %t22
+  mov %s, %t23
   br .for.cond
 .for.done:
-  %t26 = mul %sign, %value
-  ret %t26
+  %t24 = mul.s32 %sign, %value
+  ret %t24
 }
 define @name(i32 %n) -> ptr {
   ptr %t0
@@ -128,10 +116,9 @@ define @name(i32 %n) -> ptr {
   i32 %t6
   ptr %t7
   i64 %t8
-  i64 %t9
+  ptr %t9
   ptr %t10
   ptr %t11
-  ptr %t12
 .entry:
   mov %t1, 0
   mov %t2, 0
@@ -139,7 +126,7 @@ define @name(i32 %n) -> ptr {
   condbr %t3, .and, .and.done
 .and:
   mov %t4, 3
-  mov %t5, %t4
+  mov.s32 %t5, %t4
   %t6 = slt %n, %t5
   mov %t1, %t6
   br .and.done
@@ -147,17 +134,14 @@ define @name(i32 %n) -> ptr {
   condbr %t1, .then, .else
 .then:
   %t7 = addrof @names
-  mov %t8, %n
-  %t8 = shl %t8, 32
-  %t8 = ashr %t8, 32
-  %t9 = wmul %t8, 8
-  %t10 = wadd %t7, %t9
-  %t11 = load.u64 %t10
-  mov %t0, %t11
+  %t8 = wmul %n, 8
+  %t9 = wadd %t7, %t8
+  %t10 = load.u64 %t9
+  mov %t0, %t10
   br .cond.done
 .else:
-  %t12 = addrof @.str.a51e86b8b5cb34db
-  mov %t0, %t12
+  %t11 = addrof @.str.a51e86b8b5cb34db
+  mov %t0, %t11
   br .cond.done
 .cond.done:
   ret %t0

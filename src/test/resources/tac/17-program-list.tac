@@ -28,7 +28,7 @@ define @sum(ptr %head) -> i32 {
   condbr %t2, .for.body, .for.done
 .for.body:
   %t3 = load.s32 %it
-  %t4 = add %total, %t3
+  %t4 = add.s32 %total, %t3
   mov %total, %t4
   br .for.step
 .for.step:
@@ -56,7 +56,7 @@ define @length(ptr %head) -> i32 {
   condbr %t1, .while.body, .while.done
 .while.body:
   mov %t2, 1
-  %t3 = add %n, %t2
+  %t3 = add.s32 %n, %t2
   mov %n, %t3
   %t4 = wadd %head, 8
   %t5 = load.u64 %t4
@@ -111,7 +111,7 @@ define @main() -> i32 {
   %t13 = call (ptr) -> i32 @sum(%list)
   %t14 = call (ptr) -> i32 @length(%list)
   mov %t15, 2
-  %t16 = mul %t14, %t15
-  %t17 = sub %t13, %t16
+  %t16 = mul.s32 %t14, %t15
+  %t17 = sub.s32 %t13, %t16
   ret %t17
 }

@@ -16,157 +16,125 @@ define @f() -> void {
   f64 %t6
   i8 %t7
   i64 %t8
-  i64 %t9
-  ptr %t10
-  i32 %t11
+  ptr %t9
+  i32 %t10
+  i64 %t11
   i64 %t12
-  i64 %t13
-  i64 %t14
-  ptr %t15
-  u32 %t16
-  i32 %t17
-  f64 %t18
-  f64 %t19
+  ptr %t13
+  u32 %t14
+  i32 %t15
+  f64 %t16
+  f64 %t17
+  i32 %t18
+  i32 %t19
   i32 %t20
   i32 %t21
   i32 %t22
   i32 %t23
   i32 %t24
-  i32 %t25
-  i32 %t26
-  i64 %t27
-  i64 %t28
-  i64 %t29
-  ptr %t30
+  i64 %t25
+  i64 %t26
+  ptr %t27
+  i32 %t28
+  i32 %t29
+  i32 %t30
   i32 %t31
   i32 %t32
   i32 %t33
-  i32 %t34
+  ptr %t34
   i32 %t35
-  i32 %t36
+  i64 %t36
   ptr %t37
-  i32 %t38
-  i64 %t39
-  i64 %t40
-  ptr %t41
-  ptr %t42
-  i32 %t43
-  i32 %t44
-  i32 %t45
-  i64 %t46
-  i64 %t47
+  ptr %t38
+  i32 %t39
+  i32 %t40
+  i32 %t41
+  i64 %t42
+  ptr %t43
+  ptr %t44
+  i64 %t45
+  ptr %t46
+  i32 %t47
   ptr %t48
-  ptr %t49
-  i64 %t50
-  i64 %t51
-  ptr %t52
-  i32 %t53
-  ptr %t54
-  i64 %t55
-  i64 %t56
-  ptr %t57
-  i32 %t58
-  i32 %t59
+  i64 %t49
+  ptr %t50
+  i32 %t51
+  i32 %t52
 .entry:
   mov %t0, 2
   mov %j, %t0
   mov %i, %t0
   mov %t1, 300
-  mov %t2, %t1
-  %t2 = shl %t2, 24
-  %t2 = ashr %t2, 24
+  mov.s8 %t2, %t1
   mov %c, %t2
-  %t3 = add %i, %c
+  %t3 = add.s32 %i, %c
   mov %i, %t3
-  %t4 = i2f %c
+  %t4 = i2f.64 %c
   mov %t5, 1.5
-  %t6 = fsub %t4, %t5
-  %t7 = f2i %t6
-  %t7 = shl %t7, 24
-  %t7 = ashr %t7, 24
+  %t6 = fsub.64 %t4, %t5
+  %t7 = f2i.64 %t6
   mov %c, %t7
-  mov %t8, %i
-  %t8 = shl %t8, 32
-  %t8 = ashr %t8, 32
-  %t9 = wmul %t8, 4
-  %t10 = wadd %p, %t9
-  mov %p, %t10
-  mov %t11, 1
-  mov %t12, %t11
-  %t12 = shl %t12, 32
-  %t12 = ashr %t12, 32
-  %t13 = sub 0, %t12
-  %t14 = wmul %t13, 4
-  %t15 = wadd %p, %t14
-  mov %p, %t15
-  %t16 = shl %u, %i
-  mov %u, %t16
-  mov %t17, 2
-  %t18 = i2f %t17
-  %t19 = fmul %d, %t18
-  mov %d, %t19
-  mov %t20, 3
-  %t21 = srem %i, %t20
+  %t8 = wmul %i, 4
+  %t9 = wadd %p, %t8
+  mov %p, %t9
+  mov %t10, 1
+  %t11 = sub 0, %t10
+  %t12 = wmul %t11, 4
+  %t13 = wadd %p, %t12
+  mov %p, %t13
+  %t14 = shl.u32 %u, %i
+  mov %u, %t14
+  mov %t15, 2
+  %t16 = i2f.64 %t15
+  %t17 = fmul.64 %d, %t16
+  mov %d, %t17
+  mov %t18, 3
+  %t19 = srem.s32 %i, %t18
+  mov %i, %t19
+  mov %t20, 1
+  %t21 = add.s32 %i, %t20
   mov %i, %t21
   mov %t22, 1
-  %t23 = add %i, %t22
+  %t23 = add.s32 %i, %t22
   mov %i, %t23
   mov %t24, 1
-  %t25 = add %i, %t24
-  mov %i, %t25
-  mov %t26, 1
-  mov %t27, %t26
-  %t27 = shl %t27, 32
-  %t27 = ashr %t27, 32
-  %t28 = sub 0, %t27
-  %t29 = wmul %t28, 4
-  %t30 = wadd %p, %t29
-  mov %p, %t30
+  %t25 = sub 0, %t24
+  %t26 = wmul %t25, 4
+  %t27 = wadd %p, %t26
+  mov %p, %t27
+  mov %t28, %i
+  mov %t29, 1
+  %t30 = add.s32 %t28, %t29
+  mov %i, %t30
+  mov %j, %t28
   mov %t31, %i
   mov %t32, 1
-  %t33 = add %t31, %t32
+  %t33 = sub.s32 %t31, %t32
   mov %i, %t33
   mov %j, %t31
-  mov %t34, %i
+  mov %t34, %p
   mov %t35, 1
-  %t36 = sub %t34, %t35
-  mov %i, %t36
-  mov %j, %t34
-  mov %t37, %p
-  mov %t38, 1
-  mov %t39, %t38
-  %t39 = shl %t39, 32
-  %t39 = ashr %t39, 32
-  %t40 = wmul %t39, 4
-  %t41 = wadd %t37, %t40
-  mov %p, %t41
+  %t36 = wmul %t35, 4
+  %t37 = wadd %t34, %t36
   mov %p, %t37
-  %t42 = addrof %a
-  mov %t43, %i
-  mov %t44, 1
-  %t45 = add %t43, %t44
-  mov %i, %t45
-  mov %t46, %t43
-  %t46 = shl %t46, 32
-  %t46 = ashr %t46, 32
-  %t47 = wmul %t46, 4
-  %t48 = wadd %t42, %t47
-  store.32 %t48, %i
-  %t49 = addrof %a
-  mov %t50, %j
-  %t50 = shl %t50, 32
-  %t50 = ashr %t50, 32
-  %t51 = wmul %t50, 4
-  %t52 = wadd %t49, %t51
-  %t53 = load.s32 %t52
-  %t54 = addrof %a
-  mov %t55, %j
-  %t55 = shl %t55, 32
-  %t55 = ashr %t55, 32
-  %t56 = wmul %t55, 4
-  %t57 = wadd %t54, %t56
-  %t58 = load.s32 %t57
-  %t59 = add %t53, %t58
-  store.32 %t52, %t59
+  mov %p, %t34
+  %t38 = addrof %a
+  mov %t39, %i
+  mov %t40, 1
+  %t41 = add.s32 %t39, %t40
+  mov %i, %t41
+  %t42 = wmul %t39, 4
+  %t43 = wadd %t38, %t42
+  store.32 %t43, %i
+  %t44 = addrof %a
+  %t45 = wmul %j, 4
+  %t46 = wadd %t44, %t45
+  %t47 = load.s32 %t46
+  %t48 = addrof %a
+  %t49 = wmul %j, 4
+  %t50 = wadd %t48, %t49
+  %t51 = load.s32 %t50
+  %t52 = add.s32 %t47, %t51
+  store.32 %t46, %t52
   ret
 }

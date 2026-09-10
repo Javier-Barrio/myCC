@@ -1,19 +1,18 @@
 package org.jbm.cc.tac;
 
 /**
- * The register class a variable's value is held in: {@code W} the width
- * of {@code int}, {@code L} the width of {@code long long}, {@code S} and
- * {@code D} single and double precision, {@code X} extended precision,
- * {@code NONE} for an aggregate, which is storage and has no value.
+ * The register file a variable's value is held in: {@code INT} for
+ * every integer type and {@code ptr}, {@code FLOAT} for every floating
+ * type, {@code NONE} for an aggregate, which is storage and has no value.
  */
 public enum RegClass {
-    W, L, S, D, X, NONE;
+    INT, FLOAT, NONE;
 
     public boolean isInteger() {
-        return this == W || this == L;
+        return this == INT;
     }
 
     public boolean isFloating() {
-        return this == S || this == D || this == X;
+        return this == FLOAT;
     }
 }
