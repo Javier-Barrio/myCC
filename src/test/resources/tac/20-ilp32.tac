@@ -18,15 +18,15 @@ define @f(u32 %u, i32 %l, ptr %p, ptr %q) -> void {
   mov.u32 %t0, %l
   %t1 = wadd.u32 %u, %t0
   mov.s32 %t2, %t1
-  mov %l, %t2
-  mov %t3, 4
-  mov %z, %t3
+  mov.s32 %l, %t2
+  mov.u32 %t3, 4
+  mov.u32 %z, %t3
   %t4 = wsub.s32 %p, %q
   %t4 = sdiv.s32 %t4, 4
-  mov %diff, %t4
-  mov %t5, 255
+  mov.s32 %diff, %t4
+  mov.s32 %t5, 255
   mov.u8 %t6, %t5
-  mov %c, %t6
-  mov %ci, %c
+  mov.u8 %c, %t6
+  mov.s32 %ci, %c
   ret
 }

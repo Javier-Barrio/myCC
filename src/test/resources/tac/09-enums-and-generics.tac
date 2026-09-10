@@ -26,26 +26,26 @@ define @f() -> void {
   u64 %t15
   u64 %t16
 .entry:
-  mov %t0, 1
-  mov %t1, 3
+  mov.s32 %t0, 1
+  mov.s32 %t1, 3
   %t2 = add.s32 %t0, %t1
-  mov %t3, 2
+  mov.s32 %t3, 2
   %t4 = add.s32 %t2, %t3
-  mov %t5, 0
+  mov.s32 %t5, 0
   %t6 = add.s32 %t4, %t5
-  mov %i, %t6
+  mov.s32 %i, %t6
   %t7 = f2i.64 %d
   mov.s8 %t8, %i
   %t9 = add.s32 %t7, %t8
   mov.s32 %t10, %p
   %t11 = add.s32 %t9, %t10
-  mov %i, %t11
-  mov %t12, 1099511627776
+  mov.s32 %i, %t11
+  mov.s64 %t12, 1099511627776
   %t13 = i2f.64 %t12
-  mov %d, %t13
-  mov %t14, 8
-  mov %t15, 8
+  mov.64 %d, %t13
+  mov.u64 %t14, 8
+  mov.u64 %t15, 8
   %t16 = wadd %t14, %t15
-  mov %z, %t16
+  mov.u64 %z, %t16
   ret
 }

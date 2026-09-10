@@ -39,7 +39,7 @@ define @f(i32 %c) -> i32 {               ; int f(int c) { int x = 1; int *p = &c
   i32 %x
   ptr %p
 .entry:
-  mov %x, 1
+  mov.s32 %x, 1
   %p = addrof %c
   store.32 %p, 5
   ret %x
@@ -58,8 +58,8 @@ address only by `addrof`. We chose (b):
 1. [x] **The compiler makes no storage decision.** Whether `x` needs memory
    depends on whether `addrof %x` appears anywhere in the function, which
    is a property of the whole body. In (a) `Lower` would have to know it
-   before lowering the first use; in (b) it emits `mov %x, 1` and `addrof
-   %x` where the tree says so and is done.
+   before lowering the first use; in (b) it emits `mov.s32 %x, 1` and
+   `addrof %x` where the tree says so and is done.
 2. [x] **Each consumer places variables as it can.** A code generator
    promotes every variable that is never under `addrof` to a virtual
    register and gives the rest frame slots, which is the `mem2reg` every
@@ -237,11 +237,14 @@ reinterpretation (store and load), no addressing mode, and no
 **Variables and addresses**:
 
 ```
-mov %x, %y | N                 write a variable: a copy of the whole register, or an immediate
-mov.sN %x, %y                  the low N bits of %y, sign-extended; N is 8, 16 or 32
-mov.uN %x, %y                  the low N bits, zero-extended
+mov.sN %x, %y | N              write a variable: the low N bits of the source, sign-extended; N is 8, 16, 32 or 64
+mov.uN %x, %y | N              the low N bits, zero-extended
+mov.P %f, %g | N.N             a floating value at precision P
 %p = addrof %x | @name         the address of a variable or a global, into a ptr variable
 ```
+
+Every `mov` states its width, a 64-bit one as `mov.s64` or `mov.u64`,
+so that no instruction is read differently from the others.
 
 `mov.sN` and `mov.uN` are the integer conversions that cost an
 instruction: a narrowing, or a change of signedness at the same width.

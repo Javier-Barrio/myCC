@@ -32,42 +32,42 @@ define @f() -> void {
   i32 %t20
 .entry:
   %t0 = add.s32 %c, %s
-  mov %i, %t0
+  mov.s32 %i, %t0
   mov.u32 %t1, %i
   %t2 = wsub.u32 %t1, %u
-  mov %u, %t2
+  mov.u32 %u, %t2
   %t3 = mul %l, %i
-  mov %l, %t3
+  mov.s64 %l, %t3
   %t4 = udiv %l, %ul
-  mov %ul, %t4
+  mov.u64 %ul, %t4
   %t5 = srem.s32 %i, %c
-  mov %i, %t5
+  mov.s32 %i, %t5
   mov.u32 %t6, %i
   %t7 = and.u32 %u, %t6
-  mov %u, %t7
-  mov %t8, 1
+  mov.u32 %u, %t7
+  mov.s32 %t8, 1
   %t9 = or %l, %t8
-  mov %l, %t9
+  mov.s64 %l, %t9
   %t10 = xor.s32 %uc, %c
-  mov %i, %t10
+  mov.s32 %i, %t10
   %t11 = shl.s32 %c, %l
-  mov %i, %t11
-  mov %t12, 3
+  mov.s32 %i, %t11
+  mov.s32 %t12, 3
   %t13 = lshr %ul, %t12
-  mov %ul, %t13
+  mov.u64 %ul, %t13
   %t14 = i2f.32 %i
   %t15 = fadd.32 %fl, %t14
-  mov %d, %t15
+  mov.64 %d, %t15
   %t16 = fsub.64 %d, %fl
-  mov %d, %t16
+  mov.64 %d, %t16
   %t17 = sub.s32 0, %c
-  mov %i, %t17
+  mov.s32 %i, %t17
   %t18 = wsub.u32 0, %u
-  mov %u, %t18
+  mov.u32 %u, %t18
   %t19 = xor.s32 %uc, -1
-  mov %i, %t19
-  mov %i, %c
+  mov.s32 %i, %t19
+  mov.s32 %i, %c
   %t20 = mul.s32 %c, %c
-  mov %i, %t20
+  mov.s32 %i, %t20
   ret
 }

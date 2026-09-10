@@ -175,21 +175,21 @@ class LowerTest {
 
     @Test
     void constantsAreMovsInTheClassOfTheirType() {
-        assertEquals("  i32 %t0\n.entry:\n  mov %t0, 5", expr("", "5"));
-        assertEquals("  i64 %t0\n.entry:\n  mov %t0, 5", expr("", "5L"));
-        assertEquals("  u32 %t0\n.entry:\n  mov %t0, 4294967295", expr("", "4294967295u"));
-        assertEquals("  f64 %t0\n.entry:\n  mov %t0, 1.5", expr("", "1.5"));
-        assertEquals("  f32 %t0\n.entry:\n  mov %t0, 1.5", expr("", "1.5f"));
-        assertEquals("  i32 %t0\n.entry:\n  mov %t0, 97", expr("", "'a'"));
-        assertEquals("  ptr %t0\n.entry:\n  mov %t0, 0", expr("", "nullptr"));
+        assertEquals("  i32 %t0\n.entry:\n  mov.s32 %t0, 5", expr("", "5"));
+        assertEquals("  i64 %t0\n.entry:\n  mov.s64 %t0, 5", expr("", "5L"));
+        assertEquals("  u32 %t0\n.entry:\n  mov.u32 %t0, 4294967295", expr("", "4294967295u"));
+        assertEquals("  f64 %t0\n.entry:\n  mov.64 %t0, 1.5", expr("", "1.5"));
+        assertEquals("  f32 %t0\n.entry:\n  mov.32 %t0, 1.5", expr("", "1.5f"));
+        assertEquals("  i32 %t0\n.entry:\n  mov.s32 %t0, 97", expr("", "'a'"));
+        assertEquals("  ptr %t0\n.entry:\n  mov.u64 %t0, 0", expr("", "nullptr"));
     }
 
     @Test
     void aLocalIsUsedDirectly() {
         assertEquals("  i32 %x\n.entry:", body("", "int x; x;"));
-        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov %t0, 1\n  mov %x, %t0", body("", "int x; x = 1;"));
-        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov %t0, 3\n  mov %x, %t0", body("", "int x = 3;"));
-        assertEquals("  f64 %d\n  i32 %x\n  f64 %t0\n.entry:\n  mov %t0, 2.0\n  mov %d, %t0", body("", "double d; int x; d = 2.0;"));
+        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov.s32 %t0, 1\n  mov.s32 %x, %t0", body("", "int x; x = 1;"));
+        assertEquals("  i32 %x\n  i32 %t0\n.entry:\n  mov.s32 %t0, 3\n  mov.s32 %x, %t0", body("", "int x = 3;"));
+        assertEquals("  f64 %d\n  i32 %x\n  f64 %t0\n.entry:\n  mov.64 %t0, 2.0\n  mov.64 %d, %t0", body("", "double d; int x; d = 2.0;"));
     }
 
     // ---- 4: globals, loads and stores --------------------------------------------------------
@@ -209,10 +209,10 @@ class LowerTest {
 
     @Test
     void aGlobalIsStoredThroughItsAddress() {
-        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @g\n  mov %t1, 1\n  store.32 %t0, %t1", expr("int g;", "g = 1"));
-        assertEquals("  ptr %t0\n  f32 %t1\n.entry:\n  %t0 = addrof @f\n  mov %t1, 1.0\n  store.f32 %t0, %t1", expr("float f;", "f = 1.0f"));
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @g\n  mov.s32 %t1, 1\n  store.32 %t0, %t1", expr("int g;", "g = 1"));
+        assertEquals("  ptr %t0\n  f32 %t1\n.entry:\n  %t0 = addrof @f\n  mov.32 %t1, 1.0\n  store.f32 %t0, %t1", expr("float f;", "f = 1.0f"));
         assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @v\n  %t1 = load.s32 %t0 volatile", expr("volatile int v;", "v"));
-        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @v\n  mov %t1, 1\n  store.32 %t0, %t1 volatile", expr("volatile int v;", "v = 1"));
+        assertEquals("  ptr %t0\n  i32 %t1\n.entry:\n  %t0 = addrof @v\n  mov.s32 %t1, 1\n  store.32 %t0, %t1 volatile", expr("volatile int v;", "v = 1"));
     }
 
     @Test
@@ -223,7 +223,7 @@ class LowerTest {
                   i32 %t1
                 .entry:
                   %t0 = load.s32 %p
-                  mov %t1, 1
+                  mov.s32 %t1, 1
                   store.32 %p, %t1
                   ret
                 }
@@ -313,10 +313,10 @@ class LowerTest {
 
     @Test
     void toBool() {
-        assertEquals("  %t0 = ne %i, 0\n  mov %b, %t0", instrs("bool b; int i;", "b = i;"));
-        assertEquals("  %t0 = ne %p, 0\n  mov %b, %t0", instrs("bool b; int *p;", "b = p;"));
-        assertEquals("  %t0 = fne %d, 0.0\n  mov %b, %t0", instrs("bool b; double d;", "b = d;"));
-        assertEquals("  u8 %b\n  i64 %l\n  u8 %t0\n.entry:\n  %t0 = ne %l, 0\n  mov %b, %t0", body("", "bool b; long l; b = l;"));
+        assertEquals("  %t0 = ne %i, 0\n  mov.u8 %b, %t0", instrs("bool b; int i;", "b = i;"));
+        assertEquals("  %t0 = ne %p, 0\n  mov.u8 %b, %t0", instrs("bool b; int *p;", "b = p;"));
+        assertEquals("  %t0 = fne %d, 0.0\n  mov.u8 %b, %t0", instrs("bool b; double d;", "b = d;"));
+        assertEquals("  u8 %b\n  i64 %l\n  u8 %t0\n.entry:\n  %t0 = ne %l, 0\n  mov.u8 %b, %t0", body("", "bool b; long l; b = l;"));
     }
 
     // ---- 7: pointer conversions -------------------------------------------------------------------
@@ -327,11 +327,11 @@ class LowerTest {
         assertEquals("", instrs("int *p;", "(unsigned long) p;"));
         assertEquals("  mov.s32 %t0, %p", instrs("int *p;", "(int) p;"));
         assertEquals("  mov.u8 %t0, %p", instrs("int *p;", "(unsigned char) p;"));
-        assertEquals("  mov %t0, 5", instrs("", "(void *) 5;"));
+        assertEquals("  mov.s32 %t0, 5", instrs("", "(void *) 5;"));
         assertEquals("", instrs("unsigned u;", "(void *) u;"));
         assertEquals("", instrs("long l;", "(char *) l;"));
         assertEquals("", instrs("void *vp;", "(int *) vp;"));
-        assertEquals("  mov %t0, 0\n  mov %p, %t0", instrs("int *p;", "p = 0;"));
+        assertEquals("  mov.u64 %t0, 0\n  mov.u64 %p, %t0", instrs("int *p;", "p = 0;"));
         assertEquals("  i32 %i\n.entry:", body("", "int i; (int *) i;"));
     }
 
@@ -380,7 +380,7 @@ class LowerTest {
         assertEquals("  %t0 = lshr.u32 %u, %n", instrs("unsigned u; int n;", "u >> n;"));
         assertEquals("  %t0 = ashr %l, %n", instrs("long l; int n;", "l >> n;"));
         assertEquals("  %t0 = shl.s32 %i, %l", instrs("int i; long l;", "i << l;"));
-        assertEquals("  mov %t0, 2\n  %t1 = shl.s32 %c, %t0", instrs("char c;", "c << 2;"));
+        assertEquals("  mov.s32 %t0, 2\n  %t1 = shl.s32 %c, %t0", instrs("char c;", "c << 2;"));
         assertEquals("  %t0 = lshr.u16 %b, %n\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b; int n;", "b >> n;"));
     }
 
@@ -414,7 +414,7 @@ class LowerTest {
         assertEquals("  %t0 = xor.u16 %b, -1\n  %t0 = and %t0, 4095", instrs("unsigned _BitInt(12) b;", "~b;"));
         assertEquals("  %t0 = ne %i, 0\n  %t1 = eq %t0, 0", instrs("int i;", "!i;"));
         assertEquals("  %t0 = slt %a, %b\n  %t1 = eq %t0, 0", instrs("int a, b;", "!(a < b);"));
-        assertEquals("  %t0 = slt %a, %b\n  mov %f, %t0", instrs("int a, b; bool f;", "f = a < b;"));
+        assertEquals("  %t0 = slt %a, %b\n  mov.u8 %f, %t0", instrs("int a, b; bool f;", "f = a < b;"));
         assertEquals("  %t0 = sub.s32 0, %c", instrs("char c;", "-c;"));
     }
 
@@ -427,12 +427,12 @@ class LowerTest {
                   u8 %t1
                   u8 %t2
                 .entry:
-                  mov %t0, 0
+                  mov.s32 %t0, 0
                   %t1 = ne %a, 0
                   condbr %t1, .and, .and.done
                 .and:
                   %t2 = ne %b, 0
-                  mov %t0, %t2
+                  mov.s32 %t0, %t2
                   br .and.done
                 .and.done:""", body("", "int a, b; a && b;"));
     }
@@ -446,12 +446,12 @@ class LowerTest {
                   u8 %t1
                   u8 %t2
                 .entry:
-                  mov %t0, 1
+                  mov.s32 %t0, 1
                   %t1 = ne %a, 0
                   condbr %t1, .or.done, .or
                 .or:
                   %t2 = ne %b, 0
-                  mov %t0, %t2
+                  mov.s32 %t0, %t2
                   br .or.done
                 .or.done:""", body("", "int a, b; a || b;"));
     }
@@ -467,11 +467,11 @@ class LowerTest {
     @Test
     void pointerArithmetic() {
         assertEquals("  %t0 = wmul %i, 4\n  %t1 = wadd %p, %t0\n  %t2 = load.s32 %t1", instrs("int *p; int i;", "p[i];"));
-        assertEquals("  mov %t0, 3\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1", instrs("int *p;", "p + 3;"));
-        assertEquals("  mov %t0, 1\n  %t1 = wadd %c, %t0", instrs("char *c;", "c + 1;"));
+        assertEquals("  mov.s32 %t0, 3\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1", instrs("int *p;", "p + 3;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = wadd %c, %t0", instrs("char *c;", "c + 1;"));
         assertEquals("  %t0 = wsub %p, %q\n  %t0 = sdiv %t0, 4", instrs("int *p, *q;", "p - q;"));
         assertEquals("  %t0 = wsub %p, %q", instrs("char *p, *q;", "p - q;"));
-        assertEquals("  i32 %i\n  ptr %p\n  i32 %t0\n  i32 %t1\n  ptr %t2\n  i32 %t3\n.entry:\n  mov %t0, 2\n  %t1 = wmul.s32 %t0, 4\n  %t2 = wadd.u32 %p, %t1\n  %t3 = load.s32 %t2", bodyOn(ILP32, "", "int i; int *p; p[2];"));
+        assertEquals("  i32 %i\n  ptr %p\n  i32 %t0\n  i32 %t1\n  ptr %t2\n  i32 %t3\n.entry:\n  mov.s32 %t0, 2\n  %t1 = wmul.s32 %t0, 4\n  %t2 = wadd.u32 %p, %t1\n  %t3 = load.s32 %t2", bodyOn(ILP32, "", "int i; int *p; p[2];"));
     }
 
     @Test
@@ -483,15 +483,15 @@ class LowerTest {
         assertEquals("  %t0 = wadd %o, 16\n  %t1 = load.s64 %t0", instrs(decls + " struct Out *o;", "o->tail;"));
         assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4\n  %t2 = load.s32 %t1", instrs(decls + " struct In s;", "s.y;"));
         assertEquals("  %t0 = addrof %s\n  %t1 = load.s32 %t0", instrs(decls + " struct In s;", "s.x;"));
-        assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4\n  mov %t2, 1\n  store.32 %t1, %t2", instrs(decls + " struct In s;", "s.y = 1;"));
+        assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4\n  mov.s32 %t2, 1\n  store.32 %t1, %t2", instrs(decls + " struct In s;", "s.y = 1;"));
     }
 
     @Test
     void addressesOfPlaces() {
         assertEquals("  %t0 = addrof %x", instrs("int x;", "&x;"));
         assertEquals("  %t0 = addrof %s\n  %t1 = wadd %t0, 4", instrs("struct In { int x, y; }; struct In s;", "&s.y;"));
-        assertEquals("  %t0 = addrof %a\n  mov %t1, 2\n  %t2 = wmul %t1, 4\n  %t3 = wadd %t0, %t2", instrs("int a[4];", "&a[2];"));
-        assertEquals("  %t0 = addrof %a\n  mov %p, %t0", instrs("int a[4]; int *p;", "p = a;"));
+        assertEquals("  %t0 = addrof %a\n  mov.s32 %t1, 2\n  %t2 = wmul %t1, 4\n  %t3 = wadd %t0, %t2", instrs("int a[4];", "&a[2];"));
+        assertEquals("  %t0 = addrof %a\n  mov.u64 %p, %t0", instrs("int a[4]; int *p;", "p = a;"));
         assertEquals("  %t0 = wadd %p, 4", instrs("struct In { int x, y; }; struct In *p;", "&p->y;"));
         assertEquals("  ptr %t0\n  ptr %t1\n.entry:\n  %t0 = addrof @g\n  %t1 = wadd %t0, 4", expr("struct In { int x, y; }; struct In g;", "&g.y"));
     }
@@ -511,10 +511,10 @@ class LowerTest {
 
     @Test
     void bitFieldStores() {
-        assertEquals("  mov %t0, 3\n  mov.u32 %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -241\n  %t3 = and %t1, 15\n  %t3 = shl %t3, 4\n  %t2 = or %t2, %t3\n  store.32 %p, %t2", instrs(BITS, "p->hi = 3;"));
+        assertEquals("  mov.s32 %t0, 3\n  mov.u32 %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -241\n  %t3 = and %t1, 15\n  %t3 = shl %t3, 4\n  %t2 = or %t2, %t3\n  store.32 %p, %t2", instrs(BITS, "p->hi = 3;"));
         assertEquals("  %t0 = load.u32 %p\n  %t0 = and %t0, -16\n  %t1 = and %u, 15\n  %t0 = or %t0, %t1\n  store.32 %p, %t0", instrs(BITS + " unsigned u;", "p->lo = u;"));
         assertEquals("  %t0 = load.u32 %p\n  %t0 = and %t0, -268435201\n  %t1 = and %i, 1048575\n  %t1 = shl %t1, 8\n  %t0 = or %t0, %t1\n  store.32 %p, %t0", instrs(BITS + " int i;", "p->wide = i;"));
-        assertEquals("  %t0 = wadd %p, 3\n  mov %t1, 1\n  %t2 = ne %t1, 0\n  %t3 = load.u8 %t0\n  %t3 = and %t3, -17\n  %t4 = and %t2, 1\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.8 %t0, %t3", instrs(BITS, "p->flag = 1;"));
+        assertEquals("  %t0 = wadd %p, 3\n  mov.s32 %t1, 1\n  %t2 = ne %t1, 0\n  %t3 = load.u8 %t0\n  %t3 = and %t3, -17\n  %t4 = and %t2, 1\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.8 %t0, %t3", instrs(BITS, "p->flag = 1;"));
     }
 
     @Test
@@ -526,33 +526,33 @@ class LowerTest {
 
     @Test
     void anAssignmentYieldsWhatTheTargetHolds() {
-        assertEquals("  mov %x, %y\n  mov %z, %y", instrs("int x, y, z;", "z = x = y;"));
-        assertEquals("  mov %t0, 300\n  mov.u32 %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -16\n  %t3 = and %t1, 15\n  %t2 = or %t2, %t3\n  store.32 %p, %t2\n  mov %t4, %t1\n  %t4 = and %t4, 15\n  mov %u, %t4",
+        assertEquals("  mov.s32 %x, %y\n  mov.s32 %z, %y", instrs("int x, y, z;", "z = x = y;"));
+        assertEquals("  mov.s32 %t0, 300\n  mov.u32 %t1, %t0\n  %t2 = load.u32 %p\n  %t2 = and %t2, -16\n  %t3 = and %t1, 15\n  %t2 = or %t2, %t3\n  store.32 %p, %t2\n  mov.u32 %t4, %t1\n  %t4 = and %t4, 15\n  mov.u32 %u, %t4",
                 instrs(BITS + " unsigned u;", "u = p->lo = 300;"));
     }
 
     @Test
     void compoundAssignmentOnAVariable() {
-        assertEquals("  mov %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov %x, %t1", instrs("int x;", "x += 1;"));
-        assertEquals("  mov %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov %x, %t1", instrs("int x;", "++x;"));
-        assertEquals("  mov %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov %x, %t1", instrs("int x;", "x++;"));
-        assertEquals("  mov %t0, %x\n  mov %t1, 1\n  %t2 = add.s32 %t0, %t1\n  mov %x, %t2\n  mov %y, %t0", instrs("int x, y;", "y = x++;"));
-        assertEquals("  mov %t0, 1\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1\n  mov %p, %t2", instrs("int *p;", "p++;"));
-        assertEquals("  mov %t0, %p\n  mov %t1, 1\n  %t2 = wmul %t1, 4\n  %t3 = wadd %t0, %t2\n  mov %p, %t3\n  mov %q, %t0", instrs("int *p, *q;", "q = p++;"));
-        assertEquals("  %t0 = i2f.64 %x\n  %t1 = fadd.64 %t0, %d\n  %t2 = f2i.64 %t1\n  mov %x, %t2", instrs("int x; double d;", "x += d;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov.s32 %x, %t1", instrs("int x;", "x += 1;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov.s32 %x, %t1", instrs("int x;", "++x;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = add.s32 %x, %t0\n  mov.s32 %x, %t1", instrs("int x;", "x++;"));
+        assertEquals("  mov.s32 %t0, %x\n  mov.s32 %t1, 1\n  %t2 = add.s32 %t0, %t1\n  mov.s32 %x, %t2\n  mov.s32 %y, %t0", instrs("int x, y;", "y = x++;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = wmul %t0, 4\n  %t2 = wadd %p, %t1\n  mov.u64 %p, %t2", instrs("int *p;", "p++;"));
+        assertEquals("  mov.u64 %t0, %p\n  mov.s32 %t1, 1\n  %t2 = wmul %t1, 4\n  %t3 = wadd %t0, %t2\n  mov.u64 %p, %t3\n  mov.u64 %q, %t0", instrs("int *p, *q;", "q = p++;"));
+        assertEquals("  %t0 = i2f.64 %x\n  %t1 = fadd.64 %t0, %d\n  %t2 = f2i.64 %t1\n  mov.s32 %x, %t2", instrs("int x; double d;", "x += d;"));
     }
 
     @Test
     void compoundAssignmentThroughAPointerEvaluatesTheTargetOnce() {
-        assertEquals("  %t0 = wadd %p, 4\n  %t1 = load.s32 %t0\n  mov %t2, 1\n  %t3 = add.s32 %t1, %t2\n  store.32 %t0, %t3",
+        assertEquals("  %t0 = wadd %p, 4\n  %t1 = load.s32 %t0\n  mov.s32 %t2, 1\n  %t3 = add.s32 %t1, %t2\n  store.32 %t0, %t3",
                 instrs("struct In { int x, y; }; struct In *p;", "p->y += 1;"));
-        assertEquals("  mov %t0, %k\n  mov %t1, 1\n  %t2 = add.s32 %t0, %t1\n  mov %k, %t2\n  %t3 = wmul %t0, 4\n  %t4 = wadd %a, %t3\n  %t5 = load.s32 %t4\n  mov %t6, 1\n  %t7 = add.s32 %t5, %t6\n  store.32 %t4, %t7",
+        assertEquals("  mov.s32 %t0, %k\n  mov.s32 %t1, 1\n  %t2 = add.s32 %t0, %t1\n  mov.s32 %k, %t2\n  %t3 = wmul %t0, 4\n  %t4 = wadd %a, %t3\n  %t5 = load.s32 %t4\n  mov.s32 %t6, 1\n  %t7 = add.s32 %t5, %t6\n  store.32 %t4, %t7",
                 instrs("int *a; int k;", "a[k++] += 1;"));
     }
 
     @Test
     void compoundAssignmentOnABitField() {
-        assertEquals("  %t0 = load.u32 %p\n  %t1 = and %t0, 15\n  mov %t2, 1\n  mov.u32 %t3, %t2\n  %t4 = wadd.u32 %t1, %t3\n  %t5 = load.u32 %p\n  %t5 = and %t5, -16\n  %t6 = and %t4, 15\n  %t5 = or %t5, %t6\n  store.32 %p, %t5",
+        assertEquals("  %t0 = load.u32 %p\n  %t1 = and %t0, 15\n  mov.s32 %t2, 1\n  mov.u32 %t3, %t2\n  %t4 = wadd.u32 %t1, %t3\n  %t5 = load.u32 %p\n  %t5 = and %t5, -16\n  %t6 = and %t4, 15\n  %t5 = or %t5, %t6\n  store.32 %p, %t5",
                 instrs(BITS, "p->lo += 1;"));
     }
 
@@ -573,49 +573,49 @@ class LowerTest {
 
     @Test
     void sizeofIsAlreadyAConstant() {
-        assertEquals("  mov %t0, 8", instrs("struct In { int x, y; }; struct In s;", "sizeof s;"));
-        assertEquals("  u64 %t0\n.entry:\n  mov %t0, 4", body("", "sizeof(int);"));
+        assertEquals("  mov.u64 %t0, 8", instrs("struct In { int x, y; }; struct In s;", "sizeof s;"));
+        assertEquals("  u64 %t0\n.entry:\n  mov.u64 %t0, 4", body("", "sizeof(int);"));
     }
 
     @Test
     void aggregateLocalInitializers() {
-        assertEquals("  %t0 = addrof %v\n  zero [3 x i32] %t0\n  mov %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov %t3, 2\n  store.32 %t2, %t3",
+        assertEquals("  %t0 = addrof %v\n  zero [3 x i32] %t0\n  mov.s32 %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov.s32 %t3, 2\n  store.32 %t2, %t3",
                 instrs("", "int v[3] = {1, 2};"));
-        assertEquals("  %t0 = addrof %p\n  zero %P %t0\n  %t1 = wadd %t0, 4\n  mov %t2, 2\n  store.32 %t1, %t2",
+        assertEquals("  %t0 = addrof %p\n  zero %P %t0\n  %t1 = wadd %t0, 4\n  mov.s32 %t2, 2\n  store.32 %t1, %t2",
                 instrs("struct P { int x, y; };", "struct P p = {.y = 2};"));
-        assertEquals("  %t0 = addrof %s\n  zero [3 x i8] %t0\n  mov %t1, 97\n  store.8 %t0, %t1\n  %t2 = wadd %t0, 1\n  mov %t3, 98\n  store.8 %t2, %t3",
+        assertEquals("  %t0 = addrof %s\n  zero [3 x i8] %t0\n  mov.s8 %t1, 97\n  store.8 %t0, %t1\n  %t2 = wadd %t0, 1\n  mov.s8 %t3, 98\n  store.8 %t2, %t3",
                 instrs("", "char s[] = \"ab\";"));
-        assertEquals("  %t0 = addrof %o\n  zero %Out %t0\n  %t1 = addrof %in\n  copy %In %t0, %t1\n  %t2 = wadd %t0, 8\n  mov %t3, 122\n  store.8 %t2, %t3",
+        assertEquals("  %t0 = addrof %o\n  zero %Out %t0\n  %t1 = addrof %in\n  copy %In %t0, %t1\n  %t2 = wadd %t0, 8\n  mov.s8 %t3, 122\n  store.8 %t2, %t3",
                 instrs("struct In { int x, y; }; struct Out { struct In in; char name[8]; }; struct In in;", "struct Out o = {in, \"z\"};"));
     }
 
     @Test
     void compoundLiterals() {
-        assertEquals("  %t0 = addrof %litN\n  zero %P %t0\n  mov %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov %t3, 2\n  store.32 %t2, %t3\n  %t4 = load.s32 %t0",
+        assertEquals("  %t0 = addrof %litN\n  zero %P %t0\n  mov.s32 %t1, 1\n  store.32 %t0, %t1\n  %t2 = wadd %t0, 4\n  mov.s32 %t3, 2\n  store.32 %t2, %t3\n  %t4 = load.s32 %t0",
                 instrsN("struct P { int x, y; };", "(struct P){1, 2}.x;"));
-        assertEquals("  mov %t0, 7\n  mov %litN, %t0", instrsN("", "(int){7};"));
+        assertEquals("  mov.s32 %t0, 7\n  mov.s32 %litN, %t0", instrsN("", "(int){7};"));
         assertEquals("  %t0 = addrof @.lit.1\n  %t1 = load.s32 %t0", instrs("", "(static const int){7};"));
-        assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  mov %t1, 3\n  store.32 %t0, %t1\n  mov %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
+        assertEquals("  %t0 = addrof %litN\n  zero [2 x i32] %t0\n  mov.s32 %t1, 3\n  store.32 %t0, %t1\n  mov.u64 %p, %t0", instrsN("int *p;", "p = (int[2]){3};"));
     }
 
     // ---- 16: calls ---------------------------------------------------------------------------
 
     @Test
     void directCalls() {
-        assertEquals("  mov %t0, 1\n  mov %t1, 2.0\n  %t2 = call (i32, f64) -> i32 @f(%t0, %t1)", instrs("int f(int, double);", "f(1, 2.0);"));
+        assertEquals("  mov.s32 %t0, 1\n  mov.64 %t1, 2.0\n  %t2 = call (i32, f64) -> i32 @f(%t0, %t1)", instrs("int f(int, double);", "f(1, 2.0);"));
         assertEquals("  call () -> void @g()", instrs("void g(void);", "g();"));
-        assertEquals("  mov %t0, 1\n  %t1 = call (i32, ...) -> i32 @v(%t0, %c)", instrs("int v(int, ...); char c;", "v(1, c);"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = call (i32, ...) -> i32 @v(%t0, %c)", instrs("int v(int, ...); char c;", "v(1, c);"));
         assertEquals("  %t0 = call (f64) -> f64 @half(%f)", instrs("double half(double); float f;", "half(f);"));
-        assertEquals("  %t0 = call () -> i32 @f\n  mov %x, %t0".replace("@f\n", "@f()\n"), instrs("int f(void); int x;", "x = f();"));
+        assertEquals("  %t0 = call () -> i32 @f()\n  mov.s32 %x, %t0", instrs("int f(void); int x;", "x = f();"));
     }
 
     @Test
     void indirectCalls() {
-        assertEquals("  mov %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "fp(3);"));
-        assertEquals("  mov %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "(*fp)(3);"));
-        assertEquals("  %t0 = addrof @f\n  mov %fp, %t0", instrs("int f(int); int (*fp)(int);", "fp = f;"));
-        assertEquals("  mov %t0, 1\n  %t1 = call (i32) -> i32 @f(%t0)", instrs("int f(int);", "(&f)(1);"));
-        assertEquals("  %t0 = addrof @f\n  mov %t1, 1\n  %t2 = icall (i32) -> i32 %t0(%t1)", instrs("int f(int);", "((int (*)(int)) (void *) f)(1);"));
+        assertEquals("  mov.s32 %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "fp(3);"));
+        assertEquals("  mov.s32 %t0, 3\n  %t1 = icall (i32) -> i32 %fp(%t0)", instrs("int (*fp)(int);", "(*fp)(3);"));
+        assertEquals("  %t0 = addrof @f\n  mov.u64 %fp, %t0", instrs("int f(int); int (*fp)(int);", "fp = f;"));
+        assertEquals("  mov.s32 %t0, 1\n  %t1 = call (i32) -> i32 @f(%t0)", instrs("int f(int);", "(&f)(1);"));
+        assertEquals("  %t0 = addrof @f\n  mov.s32 %t1, 1\n  %t2 = icall (i32) -> i32 %t0(%t1)", instrs("int f(int);", "((int (*)(int)) (void *) f)(1);"));
     }
 
     @Test
@@ -630,8 +630,8 @@ class LowerTest {
                   i32 %t3
                 .entry:
                   %t0 = addrof @h
-                  mov %t1, 1
-                  mov %t2, 2.0
+                  mov.s32 %t1, 1
+                  mov.64 %t2, 2.0
                   %t3 = call (i32, f64) -> i32 @f(%t1, %t2)
                   ret
                 }
@@ -678,15 +678,15 @@ class LowerTest {
                   %t1 = ne %c, 0
                   condbr %t1, .then, .else
                 .then:
-                  mov %t2, 1
-                  mov %t0, %t2
+                  mov.s32 %t2, 1
+                  mov.s32 %t0, %t2
                   br .cond.done
                 .else:
-                  mov %t3, 2
-                  mov %t0, %t3
+                  mov.s32 %t3, 2
+                  mov.s32 %t0, %t3
                   br .cond.done
                 .cond.done:
-                  mov %x, %t0""", body("", "int c; int x; x = c ? 1 : 2;"));
+                  mov.s32 %x, %t0""", body("", "int c; int x; x = c ? 1 : 2;"));
     }
 
     @Test
@@ -727,8 +727,8 @@ class LowerTest {
 
     @Test
     void commaEvaluatesTheLeftForItsEffect() {
-        assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %x, %b", instrs("int a, b, x;", "x = (a = 1, b);"));
-        assertEquals("  mov %t0, 1\n  mov %a, %t0\n  mov %t1, 2\n  mov %b, %t1", instrs("int a, b;", "a = 1, b = 2;"));
+        assertEquals("  mov.s32 %t0, 1\n  mov.s32 %a, %t0\n  mov.s32 %x, %b", instrs("int a, b, x;", "x = (a = 1, b);"));
+        assertEquals("  mov.s32 %t0, 1\n  mov.s32 %a, %t0\n  mov.s32 %t1, 2\n  mov.s32 %b, %t1", instrs("int a, b;", "a = 1, b = 2;"));
     }
 
     // ---- 20: if -------------------------------------------------------------------------------
@@ -739,8 +739,8 @@ class LowerTest {
                   %t0 = ne %c, 0
                   condbr %t0, .then, .if.done
                 .then:
-                  mov %t1, 1
-                  mov %x, %t1
+                  mov.s32 %t1, 1
+                  mov.s32 %x, %t1
                   br .if.done
                 .if.done:""", instrs("int c, x;", "if (c) x = 1;"));
     }
@@ -751,12 +751,12 @@ class LowerTest {
                   %t0 = ne %c, 0
                   condbr %t0, .then, .else
                 .then:
-                  mov %t1, 1
-                  mov %x, %t1
+                  mov.s32 %t1, 1
+                  mov.s32 %x, %t1
                   br .if.done
                 .else:
-                  mov %t2, 2
-                  mov %x, %t2
+                  mov.s32 %t2, 2
+                  mov.s32 %x, %t2
                   br .if.done
                 .if.done:""", instrs("int c, x;", "if (c) x = 1; else x = 2;"));
     }
@@ -770,8 +770,8 @@ class LowerTest {
                   %t1 = ne %b, 0
                   condbr %t1, .then.2, .if.done.2
                 .then.2:
-                  mov %t2, 1
-                  mov %x, %t2
+                  mov.s32 %t2, 1
+                  mov.s32 %x, %t2
                   br .if.done.2
                 .if.done.2:
                   br .if.done
@@ -794,9 +794,9 @@ class LowerTest {
                   %t0 = ne %n, 0
                   condbr %t0, .while.body, .while.done
                 .while.body:
-                  mov %t1, 1
+                  mov.s32 %t1, 1
                   %t2 = sub.s32 %n, %t1
-                  mov %n, %t2
+                  mov.s32 %n, %t2
                   br .while.cond
                 .while.done:""", instrs("int n;", "while (n) n--;"));
     }
@@ -806,9 +806,9 @@ class LowerTest {
         assertEquals("""
                   br .do.body
                 .do.body:
-                  mov %t0, 1
+                  mov.s32 %t0, 1
                   %t1 = sub.s32 %n, %t0
-                  mov %n, %t1
+                  mov.s32 %n, %t1
                   br .do.cond
                 .do.cond:
                   %t2 = ne %n, 0
@@ -819,21 +819,21 @@ class LowerTest {
     @Test
     void forLoopWithADeclaration() {
         assertEquals("""
-                  mov %t0, 0
-                  mov %i, %t0
+                  mov.s32 %t0, 0
+                  mov.s32 %i, %t0
                   br .for.cond
                 .for.cond:
                   %t1 = slt %i, %n
                   condbr %t1, .for.body, .for.done
                 .for.body:
-                  mov %t2, 1
+                  mov.s32 %t2, 1
                   %t3 = add.s32 %s, %t2
-                  mov %s, %t3
+                  mov.s32 %s, %t3
                   br .for.step
                 .for.step:
-                  mov %t4, 1
+                  mov.s32 %t4, 1
                   %t5 = add.s32 %i, %t4
-                  mov %i, %t5
+                  mov.s32 %i, %t5
                   br .for.cond
                 .for.done:""", instrs("int n, s;", "for (int i = 0; i < n; i++) s += 1;"));
     }
@@ -867,9 +867,9 @@ class LowerTest {
                 .then.2:
                   br .while.done
                 .if.done.2:
-                  mov %t3, 1
+                  mov.s32 %t3, 1
                   %t4 = sub.s32 %n, %t3
-                  mov %n, %t4
+                  mov.s32 %n, %t4
                   br .while.cond
                 .while.done:""", instrs("int n, c, d;", "while (n) { if (c) continue; if (d) break; n--; }"));
     }
@@ -881,9 +881,9 @@ class LowerTest {
         assertEquals("""
                   br .again
                 .again:
-                  mov %t0, 1
+                  mov.s32 %t0, 1
                   %t1 = sub.s32 %n, %t0
-                  mov %n, %t1
+                  mov.s32 %n, %t1
                   %t2 = ne %n, 0
                   condbr %t2, .then, .if.done
                 .then:
@@ -901,7 +901,7 @@ class LowerTest {
                 .entry:
                   ret %n
                 .after:
-                  mov %t1, 1
+                  mov.s32 %t1, 1
                   ret %t1
                 }
                 """, function("int f(int n) { return n; n = 2; after: return 1; }"));
@@ -925,9 +925,9 @@ class LowerTest {
                 .while.body:
                   br .in
                 .in:
-                  mov %t1, 1
+                  mov.s32 %t1, 1
                   %t2 = sub.s32 %n, %t1
-                  mov %n, %t2
+                  mov.s32 %n, %t2
                   br .while.cond
                 .while.done:""", instrs("int n;", "goto in; while (n) { in: n--; }"));
     }
@@ -939,16 +939,16 @@ class LowerTest {
         assertEquals("""
                   switch %c, .default, [ 1 -> .case.1, 2 -> .case.2 ]
                 .case.1:
-                  mov %t0, 10
-                  mov %x, %t0
+                  mov.s32 %t0, 10
+                  mov.s32 %x, %t0
                   br .switch.done
                 .case.2:
-                  mov %t1, 20
-                  mov %x, %t1
+                  mov.s32 %t1, 20
+                  mov.s32 %x, %t1
                   br .default
                 .default:
-                  mov %t2, 0
-                  mov %x, %t2
+                  mov.s32 %t2, 0
+                  mov.s32 %x, %t2
                   br .switch.done
                 .switch.done:""", instrs("int c, x;", "switch (c) { case 1: x = 10; break; case 2: x = 20; default: x = 0; }"));
     }
@@ -958,8 +958,8 @@ class LowerTest {
         assertEquals("""
                   switch %c, .switch.done, [ 1 -> .case.1 ]
                 .case.1:
-                  mov %t1, 1
-                  mov %x, %t1
+                  mov.s32 %t1, 1
+                  mov.s32 %x, %t1
                   br .switch.done
                 .switch.done:""", instrs("int c, x;", "switch (c) { x = 5; case 1: x = 1; }"));
     }
@@ -973,12 +973,12 @@ class LowerTest {
                 .case.next:
                   switch %c, .switch.done, [ 120 -> .case.120 ]
                 .case.97.102:
-                  mov %t2, 1
-                  mov %x, %t2
+                  mov.s32 %t2, 1
+                  mov.s32 %x, %t2
                   br .switch.done
                 .case.120:
-                  mov %t3, 2
-                  mov %x, %t3
+                  mov.s32 %t3, 2
+                  mov.s32 %x, %t3
                   br .switch.done
                 .switch.done:""", instrs("int c, x;", "switch (c) { case 'a' ... 'f': x = 1; break; case 'x': x = 2; }"));
     }
@@ -990,8 +990,8 @@ class LowerTest {
                 .case.5:
                   switch %c, .switch.done.2, [ 1 -> .case.1 ]
                 .case.1:
-                  mov %t0, 1
-                  mov %x, %t0
+                  mov.s32 %t0, 1
+                  mov.s32 %x, %t0
                   br .switch.done.2
                 .switch.done.2:
                   br .switch.done
@@ -1006,7 +1006,7 @@ class LowerTest {
                 define @f(i32 %n) -> i32 {
                   i32 %t0
                 .entry:
-                  mov %t0, 1
+                  mov.s32 %t0, 1
                   %t1 = add.s32 %n, %t0
                   ret %t1
                 }
@@ -1050,7 +1050,7 @@ class LowerTest {
 
     @Test
     void bitFieldInitializersAtRunTime() {
-        assertEquals("  %t0 = addrof %b\n  zero %B %t0\n  mov %t1, 3\n  mov.u32 %t2, %t1\n  %t3 = load.u32 %t0\n  %t3 = and %t3, -241\n  %t4 = and %t2, 15\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.32 %t0, %t3",
+        assertEquals("  %t0 = addrof %b\n  zero %B %t0\n  mov.s32 %t1, 3\n  mov.u32 %t2, %t1\n  %t3 = load.u32 %t0\n  %t3 = and %t3, -241\n  %t4 = and %t2, 15\n  %t4 = shl %t4, 4\n  %t3 = or %t3, %t4\n  store.32 %t0, %t3",
                 instrs("struct B { unsigned lo : 4; unsigned hi : 4; };", "struct B b = {.hi = 3};"));
     }
 
@@ -1121,7 +1121,7 @@ class LowerTest {
                 }
                 """, normalizeStrings(unit("const char *p = \"hi\"; const char *f(void) { return \"hi\"; }")));
         assertEquals("  %t0 = addrof @.str.H", normalizeStrings(instrs("", "\"x\";")));
-        assertEquals("  %t0 = addrof @.str.H\n  mov %t1, 1\n  %t2 = wadd %t0, %t1\n  %t3 = load.s8 %t2", normalizeStrings(instrs("", "\"xy\"[1];")));
+        assertEquals("  %t0 = addrof @.str.H\n  mov.s32 %t1, 1\n  %t2 = wadd %t0, %t1\n  %t3 = load.s8 %t2", normalizeStrings(instrs("", "\"xy\"[1];")));
     }
 
     @Test
@@ -1147,7 +1147,7 @@ class LowerTest {
                 .entry:
                   %t0 = addrof @count.static
                   %t1 = load.s32 %t0
-                  mov %t2, 1
+                  mov.s32 %t2, 1
                   %t3 = add.s32 %t1, %t2
                   store.32 %t0, %t3
                   ret

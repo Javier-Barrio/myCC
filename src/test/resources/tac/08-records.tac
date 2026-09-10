@@ -85,10 +85,10 @@ define @f() -> void {
   u64 %t70
 .entry:
   %t0 = addrof %p
-  mov %pp, %t0
+  mov.u64 %pp, %t0
   %t1 = addrof %b
   zero %B %t1
-  mov %t2, 3
+  mov.s32 %t2, 3
   mov.u32 %t3, %t2
   %t4 = load.u32 %t1
   %t4 = and %t4, -241
@@ -97,7 +97,7 @@ define @f() -> void {
   %t4 = or %t4, %t5
   store.32 %t1, %t4
   %t6 = wadd %t1, 3
-  mov %t7, 1
+  mov.s32 %t7, 1
   %t8 = ne %t7, 0
   %t9 = load.u8 %t6
   %t9 = and %t9, -17
@@ -106,15 +106,15 @@ define @f() -> void {
   %t9 = or %t9, %t10
   store.8 %t6, %t9
   %t11 = addrof %p
-  mov %t12, 1
+  mov.s32 %t12, 1
   mov.s8 %t13, %t12
   store.8 %t11, %t13
   %t14 = addrof %p
   %t15 = wadd %t14, 4
-  mov %t16, 2
+  mov.s32 %t16, 2
   store.32 %t15, %t16
   %t17 = wadd %pp, 4
-  mov %t18, 1.5
+  mov.64 %t18, 1.5
   %t19 = fcvt.32 %t18
   store.f32 %t17, %t19
   %t20 = addrof %q
@@ -132,11 +132,11 @@ define @f() -> void {
   call () -> %P @make() into %t29
   %t30 = wadd %t29, 4
   %t31 = load.s32 %t30
-  mov %t32, 3
+  mov.s32 %t32, 3
   %t33 = add.s32 %t31, %t32
   store.32 %t28, %t33
   %t34 = addrof %b
-  mov %t35, 15
+  mov.s32 %t35, 15
   mov.u32 %t36, %t35
   %t37 = load.u32 %t34
   %t37 = and %t37, -16
@@ -148,7 +148,7 @@ define @f() -> void {
   %t41 = load.u32 %t40
   %t42 = and %t41, 15
   mov.s32 %t43, %t42
-  mov %t44, 1
+  mov.s32 %t44, 1
   %t45 = add.s32 %t43, %t44
   mov.u32 %t46, %t45
   %t47 = load.u32 %t39
@@ -182,14 +182,14 @@ define @f() -> void {
   %t63 = shl %t63, 4
   %t62 = or %t62, %t63
   store.8 %t57, %t62
-  mov %t64, 0
+  mov.u64 %t64, 0
   %t65 = wadd %t64, 8
-  mov %o, %t65
-  mov %t66, 12
-  mov %t67, 4
+  mov.s64 %o, %t65
+  mov.u64 %t66, 12
+  mov.u64 %t67, 4
   %t68 = wadd %t66, %t67
-  mov %t69, 4
+  mov.u64 %t69, 4
   %t70 = wadd %t68, %t69
-  mov %s, %t70
+  mov.u64 %s, %t70
   ret
 }
