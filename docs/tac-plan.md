@@ -133,7 +133,7 @@ Floating instructions carry their precision the same way: `fadd.32`
 computes and rounds in single precision, `fadd.64` in double, `fadd.80`
 in the x87 format on targets that have it, and the register holds the
 value at the widest precision the target has. Widening between formats
-is exact and costs nothing; `fcvt.32` rounds to single.
+is exact and costs nothing; `mov.32` rounds to single.
 
 ## Decision: not SSA; there is no `phi`
 
@@ -298,7 +298,6 @@ instructions; each names the floating precision:
 %f = u2f.P %x                  unsigned integer to floating
 %x = f2i.P %f                  floating at P to a signed integer, truncating toward zero; out of range UB
 %x = f2u.P %f                  floating to an unsigned integer; out of range UB
-%f = fcvt.P %g                 rounds to precision P; a widening is exact and is no instruction
 ```
 
 An integer narrower than 64 bits is already extended, so `i2f.64 %c`
@@ -467,7 +466,7 @@ except through names.
 - an integer modifier is `.s8 .u8 .s16 .u16 .s32 .u32 .s64 .u64` and
   every integer arithmetic, logic, shift and `mov` instruction has one; a floating modifier is `.32 .64 .80`, one
   the target has, and every floating instruction and every `i2f`, `u2f`,
-  `f2i`, `f2u` and `fcvt` has one;
+  `f2i` and `f2u` has one; a rounding between precisions is a `mov.P`;
 - `load` and `store` go through a `ptr` variable; an aggregate `store`'s
   value is a `ptr` or the immediate 0; `into` and an aggregate `ret` take
   `ptr` variables; `mov` joins two integer

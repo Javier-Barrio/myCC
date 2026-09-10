@@ -40,7 +40,7 @@ define @f() -> void {
   mov.s32 %i, %t1
   %t2 = i2f.64 %c
   %t3 = call (f64) -> f64 @half(%t2)
-  %t4 = fcvt.32 %t3
+  mov.32 %t4, %t3
   mov.32 %fl, %t4
   %t5 = addrof @.str.d153ce427d7ff938
   %t6 = addrof @.str.d98ac5bc9eec51cb

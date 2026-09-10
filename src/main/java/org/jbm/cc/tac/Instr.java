@@ -109,14 +109,14 @@ public sealed interface Instr {
     }
 
     enum CvtOp {
-        I2F, U2F, F2I, F2U, FCVT;
+        I2F, U2F, F2I, F2U;
 
         public String spelling() {
             return name().toLowerCase();
         }
     }
 
-    /** {@code %dst = op.P src}: between an integer and a floating value, or a rounding to precision P. */
+    /** {@code %dst = op.P src}: between an integer and a floating value at precision P; a rounding between precisions is a {@code mov.P}. */
     record Cvt(@NonNull CvtOp op, @NonNull Var dst, @NonNull Var src, @NonNull Type.Float precision, @NonNull Token token)
             implements Instr {
         @Override

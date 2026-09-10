@@ -229,7 +229,6 @@ public final class TacInvariants implements TacVisitor<Void> {
         switch (i.op()) {
             case I2F, U2F -> require(s.isInteger() && d.isFloating(), "i2f/u2f needs an integer source and a floating destination");
             case F2I, F2U -> require(s.isFloating() && d.isInteger(), "f2i/f2u needs a floating source and an integer destination");
-            case FCVT -> require(s.isFloating() && d.isFloating(), "fcvt needs floating operands");
         }
         return null;
     }
