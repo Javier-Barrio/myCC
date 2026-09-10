@@ -502,7 +502,8 @@ final class ExprLower implements TVisitor<Val> {
         return new Val(r, e.type());
     }
 
-    // A widening between floating formats is exact: nothing. A narrowing rounds.
+    // A widening between floating formats is exact: nothing. A narrowing
+    // rounds, which is a mov at the narrower precision.
     @Override
     public Val visit(TExpr.FloatToFloat e) {
         Val v = value(e.operand());
@@ -512,7 +513,7 @@ final class ExprLower implements TVisitor<Val> {
             return new Val(v.var(), e.type());
         }
         Var r = temp(e.type());
-        b.emit(new Instr.Cvt(Instr.CvtOp.FCVT, r, v.var(), to, e.token()));
+        b.emit(new Instr.Mov(r, v.var(), to, e.token()));
         return new Val(r, e.type());
     }
 

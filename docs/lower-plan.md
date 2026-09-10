@@ -183,7 +183,7 @@ type `t`:
 | `IntToInt` | nothing when `t` is 64 bits wide, or `t` is wider than `f` and `f` is unsigned, or `t` is wider than `f` and both are signed, or `t` and `f` have one width and signedness; otherwise `mov.sN`/`mov.uN` by `t`'s signedness and width |
 | `IntToFloat` | `i2f.P` or `u2f.P` by `isSigned(f)`, `P` the precision of `t` |
 | `FloatToInt` | `f2i.P` or `f2u.P` by `isSigned(t)`, `P` the precision of `f`; a `_BitInt` result gets `canon` |
-| `FloatToFloat` | `fcvt.P` when `t` is narrower than `f`; nothing when wider or equal |
+| `FloatToFloat` | `mov.P` when `t` is narrower than `f`; nothing when wider or equal |
 | `ToBool` | `%r = ne %v, 0` or `fne %v, 0.0`; nothing when the operand is a comparison, a logical operator or `!`, which already yield 0 or 1 |
 | `ToVoid` | evaluate the operand, return no value |
 | `PtrToPtr`, `NullToPtr` | nothing, a `ptr` is a `ptr`; `NullToPtr` of a constant is `mov %r, 0` |

@@ -126,9 +126,9 @@ class TacInvariantsTest {
         }).contains("flt on INT"));
         assertTrue(rejects(f -> {
             var l = local(f, "l", Type.I64);
-            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.FCVT, l, x(f), (Type.Float) Type.F32, AT));
+            f.entry().instrs.add(new Instr.Cvt(Instr.CvtOp.F2I, l, x(f), (Type.Float) Type.F32, AT));
             f.entry().instrs.add(new Instr.Ret(x(f), AT));
-        }).contains("fcvt"));
+        }).contains("f2i"));
     }
 
     @Test

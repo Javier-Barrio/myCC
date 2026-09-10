@@ -126,7 +126,7 @@ define @f() -> void {
   store.32 %t17, %t18
   %t19 = wadd.u64 %pp, 4
   mov.64 %t20, 1.5
-  %t21 = fcvt.32 %t20
+  mov.32 %t21, %t20
   store.f32 %t19, %t21
   %t22 = addrof %q
   %t23 = addrof %p

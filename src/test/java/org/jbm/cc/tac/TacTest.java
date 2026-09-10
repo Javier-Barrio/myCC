@@ -157,7 +157,7 @@ class TacTest {
                 new Instr.Cmp(Instr.CmpOp.ULT, c, a, b, AT),
                 new Instr.Cmp(Instr.CmpOp.FNE, c, d, new Operand.FloatImm(0.0), AT),
                 new Instr.Cvt(Instr.CvtOp.I2F, d, a, (Type.Float) Type.F64, AT),
-                new Instr.Cvt(Instr.CvtOp.FCVT, s, d, (Type.Float) Type.F32, AT),
+                new Instr.Mov(s, d, Type.F32, AT),
                 new Instr.Load(c, p, 8, Instr.Ext.UNSIGNED, false, AT),
                 new Instr.Load(l, p, 32, Instr.Ext.SIGNED, true, AT),
                 new Instr.Load(d, p, 64, Instr.Ext.FLOAT, false, AT),
@@ -187,7 +187,7 @@ class TacTest {
                 %c = ult %a, %b
                 %c = fne %d, 0.0
                 %d = i2f.64 %a
-                %s = fcvt.32 %d
+                mov.32 %s, %d
                 %c = load.u8 %p
                 %l = load.s32 %p volatile
                 %d = load.f64 %p

@@ -30,7 +30,7 @@ define @f() -> void {
   %t2 = f2i.64 %d
   mov.s32 %i, %t2
   mov.64 %d, %fl
-  %t3 = fcvt.32 %d
+  mov.32 %t3, %d
   mov.32 %fl, %t3
   %t4 = ne %p, 0
   mov.u8 %b, %t4

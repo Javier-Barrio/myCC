@@ -308,7 +308,7 @@ class LowerTest {
         assertEquals("  %t0 = f2u.64 %d", instrs("double d;", "(unsigned long) d;"));
         assertEquals("  %t0 = f2u.64 %d", instrs("double d;", "(unsigned char) d;"));
         assertEquals("  %t0 = f2i.32 %f", instrs("float f;", "(short) f;"));
-        assertEquals("  %t0 = fcvt.32 %d", instrs("double d;", "(float) d;"));
+        assertEquals("  mov.32 %t0, %d", instrs("double d;", "(float) d;"));
         assertEquals("", instrs("float f;", "(double) f;"));
         assertEquals("  f64 %d\n.entry:", body("", "double d; (long double) d;"));
     }

@@ -70,7 +70,7 @@ class TacCorpusTest {
         for (Class<?> kind : Instr.class.getPermittedSubclasses()) assertTrue(seen.contains(kind), "the corpus exercises " + kind.getSimpleName());
         for (var op : List.of("WADD", "WSUB", "WMUL", "ADD", "SUB", "MUL", "SDIV", "UDIV", "SREM", "UREM", "AND", "OR", "XOR",
                 "SHL", "LSHR", "ASHR", "FADD", "FSUB", "FMUL", "FDIV", "EQ", "NE", "SLT", "SLE", "ULT", "ULE", "FEQ", "FNE", "FLT", "FLE",
-                "I2F", "U2F", "F2I", "F2U", "FCVT")) {
+                "I2F", "U2F", "F2I", "F2U")) {
             assertTrue(ops.contains(op), "the corpus exercises " + op.toLowerCase());
         }
     }
