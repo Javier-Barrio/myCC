@@ -1,6 +1,7 @@
 package org.jbm.mycc.repl;
 
 import org.jbm.mycc.cc.Compiler;
+import org.jbm.mycc.cc.codegen.Codegen;
 import org.jbm.mycc.cc.cpp.CppTokenizer.LexException;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
 import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
@@ -168,7 +169,7 @@ public final class Repl {
 
     /** The names of the commands, for completion and help. */
     public static List<String> commands() {
-        return List.of("/list", "/vars", "/funcs", "/types", "/macros", "/tac", "/drop", "/reset", "/help", "/exit");
+        return List.of("/list", "/vars", "/funcs", "/types", "/macros", "/tac", "/asm", "/drop", "/load", "/save", "/reset", "/help", "/exit");
     }
 
     /** The lines kept so far: directives, declarations, {@code $N} declarations. */
@@ -626,6 +627,7 @@ public final class Repl {
             case "/types" -> typesCommand();
             case "/macros" -> macros();
             case "/tac" -> tac(arg);
+            case "/asm" -> asmCommand(arg);
             case "/drop" -> drop(arg);
             case "/load" -> loadFile(arg);
             case "/save" -> saveFile(arg);
@@ -645,6 +647,7 @@ public final class Repl {
         say("|  /types         the typedefs, structs, unions and enums");
         say("|  /macros        the #defines");
         say("|  /tac name      the TAC of a function or an object");
+        say("|  /asm name      the x86-64 assembly of a function, with its TAC in comments");
         say("|  /drop name     forget the line that declares a name");
         say("|  /load file     run a file line by line, as if typed");
         say("|  /save file     write the kept lines to a file");
@@ -763,6 +766,22 @@ public final class Repl {
         } catch (IOException e) {
             say("|  cannot write " + path + ": " + e.getMessage());
         }
+    }
+
+    private void asmCommand(String name) {
+        if (name.isEmpty()) {
+            say("|  usage: /asm name");
+            return;
+        }
+        for (Function f : last.tac().functions) {
+            if (f.name.equals(name)) {
+                for (String line : Codegen.emit(last.tac(), f, true).split("\n")) {
+                    say("|  " + line);
+                }
+                return;
+            }
+        }
+        say("|  no such function: " + name);
     }
 
     // The kept line declaring the name goes; if the rest no longer

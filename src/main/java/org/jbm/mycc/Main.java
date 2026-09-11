@@ -1,6 +1,7 @@
 package org.jbm.mycc;
 
 import org.jbm.mycc.cc.Compiler;
+import org.jbm.mycc.cc.codegen.Codegen;
 import org.jbm.mycc.cc.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
 import org.jbm.mycc.cc.cpp.HeaderProvider;
@@ -53,14 +54,25 @@ public class Main {
 
     // With a path argument compiles that file, with `-I dir` search
     // directories for its includes; without one, SOURCE.
+    // `-S` prints x86-64 assembly instead, `-a` with the TAC in comments.
     public static void main(String[] args) throws IOException {
         List<Path> searchDirs = new ArrayList<>();
         String file = "<source>";
         String source = SOURCE;
+        boolean assembly = false;
+        boolean annotate = false;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("-I") && i + 1 < args.length) {
                 searchDirs.add(Path.of(args[i + 1]));
                 i++;
+                continue;
+            }
+            if (args[i].equals("-S")) {
+                assembly = true;
+                continue;
+            }
+            if (args[i].equals("-a")) {
+                annotate = true;
                 continue;
             }
             file = args[i];
@@ -69,6 +81,10 @@ public class Main {
         HeaderProvider headers = HeaderProvider.standard(searchDirs);
         var types = new Types(X86_64SysV.INSTANCE);
         Compiler.Compiled compiled = Compiler.compile(source, headers, file, types);
+        if (assembly) {
+            System.out.print(Codegen.emit(compiled.tac(), annotate));
+            return;
+        }
 
         // The three stages a reader may want to see: the syntax tree, the
         // typed tree, and the TAC that the VM and code generation consume.

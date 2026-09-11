@@ -33,7 +33,7 @@ public final class Completer {
     private static final Pattern WORD = Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*$");
     private static final Pattern MEMBER = Pattern.compile("([A-Za-z_$][A-Za-z0-9_$]*)(->|\\.)([A-Za-z_$][A-Za-z0-9_$]*)?$");
     private static final Pattern INCLUDE = Pattern.compile("^\\s*#\\s*include\\s*<([A-Za-z0-9_./]*)$");
-    private static final Pattern NAME_COMMAND = Pattern.compile("^\\s*(/tac|/drop|/list)\\s+([A-Za-z_$][A-Za-z0-9_$]*)?$");
+    private static final Pattern NAME_COMMAND = Pattern.compile("^\\s*(/tac|/asm|/drop|/list)\\s+([A-Za-z_$][A-Za-z0-9_$]*)?$");
 
     private final Repl repl;
 
