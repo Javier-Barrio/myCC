@@ -10,4 +10,7 @@ public interface Console {
 
     /** One line of output. */
     void print(String line);
+
+    /** Program output as it comes, without a line ending added. */
+    void write(String text);
 }

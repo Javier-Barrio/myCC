@@ -33,6 +33,11 @@ public final class ScriptConsole implements Console {
         transcript.append(line).append('\n');
     }
 
+    @Override
+    public void write(String text) {
+        transcript.append(text);
+    }
+
     public String transcript() {
         return transcript.toString();
     }

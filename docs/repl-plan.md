@@ -141,6 +141,9 @@ recompile, completion candidates for each context.
 6. [x] `Completer` and its contexts; `JLineConsole`; `CShell` main and a `cshell` Gradle task.
 7. [x] `/load`, `/save`, errors with the caret, faults with the C location.
 
-Deferred: real builtins (`printf`, `malloc`, ...) replacing the no-ops;
-non-constant initializers at file scope; `$N` per expression when a
+Builtins: `printf` and the small libc in `repl.vm.builtins`, bound by
+name exactly while a header or prototype declares them, output through
+the console.
+
+Deferred: non-constant initializers at file scope; `$N` per expression when a
 line has several; a C backtrace on faults.

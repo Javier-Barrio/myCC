@@ -74,4 +74,10 @@ public final class JLineConsole implements Console {
         terminal.writer().println(line);
         terminal.writer().flush();
     }
+
+    @Override
+    public void write(String text) {
+        terminal.writer().print(text);
+        terminal.writer().flush();
+    }
 }

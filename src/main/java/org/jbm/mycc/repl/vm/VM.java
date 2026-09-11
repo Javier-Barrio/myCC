@@ -13,7 +13,6 @@ import org.jbm.mycc.cc.lower.tac.TacVisitor;
 import org.jbm.mycc.cc.lower.tac.TargetDesc;
 import org.jbm.mycc.cc.lower.tac.Type;
 import org.jbm.mycc.cc.lower.tac.Var;
-import org.jbm.mycc.repl.vm.builtins.Printf;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -39,9 +38,26 @@ public class VM implements TacVisitor<Void> {
     // a declared function it does not define.
     private final LinkedHashMap<String, Builtin> builtins = new LinkedHashMap<>();
 
+    // Where the program's output goes: the builtins write here, and the
+    // shell points it at its console.
+    private java.io.PrintStream out = System.out;
+
+    public java.io.PrintStream out() {
+        return out;
+    }
+
+    public void out(java.io.PrintStream stream) {
+        out = stream;
+    }
+
     /** Provides {@code name} as a builtin; a later module defining it takes precedence. */
     public void bind(String name, Builtin builtin) {
         builtins.put(name, builtin);
+    }
+
+    /** Withdraws a builtin. */
+    public void unbind(String name) {
+        builtins.remove(name);
     }
 
     /** Unbinds a name; its storage stays for whatever still points at it. */
@@ -91,9 +107,6 @@ public class VM implements TacVisitor<Void> {
         if (target != null && !target.equals(mod.target)) {
             throw new IllegalStateException("module for " + mod.target.name() + " loaded into a VM running " + target.name());
         }
-
-        builtins.put("printf", new Printf());
-
         target = mod.target;
         for (var s : mod.structs) {
             structs.put(s.name(), s);
@@ -206,10 +219,10 @@ public class VM implements TacVisitor<Void> {
     }
 
     /** An integer or pointer value, held extended per its variable's type. */
-    record IntValue(long value) implements Value {
+    public record IntValue(long value) implements Value {
     }
 
-    record FloatValue(double value) implements Value {
+    public record FloatValue(double value) implements Value {
     }
 
     // The address of a variable of the running function.

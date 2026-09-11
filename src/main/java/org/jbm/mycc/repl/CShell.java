@@ -46,5 +46,10 @@ public final class CShell {
         public void print(String line) {
             target.print(line);
         }
+
+        @Override
+        public void write(String text) {
+            target.write(text);
+        }
     }
 }

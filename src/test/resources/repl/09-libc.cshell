@@ -1,0 +1,47 @@
+cshell> printf("hi\n")
+|  error: use of undeclared identifier 'printf' at 1:1
+|  printf("hi\n")
+|  ^
+cshell> #include <stdio.h>
+cshell> printf("%d %5d|%-5d|%05d %x %o %c %s %%\n", 42, 42, 42, 42, 255, 8, 'z', "str")
+42    42|42   |00042 ff 10 z str %
+$1 ==> 35
+cshell> printf("%f %.2f %e %g %g %g\n", 3.14159, 2.5, 12345.678, 0.0001, 100000.0, 1e-5)
+3.141590 2.50 1.234568e+04 0.0001 100000 1e-05
+$2 ==> 47
+cshell> printf("%ld %lld %u %lu\n", -1L, 1LL << 40, -1, -1L)
+-1 1099511627776 4294967295 18446744073709551615
+$3 ==> 49
+cshell> puts("done"); putchar('!'); putchar('\n');
+done
+!
+cshell> #include <string.h>
+cshell> char buf[16];
+buf ==> ""
+cshell> strcpy(buf, "hello"); strcat(buf, ", world");
+cshell> buf
+$4 ==> "hello, world"
+cshell> strlen(buf)
+$5 ==> 12
+cshell> strcmp("a", "b") < 0 && strcmp("b", "a") > 0 && strcmp("x", "x") == 0
+$6 ==> 1
+cshell> #include <stdlib.h>
+cshell> int *p;
+p ==> nullptr
+cshell> p = malloc(3 * sizeof(int));
+cshell> p[0] = 1; p[1] = 2; p[2] = 3;
+cshell> p[0] + p[1] + p[2]
+$7 ==> 6
+cshell> abs(-7) + atoi("35")
+$8 ==> 42
+cshell> #include <math.h>
+cshell> sqrt(2.0) * sqrt(2.0)
+$9 ==> 2.0000000000000004
+cshell> pow(2, 10)
+$10 ==> 1024.0
+cshell> /drop $5
+|  dropped $5
+cshell> exit(3);
+|  exit(3)
+cshell> 1 + 1
+$11 ==> 2
