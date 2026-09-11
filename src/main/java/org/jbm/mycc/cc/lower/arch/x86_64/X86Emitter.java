@@ -251,12 +251,16 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.AddrOfVar i) {
-        throw new UnsupportedOperationException("addrof: step 3");
+        asm.insn("leaq", slot(i.var()), "%rax");
+        write("rax", i.dst());
+        return null;
     }
 
     @Override
     public Void visit(Instr.AddrOfGlobal i) {
-        throw new UnsupportedOperationException("addrof: step 3");
+        asm.insn("leaq", i.name() + "(%rip)", "%rax");
+        write("rax", i.dst());
+        return null;
     }
 
     // ---- arithmetic, comparison, conversion ----------------------------------------------------
@@ -441,12 +445,57 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Load i) {
-        throw new UnsupportedOperationException("load: step 3");
+        read(i.ptr(), "rcx");
+        if (i.ext() == Instr.Ext.FLOAT) {
+            if (i.width() == 32) {
+                asm.insn("movss", "(%rcx)", "%xmm0");
+                asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+            } else {
+                asm.insn("movsd", "(%rcx)", "%xmm0");
+            }
+            writeFloat("xmm0", i.dst());
+        } else {
+            extendFrom("(%rcx)", i.width(), i.ext() == Instr.Ext.SIGNED, "rax");
+            write("rax", i.dst());
+        }
+        return null;
     }
 
+    // A scalar at its width; an aggregate as a byte copy from the
+    // pointer the value holds, or a byte fill for the immediate 0.
     @Override
     public Void visit(Instr.Store i) {
-        throw new UnsupportedOperationException("store: step 3");
+        Type t = i.type();
+        if (t instanceof Type.Int n) {
+            read(i.value(), "rax");
+            read(i.ptr(), "rcx");
+            asm.insn("mov" + suffix(n.width()), "%" + part("rax", n.width()), "(%rcx)");
+        } else if (t instanceof Type.Ptr) {
+            read(i.value(), "rax");
+            read(i.ptr(), "rcx");
+            asm.insn("movq", "%rax", "(%rcx)");
+        } else if (t instanceof Type.Float f) {
+            readFloat(i.value(), "xmm0");
+            read(i.ptr(), "rcx");
+            if (f.width() == 32) {
+                asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
+                asm.insn("movss", "%xmm0", "(%rcx)");
+            } else {
+                asm.insn("movsd", "%xmm0", "(%rcx)");
+            }
+        } else {
+            long size = module.sizeOf(t);
+            read(i.ptr(), "rdi");
+            asm.insn("movq", "$" + size, "%rcx");
+            if (i.value() instanceof Operand.IntImm) {
+                asm.insn("xorl", "%eax", "%eax");
+                asm.insn("rep stosb");
+            } else {
+                read(i.value(), "rsi");
+                asm.insn("rep movsb");
+            }
+        }
+        return null;
     }
 
     // ---- control -------------------------------------------------------------------------------

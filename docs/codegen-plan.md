@@ -132,7 +132,7 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 1. [x] `Asm`, `Frame`, `Emitter` with `mov` and `ret`, prologue and
    epilogue; a function returning a constant runs natively.
 2. [x] `bin`, `cmp`, `cvt`.
-3. [ ] `addrof`, `load`, `store`, aggregates.
+3. [x] `addrof`, `load`, `store`, aggregates.
 4. [x] `br`, `condbr`, `switch`, `trap`.
 5. [ ] `Abi`: calls with integer, floating, stack and variadic arguments,
    `icall`, aggregate arguments and results, parameter spills.

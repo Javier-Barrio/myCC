@@ -45,6 +45,19 @@ class NativeTest {
     }
 
     @Test
+    void memoryRuns() throws Exception {
+        assertEquals(5, Native.run("int main(void) { int x = 1; int *p = &x; *p = 5; return x; }").exit());
+        assertEquals(1, Native.run("int main(void) { int a[3] = { 1, 2, 3 }; int *p = a + 2; *p = 7; return a[2] == 7 && p - a == 2 && a[0] + a[1] == 3; }").exit());
+        assertEquals(12, Native.run("struct P { int x; int y; }; int main(void) { struct P p; p.x = 3; p.y = 4; struct P q = p; q.x = 9; return p.x * p.y * (q.x == 9); }").exit());
+        assertEquals(1, Native.run("int main(void) { char buf[4]; buf[0] = 200; unsigned char *u = (unsigned char *) buf; return buf[0] == -56 && u[0] == 200; }").exit());
+        assertEquals(1, Native.run("int main(void) { double d[2]; d[0] = 1.5; d[1] = 2; float f = d[0]; return d[0] + d[1] == 3.5 && f == 1.5f; }").exit());
+        assertEquals(1, Native.run("struct B { unsigned a : 3; unsigned b : 5; int c : 4; }; int main(void) { struct B b; b.a = 7; b.b = 31; b.c = -3; return b.a == 7 && b.b == 31 && b.c == -3; }").exit());
+        assertEquals(1, Native.run("union U { int i; unsigned char c[4]; }; int main(void) { union U u; u.i = 0x04030201; return u.c[0] == 1 && u.c[3] == 4; }").exit());
+        assertEquals(1, Native.run("int main(void) { int m[2][3]; m[1][2] = 6; int *flat = &m[0][0]; return flat[5] == 6; }").exit());
+        assertEquals(0, Native.run("struct P { int a; int b; }; int main(void) { struct P z = { 0 }; return z.a + z.b; }").exit());
+    }
+
+    @Test
     void aMovedValueRuns() throws Exception {
         assertEquals(7, Native.run("int main(void) { char c = 7; int i = c; return i; }").exit());
         assertEquals(200, Native.run("int main(void) { unsigned char c = 200; return c; }").exit());
