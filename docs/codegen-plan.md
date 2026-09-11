@@ -9,26 +9,37 @@ register allocation, no optimization; those come later, if ever, as a
 pass over the TAC, not here.
 
 ```
-define @sq(i32 %x) -> i32 {            sq:
-  i32 %t0                                  pushq %rbp
-.entry:                                    movq %rsp, %rbp
-  %t0 = mul.s32 %x, %x                     subq $16, %rsp
-  ret %t0                                  movl %edi, -4(%rbp)        # %x from its argument register
-}                                        .L_sq_entry:
-                                           movslq -4(%rbp), %rax
-                                           movslq -4(%rbp), %rcx
-                                           imull %ecx, %eax
-                                           movslq %eax, %rax
-                                           movl %eax, -8(%rbp)        # %t0
-                                           movslq -8(%rbp), %rax
-                                           leave
-                                           ret
+define @sq(i32 %x) -> i32 {        # define @sq(i32 %x) -> i32
+  i32 %t0                          sq:
+.entry:                              pushq %rbp
+  %t0 = mul.s32 %x, %x               movq %rsp, %rbp
+  ret %t0                            subq $16, %rsp                 # %x at -4(%rbp), %t0 at -8(%rbp)
+}                                    movl %edi, -4(%rbp)            # %x from its argument register
+                                   .L_sq_entry:
+                                     # %t0 = mul.s32 %x, %x
+                                     movslq -4(%rbp), %rax
+                                     movslq -4(%rbp), %rcx
+                                     imull %ecx, %eax
+                                     movslq %eax, %rax
+                                     movl %eax, -8(%rbp)
+                                     # ret %t0
+                                     movslq -8(%rbp), %rax
+                                     leave
+                                     ret
 ```
 
 AT&T syntax: source before destination, registers with `%`, immediates
 with `$`, memory as `offset(base, index, scale)`, and the operand width
 as the mnemonic's suffix (`b w l q`), so `movl %eax, -8(%rbp)` writes 4
 bytes and `movslq` extends a signed 4-byte value to 8.
+
+**Annotation.** In annotated mode, shown above, every TAC instruction
+is printed as a comment, as `TacWriter` spells it, before the assembly
+it became, with the function's signature at its label and the slot
+table after the prologue. Since an instruction's assembly depends on
+nothing but itself, the comment delimits exactly its lines. The plain
+mode prints the assembly alone. `Main -S` is plain, `Main -S -a`
+annotated, and the shell's `/asm name` is annotated.
 
 ## Rules
 
@@ -78,16 +89,17 @@ bytes and `movslq` extends a signed 4-byte value to 8.
 ## Components
 
 ```
-Codegen      emit(Module) -> String: the sections, each Global through Data, each Function through Emitter
+Codegen      emit(Module, boolean annotate) -> String: the sections, each Global through Data, each Function through Emitter
 Frame        slot offsets for one Function's parameters and locals; frame size
 Emitter      implements TacVisitor<Void>: one method per instruction, writing lines; load(Operand, reg),
              store(reg, Var), address(Var), the width suffixes; prologue with parameter spills, epilogue
 Abi          the SysV register order, argument classification, the call sequence, the return
 Data         a Global's byte image and its directives
-Asm          the text: labels, instructions, comments, indentation
+Asm          the text: labels, instructions, indentation; comments only when annotating
 ```
 
-`Main -S file.c` prints the assembly. Then:
+`Main -S file.c` prints the assembly, `Main -S -a file.c` with the TAC
+in comments. Then:
 
 ```
 gcc -o prog file.s        # links the C library, so printf and malloc are the real ones
@@ -97,7 +109,8 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 
 - `CodegenTest`: the exact assembly of small functions, one per
   instruction family and for the prologue, a call, a global with each
-  item kind, as `LowerTest` does for the TAC.
+  item kind, as `LowerTest` does for the TAC; annotated, so each
+  expectation reads as TAC followed by its assembly, and one plain case.
 - `NativeTest`: every self-asserting program of `VmGrammarTest`,
   `VmDataflowTest`, `VmMemoryTest` and `LibcTest`, compiled to
   assembly, assembled with `gcc`, run, and expected to exit 0 or print
@@ -114,7 +127,7 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 5. [ ] `Abi`: calls with integer, floating, stack and variadic arguments,
    `icall`, aggregate arguments and results, parameter spills.
 6. [ ] `Data`; `NativeTest` over the program corpus.
-7. [ ] `Main -S`.
+7. [ ] `Main -S` and `-a`; `/asm name` in the shell.
 
 Deferred: register allocation; `f80` on the x87; small aggregates by
 value across the library boundary; `setjmp`; other targets, which get
