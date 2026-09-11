@@ -1,6 +1,6 @@
 # Code generation: TAC to x86-64 assembly
 
-`org.jbm.mycc.cc.codegen`: a `Module` compiled for `x86_64-sysv` to
+A `Module` compiled for `x86_64-sysv` to
 GNU assembler text in AT&T syntax, assembled and linked by `gcc`. The
 smallest correct scheme, the same one the VM uses: every variable has a
 slot in the frame, every instruction loads its operands from their
@@ -88,14 +88,24 @@ annotated, and the shell's `/asm name` is annotated.
 
 ## Components
 
+Target-independent, in `org.jbm.mycc.cc.codegen`:
+
 ```
-Codegen      emit(Module, boolean annotate) -> String: the sections, each Global through Data, each Function through Emitter
-Frame        slot offsets for one Function's parameters and locals; frame size
-Emitter      implements TacVisitor<Void>: one method per instruction, writing lines; load(Operand, reg),
-             store(reg, Var), address(Var), the width suffixes; prologue with parameter spills, epilogue
-Abi          the SysV register order, argument classification, the call sequence, the return
+Codegen      emit(Module, boolean annotate) -> String: picks the Backend for the module's target; the
+             sections, each Global through Data, each Function through the backend
+Backend      what a target provides: the assembly of one Function
+Frame        slot offsets for one Function's parameters and locals, from the module's sizes; frame size
 Data         a Global's byte image and its directives
 Asm          the text: labels, instructions, indentation; comments only when annotating
+```
+
+CPU-specific, in `org.jbm.mycc.cc.lower.arch.x86_64`, beside `X86_64SysV`:
+
+```
+X86Emitter   implements Backend and TacVisitor<Void>: one method per instruction, writing lines;
+             load(Operand, reg), store(reg, Var), address(Var), the width suffixes; prologue with
+             parameter spills, epilogue
+X86Abi       the SysV register order, argument classification, the call sequence, the return
 ```
 
 `Main -S file.c` prints the assembly, `Main -S -a file.c` with the TAC
@@ -119,7 +129,7 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 
 ## Steps
 
-1. [ ] `Asm`, `Frame`, `Emitter` with `mov` and `ret`, prologue and
+1. [x] `Asm`, `Frame`, `Emitter` with `mov` and `ret`, prologue and
    epilogue; a function returning a constant runs natively.
 2. [ ] `bin`, `cmp`, `cvt`.
 3. [ ] `addrof`, `load`, `store`, aggregates.
@@ -131,4 +141,4 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 
 Deferred: register allocation; `f80` on the x87; small aggregates by
 value across the library boundary; `setjmp`; other targets, which get
-their own `Emitter` and `Abi` behind the same `Codegen`.
+their own emitter and ABI in their own `arch` package behind the same `Codegen`.
