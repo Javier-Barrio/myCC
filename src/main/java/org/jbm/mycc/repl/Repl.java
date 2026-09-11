@@ -123,7 +123,10 @@ public final class Repl {
         }
     }
 
-    // The program's output, byte by byte from the builtins, to the console.
+    // The program's output, byte by byte from the builtins, to the
+    // console; whether it left the cursor in the middle of a line.
+    private boolean midLine;
+
     private final class ConsoleStream extends OutputStream {
         private final ByteArrayOutputStream pending = new ByteArrayOutputStream();
 
@@ -135,10 +138,22 @@ public final class Repl {
         @Override
         public void flush() {
             if (pending.size() > 0) {
-                console.write(pending.toString(StandardCharsets.ISO_8859_1));
+                String text = pending.toString(StandardCharsets.ISO_8859_1);
+                console.write(text);
+                midLine = !text.endsWith("\n");
                 pending.reset();
             }
         }
+    }
+
+    // The shell's own lines start at a line start: a program's unfinished
+    // line is ended first.
+    private void say(String line) {
+        if (midLine) {
+            console.write("\n");
+            midLine = false;
+        }
+        console.print(line);
     }
 
     /** The last successful compile: the typed tree and syntax tree completion reads. */
@@ -164,6 +179,10 @@ public final class Repl {
     /** Reads and handles lines until the end of input or {@code /exit}. */
     public void run() {
         while (true) {
+            if (midLine) {
+                console.write("\n");
+                midLine = false;
+            }
             Optional<String> line = console.readLine(PROMPT);
             if (line.isEmpty()) {
                 return;
@@ -192,7 +211,7 @@ public final class Repl {
             if (!snippet(text)) {
                 Optional<String> next = more.get();
                 if (next.isEmpty()) {
-                    console.print("|  error: incomplete input");
+                    say("|  error: incomplete input");
                     return true;
                 }
                 text = text + "\n" + next.get();
@@ -285,7 +304,7 @@ public final class Repl {
     // location is on and a caret under its column. `typed` is what the
     // user wrote when the snippet is a rewrite of it.
     private void report(String kind, String message, Trial trial, int skipLines, int skipColumns, String typed) {
-        console.print("|  " + kind + ": " + relocate(message, trial, skipLines, skipColumns));
+        say("|  " + kind + ": " + relocate(message, trial, skipLines, skipColumns));
         Matcher m = LOCATION.matcher(message);
         if (!m.find()) {
             return;
@@ -308,8 +327,8 @@ public final class Repl {
                 column -= skipColumns;
             }
         }
-        console.print("|  " + source);
-        console.print("|  " + " ".repeat(Math.max(column - 1, 0)) + "^");
+        say("|  " + source);
+        say("|  " + " ".repeat(Math.max(column - 1, 0)) + "^");
     }
 
     private static String typed(Trial trial) {
@@ -341,7 +360,7 @@ public final class Repl {
         Compiler.Compiled compiled = a.compiled().get();
         Optional<TFunction> file = fileFunction(compiled.typed());
         if (file.isPresent() && !declarations(compiled, trial).isEmpty()) {
-            console.print("|  error: a line holds declarations or statements, not both");
+            say("|  error: a line holds declarations or statements, not both");
             return true;
         }
         if (file.isPresent() && isExpression(file.get()) && expression(text, expressionType(file.get()))) {
@@ -361,7 +380,7 @@ public final class Repl {
             kept.clear();
             kept.addAll(trial.entries());
             for (Kept k : replaced) {
-                console.print("|  replaced " + String.join(", ", k.names()));
+                say("|  replaced " + String.join(", ", k.names()));
             }
             echoDeclarations(compiled, trial);
         }
@@ -397,9 +416,9 @@ public final class Repl {
         kept.add(new Kept(declaration, Set.of(name)));
         if (array) {
             long address = vm.memory().loadInt(vm.addressOf(name), (int) types.size(typeOf(compiled.typed(), name)) * 8, false);
-            console.print(name + " ==> " + printer.printAt(address, type));
+            say(name + " ==> " + printer.printAt(address, type));
         } else {
-            console.print(name + " ==> " + printer.print(name, typeOf(compiled.typed(), name)));
+            say(name + " ==> " + printer.print(name, typeOf(compiled.typed(), name)));
         }
         return true;
     }
@@ -411,7 +430,7 @@ public final class Repl {
             vm.step(compiled.tac());
             return true;
         } catch (Libc.Exit e) {
-            console.print("|  " + e.getMessage());
+            say("|  " + e.getMessage());
             return false;
         } catch (IllegalStateException e) {
             report("fault", e.getMessage(), trial, skipLines, skipColumns, typed);
@@ -569,13 +588,13 @@ public final class Repl {
     private void echoDeclarations(Compiler.Compiled compiled, Trial trial) {
         for (Decl d : declarations(compiled, trial)) {
             if (d instanceof Decl.FunctionDefinition f) {
-                console.print("|  defined " + f.name().text);
+                say("|  defined " + f.name().text);
             } else if (d instanceof Decl.Declaration decl && !isTypedef(decl)) {
                 for (Decl.InitDeclarator id : decl.declarators()) {
                     String name = id.name().text;
                     Optional<TUnit.Global> g = definedGlobal(compiled.typed(), name);
                     if (g.isPresent()) {
-                        console.print(name + " ==> " + printer.print(name, g.get().symbol().type()));
+                        say(name + " ==> " + printer.print(name, g.get().symbol().type()));
                     }
                 }
             }
@@ -612,25 +631,25 @@ public final class Repl {
             case "/save" -> saveFile(arg);
             case "/reset" -> {
                 reset();
-                console.print("|  reset");
+                say("|  reset");
             }
-            default -> console.print("|  unknown command: " + name);
+            default -> say("|  unknown command: " + name);
         }
         return true;
     }
 
     private void help() {
-        console.print("|  /list [name]   the kept lines, numbered; or the line declaring a name");
-        console.print("|  /vars          the objects, with their values");
-        console.print("|  /funcs         the functions, with their types");
-        console.print("|  /types         the typedefs, structs, unions and enums");
-        console.print("|  /macros        the #defines");
-        console.print("|  /tac name      the TAC of a function or an object");
-        console.print("|  /drop name     forget the line that declares a name");
-        console.print("|  /load file     run a file line by line, as if typed");
-        console.print("|  /save file     write the kept lines to a file");
-        console.print("|  /reset         forget everything");
-        console.print("|  /exit          leave");
+        say("|  /list [name]   the kept lines, numbered; or the line declaring a name");
+        say("|  /vars          the objects, with their values");
+        say("|  /funcs         the functions, with their types");
+        say("|  /types         the typedefs, structs, unions and enums");
+        say("|  /macros        the #defines");
+        say("|  /tac name      the TAC of a function or an object");
+        say("|  /drop name     forget the line that declares a name");
+        say("|  /load file     run a file line by line, as if typed");
+        say("|  /save file     write the kept lines to a file");
+        say("|  /reset         forget everything");
+        say("|  /exit          leave");
     }
 
     private void list(String name) {
@@ -640,9 +659,9 @@ public final class Repl {
                 continue;
             }
             String[] lines = k.text().split("\n");
-            console.print("|  " + (i + 1) + " : " + lines[0]);
+            say("|  " + (i + 1) + " : " + lines[0]);
             for (int j = 1; j < lines.length; j++) {
-                console.print("|      " + lines[j]);
+                say("|      " + lines[j]);
             }
         }
     }
@@ -651,7 +670,7 @@ public final class Repl {
         for (TUnit.Global g : last.typed().globals()) {
             if (g.isDefinition() && g.symbol().declaredAt.file.equals(FILE)) {
                 String n = g.symbol().name;
-                console.print("|  " + g.symbol().type().spelling() + " " + n + " = " + printer.print(n, g.symbol().type()));
+                say("|  " + g.symbol().type().spelling() + " " + n + " = " + printer.print(n, g.symbol().type()));
             }
         }
     }
@@ -659,7 +678,7 @@ public final class Repl {
     private void funcs() {
         for (TFunction f : last.typed().functions()) {
             if (!f.symbol().name.equals(Parser.FILE_FUNCTION) && f.symbol().declaredAt.file.equals(FILE)) {
-                console.print("|  " + f.symbol().name + " : " + f.symbol().type().spelling());
+                say("|  " + f.symbol().name + " : " + f.symbol().type().spelling());
             }
         }
     }
@@ -667,10 +686,10 @@ public final class Repl {
     private void typesCommand() {
         for (Decl d : last.ast()) {
             if (d instanceof Decl.Declaration decl && decl.specifiers().token().file.equals(FILE)) {
-                tag(decl.specifiers().type()).ifPresent(t -> console.print("|  " + t));
+                tag(decl.specifiers().type()).ifPresent(t -> say("|  " + t));
                 if (isTypedef(decl)) {
                     for (Decl.InitDeclarator id : decl.declarators()) {
-                        console.print("|  typedef " + id.name().text);
+                        say("|  typedef " + id.name().text);
                     }
                 }
             }
@@ -680,20 +699,20 @@ public final class Repl {
     private void macros() {
         for (Kept k : kept) {
             if (DEFINE.matcher(k.text()).find()) {
-                console.print("|  " + k.text());
+                say("|  " + k.text());
             }
         }
     }
 
     private void tac(String name) {
         if (name.isEmpty()) {
-            console.print("|  usage: /tac name");
+            say("|  usage: /tac name");
             return;
         }
         for (Function f : last.tac().functions) {
             if (f.name.equals(name)) {
                 for (String line : TacWriter.print(f).split("\n")) {
-                    console.print("|  " + line);
+                    say("|  " + line);
                 }
                 return;
             }
@@ -702,26 +721,26 @@ public final class Repl {
             if (g.name().equals(name)) {
                 for (String line : TacWriter.print(last.tac()).split("\n")) {
                     if (line.startsWith("global ") && line.contains("@" + name + " ")) {
-                        console.print("|  " + line);
+                        say("|  " + line);
                     }
                 }
                 return;
             }
         }
-        console.print("|  no such name: " + name);
+        say("|  no such name: " + name);
     }
 
     // A file's lines, each as if typed; continuation comes from the file.
     private void loadFile(String path) {
         if (path.isEmpty()) {
-            console.print("|  usage: /load file");
+            say("|  usage: /load file");
             return;
         }
         List<String> lines;
         try {
             lines = Files.readAllLines(Path.of(path));
         } catch (IOException e) {
-            console.print("|  cannot read " + path + ": " + e.getMessage());
+            say("|  cannot read " + path + ": " + e.getMessage());
             return;
         }
         Deque<String> rest = new ArrayDeque<>(lines);
@@ -735,14 +754,14 @@ public final class Repl {
 
     private void saveFile(String path) {
         if (path.isEmpty()) {
-            console.print("|  usage: /save file");
+            say("|  usage: /save file");
             return;
         }
         try {
             Files.writeString(Path.of(path), prefix());
-            console.print("|  saved " + kept.size() + " lines to " + path);
+            say("|  saved " + kept.size() + " lines to " + path);
         } catch (IOException e) {
-            console.print("|  cannot write " + path + ": " + e.getMessage());
+            say("|  cannot write " + path + ": " + e.getMessage());
         }
     }
 
@@ -750,12 +769,12 @@ public final class Repl {
     // compiles, it comes back and the error says what needed it.
     private void drop(String name) {
         if (name.isEmpty()) {
-            console.print("|  usage: /drop name");
+            say("|  usage: /drop name");
             return;
         }
         Optional<Kept> line = kept.stream().filter(k -> k.names().contains(name)).findFirst();
         if (line.isEmpty()) {
-            console.print("|  no kept line declares " + name);
+            say("|  no kept line declares " + name);
             return;
         }
         int index = kept.indexOf(line.get());
@@ -768,7 +787,7 @@ public final class Repl {
             kept.add(index, line.get());
             // the error's lines count without the removed line; put it back
             String message = shiftLines(e.getMessage(), removedAt, removedLines);
-            console.print("|  cannot drop " + name + ": " + relocate(message));
+            say("|  cannot drop " + name + ": " + relocate(message));
             return;
         }
         for (String n : line.get().names()) {
@@ -776,6 +795,6 @@ public final class Repl {
         }
         bindDeclared(last);
         vm.step(last.tac());
-        console.print("|  dropped " + String.join(", ", line.get().names()));
+        say("|  dropped " + String.join(", ", line.get().names()));
     }
 }
