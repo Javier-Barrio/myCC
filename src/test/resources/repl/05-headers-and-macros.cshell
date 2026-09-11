@@ -8,5 +8,10 @@ cshell> #include <stdio.h>
 cshell> printf("hi\n")
 hi
 $3 ==> 3
+cshell> printf("no newline")
+no newline
+$4 ==> 10
+cshell> printf("two "); printf("halves");
+two halves
 cshell> sizeof(size_t)
-$4 ==> 8
+$5 ==> 8

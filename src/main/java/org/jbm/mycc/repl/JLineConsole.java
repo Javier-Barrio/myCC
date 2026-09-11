@@ -7,6 +7,7 @@ import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.Reference;
 import org.jline.reader.UserInterruptException;
+import org.jline.reader.impl.DefaultParser;
 import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -35,8 +36,15 @@ public final class JLineConsole implements Console {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        // C text is taken as typed: the default parser would treat `\`
+        // as an escape and quotes as word delimiters, so "world\n" would
+        // arrive as "worldn".
+        DefaultParser parser = new DefaultParser();
+        parser.setEscapeChars(null);
+        parser.setQuoteChars(null);
         reader = LineReaderBuilder.builder()
                 .terminal(terminal)
+                .parser(parser)
                 .history(new DefaultHistory())
                 .completer((lineReader, parsed, candidates) -> {
                     List<Completer.Candidate> found = completer.complete(parsed.line(), parsed.cursor());
