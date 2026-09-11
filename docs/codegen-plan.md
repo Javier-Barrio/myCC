@@ -32,7 +32,7 @@ bytes and `movslq` extends a signed 4-byte value to 8.
 
 ## Rules
 
-- **Slots.** A `Frame` gives each parameter and local an `[rbp - N]`
+- **Slots.** A `Frame` gives each parameter and local a `-N(%rbp)`
   slot of its type's size and alignment, aggregates included; the frame
   is rounded to 16. Reading a scalar variable extends it per its type
   (`movsbq`, `movzwq`, `movslq`, `movl` for a `u32`, which zero-extends),
