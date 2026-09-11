@@ -39,6 +39,29 @@ cshell> /tac x
 |  global @x : i32 align 4 = { 0 : i32 1 }
 cshell> /tac nope
 |  no such name: nope
+cshell> /asm sq
+|  # define @sq(i32 %v) -> i32
+|    .globl sq
+|  sq:
+|    pushq %rbp
+|    movq %rsp, %rbp
+|    subq $16, %rsp
+|    # %v at -4(%rbp), %t0 at -8(%rbp)
+|    # %v from its argument register
+|    movl %edi, -4(%rbp)
+|  .L_sq_entry:
+|    # %t0 = mul.s32 %v, %v
+|    movslq -4(%rbp), %rax
+|    movslq -4(%rbp), %rcx
+|    imulq %rcx, %rax
+|    movslq %eax, %rax
+|    movl %eax, -8(%rbp)
+|    # ret %t0
+|    movslq -8(%rbp), %rax
+|    leave
+|    ret
+cshell> /asm nope
+|  no such function: nope
 cshell> /drop x
 |  cannot drop x: use of undeclared identifier 'x' at kept line 6:22
 cshell> /drop P
@@ -61,6 +84,7 @@ cshell> /help
 |  /types         the typedefs, structs, unions and enums
 |  /macros        the #defines
 |  /tac name      the TAC of a function or an object
+|  /asm name      the x86-64 assembly of a function, with its TAC in comments
 |  /drop name     forget the line that declares a name
 |  /load file     run a file line by line, as if typed
 |  /save file     write the kept lines to a file

@@ -161,7 +161,9 @@ class CodegenTest {
         assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -56(%rbp)"), asm);
         assertTrue(asm.contains("rep movsb\n  movq -56(%rbp), %rax\n  leave"), asm);
         String param = function("struct P { int a; int b; }; int sum(struct P p) { return p.a + p.b; }");
-        assertTrue(param.contains("movq %rdi, %rsi\n  leaq -8(%rbp), %rdi\n  movq $8, %rcx\n  rep movsb"), param);
+        assertTrue(param.contains("# %p copied from the address in its argument\n  movq %rdi, %rsi\n  leaq -8(%rbp), %rdi\n  movq $8, %rcx\n  rep movsb"), param);
+        String mixed = function("struct P { int a; int b; }; int f(struct P p, int b) { return p.a + b; }");
+        assertTrue(mixed.indexOf("movl %esi, -12(%rbp)") < mixed.indexOf("rep movsb"), "scalars are spilled before the copy clobbers their registers\n" + mixed);
     }
 
     @Test

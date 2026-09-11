@@ -7,6 +7,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /** Programs compiled to assembly, built with gcc, and run: the exit status is the check. */
 class NativeTest {
 
+    static java.util.stream.Stream<java.nio.file.Path> programs() throws java.io.IOException {
+        try (var files = java.nio.file.Files.list(java.nio.file.Path.of("src/test/resources/programs"))) {
+            return files.filter(p -> p.toString().endsWith(".c")).sorted().toList().stream();
+        }
+    }
+
+    /** The corpus the VM runs, natively: each program exits 0. */
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("programs")
+    void corpusExitsWithZero(java.nio.file.Path program) throws Exception {
+        Native.Run r = Native.run(java.nio.file.Files.readString(program));
+        assertEquals(0, r.exit(), "CHECK " + r.exit() + " failed in " + program.getFileName() + "\n" + r.out());
+    }
+
     @Test
     void aConstantReturnRuns() throws Exception {
         assertEquals(42, Native.run("int main(void) { return 42; }").exit());

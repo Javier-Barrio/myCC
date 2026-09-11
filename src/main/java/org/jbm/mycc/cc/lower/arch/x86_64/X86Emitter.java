@@ -43,10 +43,11 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     // .rodata and loaded PC-relative: the instruction set has no
     // floating immediates.
     private final java.util.LinkedHashMap<Long, String> pool = new java.util.LinkedHashMap<>();
+    private int constants;
 
     private String constant(double d) {
         long bits = Double.doubleToRawLongBits(d);
-        return pool.computeIfAbsent(bits, b -> ".LC" + pool.size());
+        return pool.computeIfAbsent(bits, b -> ".LC" + constants++);
     }
 
     private void emitPool() {
@@ -74,7 +75,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         this.module = module;
         this.function = function;
         this.frame = new Frame(module, function);
-        this.returnsAggregate = module.target.classOf(function.sig.ret()) == RegClass.NONE;
+        this.returnsAggregate = isAggregate(function.sig.ret());
         if (returnsAggregate) {
             intoSlot = frame.reserve(8, 8);
         }
@@ -92,6 +93,12 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             }
         }
         emitPool();
+    }
+
+    // An aggregate has no register class, and neither has void, which is
+    // not an aggregate.
+    private static boolean isAggregate(Type t) {
+        return t instanceof Type.Array || t instanceof Type.Struct;
     }
 
     private String label(Block b) {
@@ -128,6 +135,10 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             asm.comment("the result's address from its argument register");
             asm.insn("movq", "%" + X86Abi.INT_ARGS.get(ints++), intoSlot + "(%rbp)");
         }
+        // An aggregate's pointer is noted and its bytes copied only once
+        // every scalar is in its slot: the copy uses %rsi, %rdi and %rcx.
+        java.util.List<Var> aggregates = new java.util.ArrayList<>();
+        java.util.List<String> pointers = new java.util.ArrayList<>();
         for (Var p : function.params) {
             RegClass c = module.target.classOf(p.type);
             if (c == RegClass.FLOAT) {
@@ -142,22 +153,30 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             } else {
                 String from;
                 if (ints < X86Abi.INT_ARGS.size()) {
-                    asm.comment(p + " from its argument register");
-                    from = X86Abi.INT_ARGS.get(ints++);
+                    from = "%" + X86Abi.INT_ARGS.get(ints++);
                 } else {
-                    asm.comment(p + " from the stack");
-                    asm.insn("movq", (16 + 8 * stack++) + "(%rbp)", "%rax");
-                    from = "rax";
+                    from = (16 + 8 * stack++) + "(%rbp)";
                 }
                 if (c == RegClass.NONE) {
-                    asm.insn("movq", "%" + from, "%rsi");
-                    asm.insn("leaq", slot(p), "%rdi");
-                    asm.insn("movq", "$" + module.sizeOf(p.type), "%rcx");
-                    asm.insn("rep movsb");
+                    aggregates.add(p);
+                    pointers.add(from);
+                } else if (from.startsWith("%")) {
+                    asm.comment(p + " from its argument register");
+                    write(from.substring(1), p);
                 } else {
-                    write(from, p);
+                    asm.comment(p + " from the stack");
+                    asm.insn("movq", from, "%rax");
+                    write("rax", p);
                 }
             }
+        }
+        for (int k = 0; k < aggregates.size(); k++) {
+            Var p = aggregates.get(k);
+            asm.comment(p + " copied from the address in its argument");
+            asm.insn("movq", pointers.get(k), "%rsi");
+            asm.insn("leaq", slot(p), "%rdi");
+            asm.insn("movq", "$" + module.sizeOf(p.type), "%rcx");
+            asm.insn("rep movsb");
         }
     }
 
@@ -587,7 +606,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 if (width(function.sig.ret()) == 32) {
                     asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
                 }
-            } else if (c == RegClass.NONE) {
+            } else if (isAggregate(function.sig.ret())) {
                 read(i.value(), "rsi");
                 asm.insn("movq", intoSlot + "(%rbp)", "%rdi");
                 asm.insn("movq", "$" + module.sizeOf(function.sig.ret()), "%rcx");
