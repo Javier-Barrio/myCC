@@ -1,7 +1,7 @@
 # Code generation: TAC to x86-64 assembly
 
 `org.jbm.mycc.cc.codegen`: a `Module` compiled for `x86_64-sysv` to
-GNU assembler text in Intel syntax, assembled and linked by `gcc`. The
+GNU assembler text in AT&T syntax, assembled and linked by `gcc`. The
 smallest correct scheme, the same one the VM uses: every variable has a
 slot in the frame, every instruction loads its operands from their
 slots into scratch registers, computes, and stores the result back. No
@@ -10,58 +10,63 @@ pass over the TAC, not here.
 
 ```
 define @sq(i32 %x) -> i32 {            sq:
-  i32 %t0                                  push rbp
-.entry:                                    mov rbp, rsp
-  %t0 = mul.s32 %x, %x                     sub rsp, 16
-  ret %t0                                  mov dword ptr [rbp-4], edi     ; %x from its argument register
+  i32 %t0                                  pushq %rbp
+.entry:                                    movq %rsp, %rbp
+  %t0 = mul.s32 %x, %x                     subq $16, %rsp
+  ret %t0                                  movl %edi, -4(%rbp)        # %x from its argument register
 }                                        .L_sq_entry:
-                                           movsxd rax, dword ptr [rbp-4]
-                                           movsxd rcx, dword ptr [rbp-4]
-                                           imul eax, ecx
-                                           movsxd rax, eax
-                                           mov dword ptr [rbp-8], eax     ; %t0
-                                           movsxd rax, dword ptr [rbp-8]
+                                           movslq -4(%rbp), %rax
+                                           movslq -4(%rbp), %rcx
+                                           imull %ecx, %eax
+                                           movslq %eax, %rax
+                                           movl %eax, -8(%rbp)        # %t0
+                                           movslq -8(%rbp), %rax
                                            leave
                                            ret
 ```
+
+AT&T syntax: source before destination, registers with `%`, immediates
+with `$`, memory as `offset(base, index, scale)`, and the operand width
+as the mnemonic's suffix (`b w l q`), so `movl %eax, -8(%rbp)` writes 4
+bytes and `movslq` extends a signed 4-byte value to 8.
 
 ## Rules
 
 - **Slots.** A `Frame` gives each parameter and local an `[rbp - N]`
   slot of its type's size and alignment, aggregates included; the frame
   is rounded to 16. Reading a scalar variable extends it per its type
-  (`movsx`, `movzx`, `movsxd`, `mov eax` for a `u32`), so a value in a
-  register is always held extended, as the TAC promises; writing stores
-  the type's width. `addrof %x` is `lea rax, [rbp - N]`.
-- **Registers.** `rax` and `rcx` for integers and pointers, `xmm0` and
-  `xmm1` for floating values, `rdx` for division; nothing lives in a
-  register across instructions. `f80` is computed as `f64`, as the VM
+  (`movsbq`, `movzwq`, `movslq`, `movl` for a `u32`, which zero-extends),
+  so a value in a register is always held extended, as the TAC promises;
+  writing stores the type's width. `addrof %x` is `leaq -N(%rbp), %rax`.
+- **Registers.** `%rax` and `%rcx` for integers and pointers, `%xmm0`
+  and `%xmm1` for floating values, `%rdx` for division; nothing lives in
+  a register across instructions. `f80` is computed as `f64`, as the VM
   does; the slot keeps its 16 bytes.
 - **Instructions.** `mov.sN/uN` extends from N bits; `bin` computes at
-  64 bits and extends per its modifier (`add`, `sub`, `imul`, `idiv`
-  and `div` with `cqo`/`xor edx`, `and`, `or`, `xor`, `shl`, `shr`,
-  `sar`; `addsd` and friends at `.64`, `addss` at `.32`); `cmp` sets
-  `al` with `setcc` and zero-extends; `cvt` is `cvtsi2sd`, `cvttsd2si`
-  and their `ss` forms, unsigned through the usual shift trick; `load`
-  and `store` at the instruction's width, an aggregate store as `rep
-  movsb` or `rep stosb`.
+  64 bits and extends per its modifier (`addq`, `subq`, `imulq`, `idivq`
+  and `divq` after `cqto` or `xorl %edx, %edx`, `andq`, `orq`, `xorq`,
+  `shlq`, `shrq`, `sarq` with the count in `%cl`; `addsd` and friends at
+  `.64`, `addss` at `.32`); `cmp` sets `%al` with `setcc` and
+  zero-extends; `cvt` is `cvtsi2sdq`, `cvttsd2siq` and their `ss` forms,
+  unsigned through the usual shift trick; `load` and `store` at the
+  instruction's width, an aggregate store as `rep movsb` or `rep stosb`.
 - **Control.** A block is a label `.L_<function>_<block>`; `br` is
-  `jmp`; `condbr` is `cmp rax, 0` then `jne`/`jmp`; `switch` is a chain
-  of `cmp`/`je` then `jmp` to the default; `ret` puts the value in `rax`
-  or `xmm0`, an aggregate's address in `rax`, then `leave; ret`;
-  `trap` is `ud2`.
-- **Calls, SysV.** Integer and pointer arguments in `rdi rsi rdx rcx r8
-  r9`, floating in `xmm0-7`, the rest pushed right to left; `al` holds
-  the count of vector registers for a variadic callee; the stack is
-  16-aligned at the call. The return value in `rax` or `xmm0` goes to
-  `dst`. An aggregate argument is passed as the pointer the TAC
+  `jmp`; `condbr` is `testq %rax, %rax` then `jne`/`jmp`; `switch` is a
+  chain of `cmpq`/`je` then `jmp` to the default; `ret` puts the value
+  in `%rax` or `%xmm0`, an aggregate's address in `%rax`, then `leave;
+  ret`; `trap` is `ud2`.
+- **Calls, SysV.** Integer and pointer arguments in `%rdi %rsi %rdx
+  %rcx %r8 %r9`, floating in `%xmm0-7`, the rest pushed right to left;
+  `%al` holds the count of vector registers for a variadic callee; the
+  stack is 16-aligned at the call. The return value in `%rax` or `%xmm0`
+  goes to `dst`. An aggregate argument is passed as the pointer the TAC
   provides and copied by the callee at entry; an aggregate result is
   returned through `into`, passed as a hidden first argument. That is
   SysV's convention only for aggregates larger than 16 bytes; small
   ones are passed in registers by real C code, so a call to a library
   function with a struct by value is rejected at compile time.
-  `icall` is `call rax`. A parameter's value is moved from its argument
-  register or its stack position into its slot in the prologue.
+  `icall` is `call *%rax`. A parameter's value is moved from its
+  argument register or its stack position into its slot in the prologue.
 - **Data.** A `Global` is a byte image built from its items exactly as
   the VM's loader builds it, emitted as `.byte` runs with each `AddrItem`
   as a `.quad name+addend` at its offset, in `.data`, `.rodata` for
