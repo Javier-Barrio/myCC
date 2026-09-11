@@ -17,15 +17,20 @@ public final class Codegen {
     }
 
     public static String emit(@NonNull Module module, boolean annotate) {
+        return AttPrinter.print(build(module, annotate));
+    }
+
+    /** The assembly IR of a module: what the printer spells and an assembler would encode. */
+    public static List<Item> build(@NonNull Module module, boolean annotate) {
         Backend backend = backend(module);
         Asm asm = new Asm(annotate);
-        asm.directive(".text");
+        asm.section(".text");
         for (Function f : module.functions) {
             backend.function(asm, module, f);
         }
         Data.emit(asm, module);
-        asm.directive(".section .note.GNU-stack,\"\",@progbits");
-        return asm.text();
+        asm.section(".section .note.GNU-stack,\"\",@progbits");
+        return asm.items();
     }
 
     /** One function's assembly alone, for a reader. */
