@@ -91,12 +91,18 @@ annotated, and the shell's `/asm name` is annotated.
 Target-independent, in `org.jbm.mycc.cc.codegen`:
 
 ```
-Codegen      emit(Module, boolean annotate) -> String: picks the Backend for the module's target; the
-             sections, each Global through Data, each Function through the backend
+Codegen      build(Module, annotate) -> List<Item>, the assembly IR; emit(...) -> String, the IR printed.
+             Picks the Backend for the module's target; the sections, each Global through Data, each
+             Function through the backend
 Backend      what a target provides: the assembly of one Function
 Frame        slot offsets for one Function's parameters and locals, from the module's sizes; frame size
-Data         a Global's byte image and its directives
-Asm          the text: labels, instructions, indentation; comments only when annotating
+Data         a Global's byte image as IR items: bytes, addresses, zeros
+Item         the assembly IR, one record per line: Insn(mnemonic, operands), Label, Section, Global,
+             Align, Bytes, Address, Word, Zero, Comment, Note
+Operand      Reg, Imm, Mem(disp, base, index, scale), Sym(name, addend, reloc), RipRel(name, reloc),
+             Indirect(reg); reloc is PLAIN, PLT or GOT
+Asm          builds the IR in order; comments only when annotating
+AttPrinter   the IR in AT&T syntax for the GNU assembler; an assembler would encode the same IR
 ```
 
 CPU-specific, in `org.jbm.mycc.cc.lower.arch.x86_64`, beside `X86_64SysV`:

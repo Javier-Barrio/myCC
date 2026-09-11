@@ -4,8 +4,6 @@ import org.jbm.mycc.cc.lower.tac.Global;
 import org.jbm.mycc.cc.lower.tac.Linkage;
 import org.jbm.mycc.cc.lower.tac.Module;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.TreeMap;
 
 /**
@@ -25,21 +23,21 @@ final class Data {
         for (Global g : module.globals) {
             String wanted = g.init() == null ? ".bss" : g.readonly() ? ".section .rodata" : ".data";
             if (!wanted.equals(section)) {
-                asm.directive(wanted);
+                asm.section(wanted);
                 section = wanted;
             }
             if (g.linkage() == Linkage.EXTERNAL) {
-                asm.directive(".globl " + g.name());
+                asm.global(g.name());
             }
-            asm.directive(".balign " + Math.max(g.align(), 1));
+            asm.align(Math.max(g.align(), 1));
             asm.label(g.name());
             long size = module.sizeOf(g.type());
             if (g.init() == null) {
-                asm.directive(".zero " + size);
+                asm.zero(size);
                 continue;
             }
             byte[] image = new byte[(int) size];
-            TreeMap<Long, String> addresses = new TreeMap<>();
+            TreeMap<Long, Operand.Sym> addresses = new TreeMap<>();
             for (Global.Item item : g.init()) {
                 apply(image, item, addresses);
             }
@@ -47,7 +45,7 @@ final class Data {
         }
     }
 
-    private static void apply(byte[] image, Global.Item item, TreeMap<Long, String> addresses) {
+    private static void apply(byte[] image, Global.Item item, TreeMap<Long, Operand.Sym> addresses) {
         int at = (int) item.offset();
         if (item instanceof Global.IntItem x) {
             putInt(image, at, x.type().width() / 8, x.value());
@@ -60,8 +58,7 @@ final class Data {
         } else if (item instanceof Global.BytesItem x) {
             System.arraycopy(x.bytes(), 0, image, at, x.bytes().length);
         } else if (item instanceof Global.AddrItem x) {
-            String addend = x.addend() == 0 ? "" : x.addend() > 0 ? "+" + x.addend() : String.valueOf(x.addend());
-            addresses.put(item.offset(), x.name() + addend);
+            addresses.put(item.offset(), Operand.sym(x.name(), x.addend()));
         } else if (item instanceof Global.BitItem x) {
             for (int k = 0; k < x.width(); k++) {
                 int bit = x.bit() + k;
@@ -84,23 +81,19 @@ final class Data {
         }
     }
 
-    // Byte runs of at most 16, an address item as a quad where it lies.
-    private static void emitImage(Asm asm, byte[] image, TreeMap<Long, String> addresses) {
+    // Byte runs of at most 16, an address item as a word where it lies.
+    private static void emitImage(Asm asm, byte[] image, TreeMap<Long, Operand.Sym> addresses) {
         int at = 0;
         while (at < image.length) {
-            String symbol = addresses.get((long) at);
+            Operand.Sym symbol = addresses.get((long) at);
             if (symbol != null) {
-                asm.directive(".quad " + symbol);
+                asm.address(symbol);
                 at += 8;
                 continue;
             }
             Long next = addresses.ceilingKey((long) at);
             int end = (int) Math.min(next == null ? image.length : next, at + 16);
-            List<String> bytes = new ArrayList<>();
-            for (int k = at; k < end; k++) {
-                bytes.add(Integer.toString(image[k] & 0xff));
-            }
-            asm.directive(".byte " + String.join(", ", bytes));
+            asm.bytes(java.util.Arrays.copyOfRange(image, at, end));
             at = end;
         }
     }

@@ -3,31 +3,54 @@ package org.jbm.mycc.cc.lower.arch.x86_64;
 import org.jbm.mycc.cc.codegen.Asm;
 import org.jbm.mycc.cc.codegen.Backend;
 import org.jbm.mycc.cc.codegen.Frame;
+import org.jbm.mycc.cc.codegen.Operand;
 import org.jbm.mycc.cc.lower.tac.Block;
 import org.jbm.mycc.cc.lower.tac.Function;
 import org.jbm.mycc.cc.lower.tac.Instr;
 import org.jbm.mycc.cc.lower.tac.Linkage;
 import org.jbm.mycc.cc.lower.tac.Module;
-import org.jbm.mycc.cc.lower.tac.Operand;
 import org.jbm.mycc.cc.lower.tac.RegClass;
 import org.jbm.mycc.cc.lower.tac.TacVisitor;
 import org.jbm.mycc.cc.lower.tac.TacWriter;
 import org.jbm.mycc.cc.lower.tac.Type;
 import org.jbm.mycc.cc.lower.tac.Var;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+
+import static org.jbm.mycc.cc.codegen.Operand.imm;
+import static org.jbm.mycc.cc.codegen.Operand.indirect;
+import static org.jbm.mycc.cc.codegen.Operand.mem;
+import static org.jbm.mycc.cc.codegen.Operand.reg;
+import static org.jbm.mycc.cc.codegen.Operand.sym;
 import static org.jbm.mycc.cc.lower.arch.x86_64.X86Abi.part;
 import static org.jbm.mycc.cc.lower.arch.x86_64.X86Abi.suffix;
 
 /**
- * x86-64 in AT&T syntax, one method per TAC instruction. Every variable
- * lives in a frame slot; an instruction reads its operands into
- * {@code %rax}, {@code %rcx} or {@code %xmm0}, {@code %xmm1}, computes,
- * and writes the result to its slot. A scalar read extends per the
- * variable's type, so a register always holds a value the way the TAC
- * says it is held; a write stores the type's width. Floating values
- * are held as doubles in registers.
+ * x86-64, one method per TAC instruction, building the assembly IR
+ * with AT&T operand order. Every variable lives in a frame slot; an
+ * instruction reads its operands into {@code %rax}, {@code %rcx} or
+ * {@code %xmm0}, {@code %xmm1}, computes, and writes the result to its
+ * slot. A scalar read extends per the variable's type, so a register
+ * always holds a value the way the TAC says it is held; a write stores
+ * the type's width. Floating values are held as doubles in registers.
  */
 public final class X86Emitter implements Backend, TacVisitor<Void> {
+
+    private static final Operand RAX = reg("rax");
+    private static final Operand RCX = reg("rcx");
+    private static final Operand RDX = reg("rdx");
+    private static final Operand RSI = reg("rsi");
+    private static final Operand RDI = reg("rdi");
+    private static final Operand RSP = reg("rsp");
+    private static final Operand RBP = reg("rbp");
+    private static final Operand EAX = reg("eax");
+    private static final Operand EDX = reg("edx");
+    private static final Operand AL = reg("al");
+    private static final Operand CL = reg("cl");
+    private static final Operand XMM0 = reg("xmm0");
+    private static final Operand XMM1 = reg("xmm1");
 
     private Asm asm;
     private Module module;
@@ -42,27 +65,8 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     // Floating constants, emitted after the code as 8-byte words in
     // .rodata and loaded PC-relative: the instruction set has no
     // floating immediates.
-    private final java.util.LinkedHashMap<Long, String> pool = new java.util.LinkedHashMap<>();
+    private final LinkedHashMap<Long, String> pool = new LinkedHashMap<>();
     private int constants;
-
-    private String constant(double d) {
-        long bits = Double.doubleToRawLongBits(d);
-        return pool.computeIfAbsent(bits, b -> ".LC" + constants++);
-    }
-
-    private void emitPool() {
-        if (pool.isEmpty()) {
-            return;
-        }
-        asm.directive(".section .rodata");
-        asm.directive(".balign 8");
-        pool.forEach((bits, label) -> {
-            asm.label(label);
-            asm.directive(".quad " + bits + "   # " + Double.longBitsToDouble(bits));
-        });
-        asm.directive(".text");
-        pool.clear();
-    }
 
     @Override
     public String target() {
@@ -81,7 +85,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         }
         asm.note(TacWriter.print(function).split("\n")[0].replace(" {", ""));
         if (function.linkage == Linkage.EXTERNAL) {
-            asm.directive(".globl " + function.name);
+            asm.global(function.name);
         }
         asm.label(function.name);
         prologue();
@@ -105,19 +109,38 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         return ".L_" + function.name + "_" + b.name;
     }
 
+    private Operand.RipRel constant(double d) {
+        long bits = Double.doubleToRawLongBits(d);
+        return Operand.rip(pool.computeIfAbsent(bits, b -> ".LC" + constants++));
+    }
+
+    private void emitPool() {
+        if (pool.isEmpty()) {
+            return;
+        }
+        asm.section(".section .rodata");
+        asm.align(8);
+        pool.forEach((bits, name) -> {
+            asm.label(name);
+            asm.word(bits, Double.toString(Double.longBitsToDouble(bits)));
+        });
+        asm.section(".text");
+        pool.clear();
+    }
+
     // ---- frame ---------------------------------------------------------------------------------
 
     private void prologue() {
-        asm.insn("pushq", "%rbp");
-        asm.insn("movq", "%rsp", "%rbp");
+        asm.insn("pushq", RBP);
+        asm.insn("movq", RSP, RBP);
         StringBuilder slots = new StringBuilder();
         for (Var v : frame.variables()) {
             if (slots.length() > 0) {
                 slots.append(", ");
             }
-            slots.append(v).append(" at ").append(slot(v));
+            slots.append(v).append(" at ").append(frame.offset(v)).append("(%rbp)");
         }
-        asm.insn("subq", "$" + frame.size(), "%rsp");
+        asm.insn("subq", imm(frame.size()), RSP);
         asm.comment(slots.toString());
         spillParameters();
     }
@@ -125,20 +148,20 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     // Each parameter from where the caller put it into its slot: the
     // integer and floating registers in order, then the stack above the
     // return address, 8 bytes each. An aggregate arrives as a pointer to
-    // its bytes and is copied. A function returning an aggregate gets
-    // the address to write it at as a hidden first integer argument.
+    // its bytes and is copied once every scalar is in its slot, since
+    // the copy uses %rsi, %rdi and %rcx. A function returning an
+    // aggregate gets the address to write it at as a hidden first
+    // integer argument.
     private void spillParameters() {
         int ints = 0;
         int floats = 0;
         int stack = 0;
         if (returnsAggregate) {
             asm.comment("the result's address from its argument register");
-            asm.insn("movq", "%" + X86Abi.INT_ARGS.get(ints++), intoSlot + "(%rbp)");
+            asm.insn("movq", reg(X86Abi.INT_ARGS.get(ints++)), mem(intoSlot, "rbp"));
         }
-        // An aggregate's pointer is noted and its bytes copied only once
-        // every scalar is in its slot: the copy uses %rsi, %rdi and %rcx.
-        java.util.List<Var> aggregates = new java.util.ArrayList<>();
-        java.util.List<String> pointers = new java.util.ArrayList<>();
+        List<Var> aggregates = new ArrayList<>();
+        List<Operand> pointers = new ArrayList<>();
         for (Var p : function.params) {
             RegClass c = module.target.classOf(p.type);
             if (c == RegClass.FLOAT) {
@@ -147,41 +170,38 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                     writeFloatFromAbi(X86Abi.FLOAT_ARGS.get(floats++), p);
                 } else {
                     asm.comment(p + " from the stack");
-                    asm.insn(width(p.type) == 32 ? "movss" : "movsd", (16 + 8 * stack++) + "(%rbp)", "%xmm0");
+                    asm.insn(width(p.type) == 32 ? "movss" : "movsd", mem(16 + 8 * stack++, "rbp"), XMM0);
                     writeFloatFromAbi("xmm0", p);
                 }
+                continue;
+            }
+            boolean inRegister = ints < X86Abi.INT_ARGS.size();
+            String register = inRegister ? X86Abi.INT_ARGS.get(ints++) : null;
+            Operand from = inRegister ? reg(register) : mem(16 + 8 * stack++, "rbp");
+            if (c == RegClass.NONE) {
+                aggregates.add(p);
+                pointers.add(from);
+            } else if (inRegister) {
+                asm.comment(p + " from its argument register");
+                write(register, p);
             } else {
-                String from;
-                if (ints < X86Abi.INT_ARGS.size()) {
-                    from = "%" + X86Abi.INT_ARGS.get(ints++);
-                } else {
-                    from = (16 + 8 * stack++) + "(%rbp)";
-                }
-                if (c == RegClass.NONE) {
-                    aggregates.add(p);
-                    pointers.add(from);
-                } else if (from.startsWith("%")) {
-                    asm.comment(p + " from its argument register");
-                    write(from.substring(1), p);
-                } else {
-                    asm.comment(p + " from the stack");
-                    asm.insn("movq", from, "%rax");
-                    write("rax", p);
-                }
+                asm.comment(p + " from the stack");
+                asm.insn("movq", from, RAX);
+                write("rax", p);
             }
         }
         for (int k = 0; k < aggregates.size(); k++) {
             Var p = aggregates.get(k);
             asm.comment(p + " copied from the address in its argument");
-            asm.insn("movq", pointers.get(k), "%rsi");
-            asm.insn("leaq", slot(p), "%rdi");
-            asm.insn("movq", "$" + module.sizeOf(p.type), "%rcx");
+            asm.insn("movq", pointers.get(k), RSI);
+            asm.insn("leaq", slot(p), RDI);
+            asm.insn("movq", imm(module.sizeOf(p.type)), RCX);
             asm.insn("rep movsb");
         }
     }
 
-    private String slot(Var v) {
-        return frame.offset(v) + "(%rbp)";
+    private Operand slot(Var v) {
+        return mem(frame.offset(v), "rbp");
     }
 
     // ---- reads and writes ----------------------------------------------------------------------
@@ -197,92 +217,88 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     }
 
     // A scalar variable's value into a register, extended per its type.
-    private void read(Var v, String reg) {
-        String at = slot(v);
+    private void read(Var v, String register) {
         if (v.type instanceof Type.Int i) {
-            extendFrom(at, i.width(), i.signed(), reg);
+            extendFrom(slot(v), i.width(), i.signed(), register);
         } else if (v.type instanceof Type.Ptr) {
-            asm.insn("movq", at, "%" + reg);
+            asm.insn("movq", slot(v), reg(register));
         } else {
             throw new IllegalStateException(v + " is not an integer");
         }
     }
 
-    // `src` (a memory operand or a register part) extended from `width` bits into a 64-bit register.
-    private void extendFrom(String src, int width, boolean signed, String reg) {
+    // `src`, a memory operand or a register part, extended from `width` bits into a 64-bit register.
+    private void extendFrom(Operand src, int width, boolean signed, String register) {
         switch (width) {
-            case 64 -> asm.insn("movq", src, "%" + reg);
+            case 64 -> asm.insn("movq", src, reg(register));
             case 32 -> {
                 if (signed) {
-                    asm.insn("movslq", src, "%" + reg);
+                    asm.insn("movslq", src, reg(register));
                 } else {
-                    asm.insn("movl", src, "%" + part(reg, 32));
+                    asm.insn("movl", src, reg(part(register, 32)));
                 }
             }
-            default -> asm.insn((signed ? "movs" : "movz") + suffix(width) + "q", src, "%" + reg);
+            default -> asm.insn((signed ? "movs" : "movz") + suffix(width) + "q", src, reg(register));
         }
     }
 
-    private void read(Operand o, String reg) {
-        if (o instanceof Operand.IntImm imm) {
-            immediate(imm.value(), reg);
+    private void read(org.jbm.mycc.cc.lower.tac.Operand o, String register) {
+        if (o instanceof org.jbm.mycc.cc.lower.tac.Operand.IntImm x) {
+            immediate(x.value(), register);
         } else {
-            read((Var) o, reg);
+            read((Var) o, register);
         }
     }
 
-    private void immediate(long value, String reg) {
-        if (value == (int) value) {
-            asm.insn("movq", "$" + value, "%" + reg);
-        } else {
-            asm.insn("movabsq", "$" + value, "%" + reg);
-        }
+    private void immediate(long value, String register) {
+        asm.insn(value == (int) value ? "movq" : "movabsq", imm(value), reg(register));
     }
 
     // A register's low bits into a scalar variable's slot, at the type's width.
-    private void write(String reg, Var v) {
+    private void write(String register, Var v) {
         int w = width(v.type);
-        asm.insn("mov" + suffix(w), "%" + part(reg, w), slot(v));
+        asm.insn("mov" + suffix(w), reg(part(register, w)), slot(v));
     }
 
     // The low N bits of a register extended in place, as a modifier says.
-    private void extend(String reg, Type.Int mod) {
+    private void extend(String register, Type.Int mod) {
         if (mod.width() == 64) {
             return;
         }
-        extendFrom("%" + part(reg, mod.width()), mod.width(), mod.signed(), reg);
+        extendFrom(reg(part(register, mod.width())), mod.width(), mod.signed(), register);
     }
 
-    private void readFloat(Operand o, String xmm) {
-        if (o instanceof Operand.FloatImm imm) {
-            asm.insn("movsd", constant(imm.value()) + "(%rip)", "%" + xmm);
+    private void readFloat(org.jbm.mycc.cc.lower.tac.Operand o, String xmm) {
+        if (o instanceof org.jbm.mycc.cc.lower.tac.Operand.FloatImm x) {
+            asm.insn("movsd", constant(x.value()), reg(xmm));
             return;
         }
         Var v = (Var) o;
         if (width(v.type) == 32) {
-            asm.insn("movss", slot(v), "%" + xmm);
-            asm.insn("cvtss2sd", "%" + xmm, "%" + xmm);
+            asm.insn("movss", slot(v), reg(xmm));
+            asm.insn("cvtss2sd", reg(xmm), reg(xmm));
         } else {
-            asm.insn("movsd", slot(v), "%" + xmm);
+            asm.insn("movsd", slot(v), reg(xmm));
         }
     }
 
     private void writeFloat(String xmm, Var v) {
         if (width(v.type) == 32) {
-            asm.insn("cvtsd2ss", "%" + xmm, "%" + xmm);
-            asm.insn("movss", "%" + xmm, slot(v));
+            asm.insn("cvtsd2ss", reg(xmm), reg(xmm));
+            asm.insn("movss", reg(xmm), slot(v));
         } else {
-            asm.insn("movsd", "%" + xmm, slot(v));
+            asm.insn("movsd", reg(xmm), slot(v));
         }
     }
 
     // A floating value as the ABI passes it, single or double per the variable's own type.
     private void writeFloatFromAbi(String xmm, Var v) {
-        if (width(v.type) == 32) {
-            asm.insn("movss", "%" + xmm, slot(v));
-        } else {
-            asm.insn("movsd", "%" + xmm, slot(v));
-        }
+        asm.insn(width(v.type) == 32 ? "movss" : "movsd", reg(xmm), slot(v));
+    }
+
+    private void roundToSingle(Operand xmm) {
+        asm.insn("cvtsd2ss", xmm, xmm);
+        asm.insn("cvtss2sd", xmm, xmm);
     }
 
     // ---- variables and addresses ---------------------------------------------------------------
@@ -296,8 +312,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         } else {
             readFloat(i.src(), "xmm0");
             if (((Type.Float) i.mod()).width() == 32) {
-                asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
-                asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+                roundToSingle(XMM0);
             }
             writeFloat("xmm0", i.dst());
         }
@@ -306,7 +321,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.AddrOfVar i) {
-        asm.insn("leaq", slot(i.var()), "%rax");
+        asm.insn("leaq", slot(i.var()), RAX);
         write("rax", i.dst());
         return null;
     }
@@ -317,12 +332,17 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     @Override
     public Void visit(Instr.AddrOfGlobal i) {
         if (defined(i.name())) {
-            asm.insn("leaq", i.name() + "(%rip)", "%rax");
+            asm.insn("leaq", Operand.rip(i.name()), RAX);
         } else {
-            asm.insn("movq", i.name() + "@GOTPCREL(%rip)", "%rax");
+            asm.insn("movq", Operand.got(i.name()), RAX);
         }
         write("rax", i.dst());
         return null;
+    }
+
+    private boolean defined(String name) {
+        return module.functions.stream().anyMatch(f -> f.name.equals(name))
+                || module.globals.stream().anyMatch(g -> g.name().equals(name));
     }
 
     // ---- arithmetic, comparison, conversion ----------------------------------------------------
@@ -345,10 +365,9 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 case FDIV -> "divsd";
                 default -> throw new IllegalStateException(i.op() + " is not a floating operation");
             };
-            asm.insn(op, "%xmm1", "%xmm0");
+            asm.insn(op, XMM1, XMM0);
             if (((Type.Float) i.mod()).width() == 32) {
-                asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
-                asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+                roundToSingle(XMM0);
             }
             writeFloat("xmm0", i.dst());
         }
@@ -361,36 +380,36 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         Type.Int unsigned = new Type.Int(mod.width(), false);
         Type.Int signed = new Type.Int(mod.width(), true);
         switch (op) {
-            case WADD, ADD -> asm.insn("addq", "%rcx", "%rax");
-            case WSUB, SUB -> asm.insn("subq", "%rcx", "%rax");
-            case WMUL, MUL -> asm.insn("imulq", "%rcx", "%rax");
+            case WADD, ADD -> asm.insn("addq", RCX, RAX);
+            case WSUB, SUB -> asm.insn("subq", RCX, RAX);
+            case WMUL, MUL -> asm.insn("imulq", RCX, RAX);
             case SDIV, SREM -> {
                 asm.insn("cqto");
-                asm.insn("idivq", "%rcx");
+                asm.insn("idivq", RCX);
                 if (op == Instr.BinOp.SREM) {
-                    asm.insn("movq", "%rdx", "%rax");
+                    asm.insn("movq", RDX, RAX);
                 }
             }
             case UDIV, UREM -> {
                 extend("rax", unsigned);
                 extend("rcx", unsigned);
-                asm.insn("xorl", "%edx", "%edx");
-                asm.insn("divq", "%rcx");
+                asm.insn("xorl", EDX, EDX);
+                asm.insn("divq", RCX);
                 if (op == Instr.BinOp.UREM) {
-                    asm.insn("movq", "%rdx", "%rax");
+                    asm.insn("movq", RDX, RAX);
                 }
             }
-            case AND -> asm.insn("andq", "%rcx", "%rax");
-            case OR -> asm.insn("orq", "%rcx", "%rax");
-            case XOR -> asm.insn("xorq", "%rcx", "%rax");
-            case SHL -> asm.insn("shlq", "%cl", "%rax");
+            case AND -> asm.insn("andq", RCX, RAX);
+            case OR -> asm.insn("orq", RCX, RAX);
+            case XOR -> asm.insn("xorq", RCX, RAX);
+            case SHL -> asm.insn("shlq", CL, RAX);
             case LSHR -> {
                 extend("rax", unsigned);
-                asm.insn("shrq", "%cl", "%rax");
+                asm.insn("shrq", CL, RAX);
             }
             case ASHR -> {
                 extend("rax", signed);
-                asm.insn("sarq", "%cl", "%rax");
+                asm.insn("sarq", CL, RAX);
             }
             default -> throw new IllegalStateException(op + " is not an integer operation");
         }
@@ -407,7 +426,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         } else {
             read(i.a(), "rax");
             read(i.b(), "rcx");
-            asm.insn("cmpq", "%rcx", "%rax");
+            asm.insn("cmpq", RCX, RAX);
             String set = switch (i.op()) {
                 case EQ -> "sete";
                 case NE -> "setne";
@@ -417,9 +436,9 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 case ULE -> "setbe";
                 default -> throw new IllegalStateException();
             };
-            asm.insn(set, "%al");
+            asm.insn(set, AL);
         }
-        asm.insn("movzbq", "%al", "%rax");
+        asm.insn("movzbq", AL, RAX);
         write("rax", i.dst());
         return null;
     }
@@ -429,24 +448,24 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     private void floatingCompare(Instr.CmpOp op) {
         switch (op) {
             case FEQ -> {
-                asm.insn("ucomisd", "%xmm1", "%xmm0");
-                asm.insn("sete", "%al");
-                asm.insn("setnp", "%cl");
-                asm.insn("andb", "%cl", "%al");
+                asm.insn("ucomisd", XMM1, XMM0);
+                asm.insn("sete", AL);
+                asm.insn("setnp", CL);
+                asm.insn("andb", CL, AL);
             }
             case FNE -> {
-                asm.insn("ucomisd", "%xmm1", "%xmm0");
-                asm.insn("setne", "%al");
-                asm.insn("setp", "%cl");
-                asm.insn("orb", "%cl", "%al");
+                asm.insn("ucomisd", XMM1, XMM0);
+                asm.insn("setne", AL);
+                asm.insn("setp", CL);
+                asm.insn("orb", CL, AL);
             }
             case FLT -> {
-                asm.insn("ucomisd", "%xmm0", "%xmm1");
-                asm.insn("seta", "%al");
+                asm.insn("ucomisd", XMM0, XMM1);
+                asm.insn("seta", AL);
             }
             case FLE -> {
-                asm.insn("ucomisd", "%xmm0", "%xmm1");
-                asm.insn("setae", "%al");
+                asm.insn("ucomisd", XMM0, XMM1);
+                asm.insn("setae", AL);
             }
             default -> throw new IllegalStateException();
         }
@@ -459,42 +478,42 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         switch (i.op()) {
             case I2F -> {
                 read(i.src(), "rax");
-                asm.insn("cvtsi2sdq", "%rax", "%xmm0");
+                asm.insn("cvtsi2sdq", RAX, XMM0);
                 writeFloat("xmm0", i.dst());
             }
             case U2F -> {
                 read(i.src(), "rax");
-                asm.insn("testq", "%rax", "%rax");
-                asm.insn("js", "1f");
-                asm.insn("cvtsi2sdq", "%rax", "%xmm0");
-                asm.insn("jmp", "2f");
+                asm.insn("testq", RAX, RAX);
+                asm.insn("js", sym("1f"));
+                asm.insn("cvtsi2sdq", RAX, XMM0);
+                asm.insn("jmp", sym("2f"));
                 asm.label("1");
-                asm.insn("movq", "%rax", "%rcx");
-                asm.insn("shrq", "$1", "%rcx");
-                asm.insn("andl", "$1", "%eax");
-                asm.insn("orq", "%rax", "%rcx");
-                asm.insn("cvtsi2sdq", "%rcx", "%xmm0");
-                asm.insn("addsd", "%xmm0", "%xmm0");
+                asm.insn("movq", RAX, RCX);
+                asm.insn("shrq", imm(1), RCX);
+                asm.insn("andl", imm(1), EAX);
+                asm.insn("orq", RAX, RCX);
+                asm.insn("cvtsi2sdq", RCX, XMM0);
+                asm.insn("addsd", XMM0, XMM0);
                 asm.label("2");
                 writeFloat("xmm0", i.dst());
             }
             case F2I -> {
                 readFloat(i.src(), "xmm0");
-                asm.insn("cvttsd2siq", "%xmm0", "%rax");
+                asm.insn("cvttsd2siq", XMM0, RAX);
                 extend("rax", (Type.Int) i.dst().type);
                 write("rax", i.dst());
             }
             case F2U -> {
                 readFloat(i.src(), "xmm0");
-                asm.insn("movsd", constant(9223372036854775808.0) + "(%rip)", "%xmm1");
-                asm.insn("ucomisd", "%xmm1", "%xmm0");
-                asm.insn("jae", "1f");
-                asm.insn("cvttsd2siq", "%xmm0", "%rax");
-                asm.insn("jmp", "2f");
+                asm.insn("movsd", constant(9223372036854775808.0), XMM1);
+                asm.insn("ucomisd", XMM1, XMM0);
+                asm.insn("jae", sym("1f"));
+                asm.insn("cvttsd2siq", XMM0, RAX);
+                asm.insn("jmp", sym("2f"));
                 asm.label("1");
-                asm.insn("subsd", "%xmm1", "%xmm0");
-                asm.insn("cvttsd2siq", "%xmm0", "%rax");
-                asm.insn("btcq", "$63", "%rax");
+                asm.insn("subsd", XMM1, XMM0);
+                asm.insn("cvttsd2siq", XMM0, RAX);
+                asm.insn("btcq", imm(63), RAX);
                 asm.label("2");
                 extend("rax", (Type.Int) i.dst().type);
                 write("rax", i.dst());
@@ -508,16 +527,17 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     @Override
     public Void visit(Instr.Load i) {
         read(i.ptr(), "rcx");
+        Operand at = mem(0, "rcx");
         if (i.ext() == Instr.Ext.FLOAT) {
             if (i.width() == 32) {
-                asm.insn("movss", "(%rcx)", "%xmm0");
-                asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+                asm.insn("movss", at, XMM0);
+                asm.insn("cvtss2sd", XMM0, XMM0);
             } else {
-                asm.insn("movsd", "(%rcx)", "%xmm0");
+                asm.insn("movsd", at, XMM0);
             }
             writeFloat("xmm0", i.dst());
         } else {
-            extendFrom("(%rcx)", i.width(), i.ext() == Instr.Ext.SIGNED, "rax");
+            extendFrom(at, i.width(), i.ext() == Instr.Ext.SIGNED, "rax");
             write("rax", i.dst());
         }
         return null;
@@ -528,29 +548,29 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     @Override
     public Void visit(Instr.Store i) {
         Type t = i.type();
+        Operand at = mem(0, "rcx");
         if (t instanceof Type.Int n) {
             read(i.value(), "rax");
             read(i.ptr(), "rcx");
-            asm.insn("mov" + suffix(n.width()), "%" + part("rax", n.width()), "(%rcx)");
+            asm.insn("mov" + suffix(n.width()), reg(part("rax", n.width())), at);
         } else if (t instanceof Type.Ptr) {
             read(i.value(), "rax");
             read(i.ptr(), "rcx");
-            asm.insn("movq", "%rax", "(%rcx)");
+            asm.insn("movq", RAX, at);
         } else if (t instanceof Type.Float f) {
             readFloat(i.value(), "xmm0");
             read(i.ptr(), "rcx");
             if (f.width() == 32) {
-                asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
-                asm.insn("movss", "%xmm0", "(%rcx)");
+                asm.insn("cvtsd2ss", XMM0, XMM0);
+                asm.insn("movss", XMM0, at);
             } else {
-                asm.insn("movsd", "%xmm0", "(%rcx)");
+                asm.insn("movsd", XMM0, at);
             }
         } else {
-            long size = module.sizeOf(t);
             read(i.ptr(), "rdi");
-            asm.insn("movq", "$" + size, "%rcx");
-            if (i.value() instanceof Operand.IntImm) {
-                asm.insn("xorl", "%eax", "%eax");
+            asm.insn("movq", imm(module.sizeOf(t)), RCX);
+            if (i.value() instanceof org.jbm.mycc.cc.lower.tac.Operand.IntImm) {
+                asm.insn("xorl", EAX, EAX);
                 asm.insn("rep stosb");
             } else {
                 read(i.value(), "rsi");
@@ -564,16 +584,16 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Br i) {
-        asm.insn("jmp", label(i.target()));
+        asm.insn("jmp", sym(label(i.target())));
         return null;
     }
 
     @Override
     public Void visit(Instr.CondBr i) {
         read(i.cond(), "rax");
-        asm.insn("testq", "%rax", "%rax");
-        asm.insn("jne", label(i.then()));
-        asm.insn("jmp", label(i.otherwise()));
+        asm.insn("testq", RAX, RAX);
+        asm.insn("jne", sym(label(i.then())));
+        asm.insn("jmp", sym(label(i.otherwise())));
         return null;
     }
 
@@ -583,14 +603,14 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         read(i.value(), "rax");
         for (Instr.Case c : i.cases()) {
             if (c.value() == (int) c.value()) {
-                asm.insn("cmpq", "$" + c.value(), "%rax");
+                asm.insn("cmpq", imm(c.value()), RAX);
             } else {
-                asm.insn("movabsq", "$" + c.value(), "%rcx");
-                asm.insn("cmpq", "%rcx", "%rax");
+                asm.insn("movabsq", imm(c.value()), RCX);
+                asm.insn("cmpq", RCX, RAX);
             }
-            asm.insn("je", label(c.target()));
+            asm.insn("je", sym(label(c.target())));
         }
-        asm.insn("jmp", label(i.dflt()));
+        asm.insn("jmp", sym(label(i.dflt())));
         return null;
     }
 
@@ -604,14 +624,14 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             if (c == RegClass.FLOAT) {
                 readFloat(i.value(), "xmm0");
                 if (width(function.sig.ret()) == 32) {
-                    asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
+                    asm.insn("cvtsd2ss", XMM0, XMM0);
                 }
             } else if (isAggregate(function.sig.ret())) {
                 read(i.value(), "rsi");
-                asm.insn("movq", intoSlot + "(%rbp)", "%rdi");
-                asm.insn("movq", "$" + module.sizeOf(function.sig.ret()), "%rcx");
+                asm.insn("movq", mem(intoSlot, "rbp"), RDI);
+                asm.insn("movq", imm(module.sizeOf(function.sig.ret())), RCX);
                 asm.insn("rep movsb");
-                asm.insn("movq", intoSlot + "(%rbp)", "%rax");
+                asm.insn("movq", mem(intoSlot, "rbp"), RAX);
             } else {
                 read(i.value(), "rax");
             }
@@ -631,7 +651,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Call i) {
-        call(i.sig(), i.args(), i.into(), i.dst(), () -> asm.insn("call", defined(i.callee()) ? i.callee() : i.callee() + "@PLT"));
+        call(i.sig(), i.args(), i.into(), i.dst(), () -> asm.insn("call", defined(i.callee()) ? sym(i.callee()) : Operand.plt(i.callee())));
         return null;
     }
 
@@ -640,19 +660,14 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         // %r10 is neither an argument register nor %rax, which a variadic call uses
         call(i.sig(), i.args(), i.into(), i.dst(), () -> {
             read(i.callee(), "r10");
-            asm.insn("call", "*%r10");
+            asm.insn("call", indirect("r10"));
         });
         return null;
     }
 
-    private boolean defined(String name) {
-        return module.functions.stream().anyMatch(f -> f.name.equals(name))
-                || module.globals.stream().anyMatch(g -> g.name().equals(name));
-    }
-
     // One argument and how it travels: by its class, single when the
     // callee's own parameter is an f32.
-    private record Arg(Operand operand, RegClass klass, boolean single) {
+    private record Arg(org.jbm.mycc.cc.lower.tac.Operand operand, RegClass klass, boolean single) {
     }
 
     // SysV: integers and pointers in six registers, floating values in
@@ -661,22 +676,29 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     // variadic callee. An aggregate result's address is the hidden first
     // argument; an aggregate argument is already the pointer the TAC
     // passes. The result goes from %rax or %xmm0 to dst.
-    private void call(Type.Func sig, java.util.List<Operand> operands, Var into, Var dst, Runnable emitCall) {
-        java.util.List<Arg> args = new java.util.ArrayList<>();
+    private void call(Type.Func sig, List<org.jbm.mycc.cc.lower.tac.Operand> operands, Var into, Var dst, Runnable emitCall) {
+        List<Arg> args = new ArrayList<>();
         if (into != null) {
             args.add(new Arg(into, RegClass.INT, false));
         }
         for (int k = 0; k < operands.size(); k++) {
-            Operand o = operands.get(k);
-            RegClass c = o instanceof Var v ? module.target.classOf(v.type) : o instanceof Operand.FloatImm ? RegClass.FLOAT : RegClass.INT;
+            org.jbm.mycc.cc.lower.tac.Operand o = operands.get(k);
+            RegClass c;
+            if (o instanceof Var v) {
+                c = module.target.classOf(v.type);
+            } else if (o instanceof org.jbm.mycc.cc.lower.tac.Operand.FloatImm) {
+                c = RegClass.FLOAT;
+            } else {
+                c = RegClass.INT;
+            }
             boolean single = k < sig.params().size() && sig.params().get(k) instanceof Type.Float f && f.width() == 32;
             args.add(new Arg(o, c == RegClass.NONE ? RegClass.INT : c, single));
         }
-        java.util.List<Arg> onStack = new java.util.ArrayList<>();
-        java.util.List<String> intRegs = new java.util.ArrayList<>();
-        java.util.List<Arg> intArgs = new java.util.ArrayList<>();
-        java.util.List<String> floatRegs = new java.util.ArrayList<>();
-        java.util.List<Arg> floatArgs = new java.util.ArrayList<>();
+        List<Arg> onStack = new ArrayList<>();
+        List<String> intRegs = new ArrayList<>();
+        List<Arg> intArgs = new ArrayList<>();
+        List<String> floatRegs = new ArrayList<>();
+        List<Arg> floatArgs = new ArrayList<>();
         for (Arg a : args) {
             if (a.klass() == RegClass.FLOAT && floatRegs.size() < X86Abi.FLOAT_ARGS.size()) {
                 floatRegs.add(X86Abi.FLOAT_ARGS.get(floatRegs.size()));
@@ -690,22 +712,22 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         }
         int pad = onStack.size() % 2 == 1 ? 8 : 0;
         if (pad > 0) {
-            asm.insn("subq", "$8", "%rsp");
+            asm.insn("subq", imm(8), RSP);
         }
         for (int k = onStack.size() - 1; k >= 0; k--) {
             Arg a = onStack.get(k);
             if (a.klass() == RegClass.FLOAT) {
                 readFloat(a.operand(), "xmm0");
-                asm.insn("subq", "$8", "%rsp");
+                asm.insn("subq", imm(8), RSP);
                 if (a.single()) {
-                    asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
-                    asm.insn("movss", "%xmm0", "(%rsp)");
+                    asm.insn("cvtsd2ss", XMM0, XMM0);
+                    asm.insn("movss", XMM0, mem(0, "rsp"));
                 } else {
-                    asm.insn("movsd", "%xmm0", "(%rsp)");
+                    asm.insn("movsd", XMM0, mem(0, "rsp"));
                 }
             } else {
                 read(a.operand(), "rax");
-                asm.insn("pushq", "%rax");
+                asm.insn("pushq", RAX);
             }
         }
         for (int k = 0; k < intArgs.size(); k++) {
@@ -714,21 +736,21 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         for (int k = 0; k < floatArgs.size(); k++) {
             readFloat(floatArgs.get(k).operand(), floatRegs.get(k));
             if (floatArgs.get(k).single()) {
-                asm.insn("cvtsd2ss", "%" + floatRegs.get(k), "%" + floatRegs.get(k));
+                asm.insn("cvtsd2ss", reg(floatRegs.get(k)), reg(floatRegs.get(k)));
             }
         }
         if (sig.variadic()) {
-            asm.insn("movl", "$" + floatRegs.size(), "%eax");
+            asm.insn("movl", imm(floatRegs.size()), EAX);
         }
         emitCall.run();
         int popped = 8 * onStack.size() + pad;
         if (popped > 0) {
-            asm.insn("addq", "$" + popped, "%rsp");
+            asm.insn("addq", imm(popped), RSP);
         }
         if (dst != null) {
             if (module.target.classOf(dst.type) == RegClass.FLOAT) {
                 if (width(sig.ret()) == 32) {
-                    asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+                    asm.insn("cvtss2sd", XMM0, XMM0);
                 }
                 writeFloat("xmm0", dst);
             } else {

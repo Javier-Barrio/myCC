@@ -1,9 +1,16 @@
 package org.jbm.mycc.cc.codegen;
 
-/** The assembly text: labels at the margin, instructions and directives indented, comments only when annotating. */
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Builds the assembly IR: a list of {@link Item}s in order. Comments
+ * are recorded only when annotating; {@link AttPrinter} turns the list
+ * into text.
+ */
 public final class Asm {
 
-    private final StringBuilder sb = new StringBuilder();
+    private final List<Item> items = new ArrayList<>();
     private final boolean annotate;
 
     public Asm(boolean annotate) {
@@ -11,36 +18,60 @@ public final class Asm {
     }
 
     public void label(String name) {
-        sb.append(name).append(":\n");
+        items.add(new Item.Label(name));
     }
 
-    public void directive(String text) {
-        sb.append("  ").append(text).append('\n');
+    public void insn(String mnemonic, Operand... operands) {
+        items.add(new Item.Insn(mnemonic, List.of(operands)));
     }
 
-    public void insn(String mnemonic, String... operands) {
-        sb.append("  ").append(mnemonic);
-        if (operands.length > 0) {
-            sb.append(' ').append(String.join(", ", operands));
-        }
-        sb.append('\n');
+    public void section(String name) {
+        items.add(new Item.Section(name));
     }
 
-    /** A comment line, when annotating. */
+    public void global(String name) {
+        items.add(new Item.Global(name));
+    }
+
+    public void align(int bytes) {
+        items.add(new Item.Align(bytes));
+    }
+
+    public void bytes(byte[] bytes) {
+        items.add(new Item.Bytes(bytes));
+    }
+
+    public void address(Operand.Sym symbol) {
+        items.add(new Item.Address(symbol));
+    }
+
+    public void word(long value, String comment) {
+        items.add(new Item.Word(value, comment));
+    }
+
+    public void zero(long bytes) {
+        items.add(new Item.Zero(bytes));
+    }
+
     public void comment(String text) {
         if (annotate) {
-            sb.append("  # ").append(text).append('\n');
+            items.add(new Item.Comment(text));
         }
     }
 
-    /** A comment at the margin, when annotating. */
     public void note(String text) {
         if (annotate) {
-            sb.append("# ").append(text).append('\n');
+            items.add(new Item.Note(text));
         }
     }
 
+    /** The IR built so far. */
+    public List<Item> items() {
+        return List.copyOf(items);
+    }
+
+    /** The IR as AT&T text. */
     public String text() {
-        return sb.toString();
+        return AttPrinter.print(items);
     }
 }
