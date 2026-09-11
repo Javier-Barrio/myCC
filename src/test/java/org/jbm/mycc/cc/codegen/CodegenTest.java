@@ -126,6 +126,21 @@ class CodegenTest {
     }
 
     @Test
+    void memoryInstructions() {
+        String asm = function("int f(int x) { int *p = &x; *p = 5; return *p; }");
+        assertTrue(asm.contains("# %t0 = addrof %x\n  leaq -4(%rbp), %rax\n  movq %rax, -24(%rbp)"), asm);
+        assertTrue(asm.contains("movq $5, %rax\n  movslq %eax, %rax\n  movl %eax, -28(%rbp)\n  # store.32 %p, %t1\n  movslq -28(%rbp), %rax\n  movq -16(%rbp), %rcx\n  movl %eax, (%rcx)"), asm);
+        assertTrue(asm.contains("# %t2 = load.s32 %p\n  movq -16(%rbp), %rcx\n  movslq (%rcx), %rax"), asm);
+        String global = function("int g; int f(void) { return g; }");
+        assertTrue(global.contains("leaq g(%rip), %rax"), global);
+        String agg = function("struct P { int a; int b; }; struct P f(struct P *p) { struct P q = *p; struct P z = { 0 }; return q; }");
+        assertTrue(agg.contains("movq $8, %rcx\n  movq -16(%rbp), %rsi\n  rep movsb"), agg);
+        assertTrue(agg.contains("movq $8, %rcx\n  xorl %eax, %eax\n  rep stosb"), agg);
+        String fl = function("float f(float *p) { return *p; }");
+        assertTrue(fl.contains("movss (%rcx), %xmm0\n  cvtss2sd %xmm0, %xmm0\n  cvtsd2ss %xmm0, %xmm0\n  movss %xmm0, -12(%rbp)"), fl);
+    }
+
+    @Test
     void plainModeHasNoComments() {
         String plain = Codegen.emit(org.jbm.mycc.cc.Compiler.compile("int main(void) { return 1; }",
                 org.jbm.mycc.cc.cpp.BundledHeaders.INSTANCE, "t.c",
