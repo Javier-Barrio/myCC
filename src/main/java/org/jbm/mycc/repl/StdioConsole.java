@@ -28,4 +28,10 @@ public final class StdioConsole implements Console {
     public void print(String line) {
         out.println(line);
     }
+
+    @Override
+    public void write(String text) {
+        out.print(text);
+        out.flush();
+    }
 }

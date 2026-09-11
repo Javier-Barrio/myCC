@@ -20,15 +20,23 @@ import org.jbm.mycc.cc.sema.tast.TStmt;
 import org.jbm.mycc.cc.sema.tast.TUnit;
 import org.jbm.mycc.cc.sema.types.CType;
 import org.jbm.mycc.cc.sema.types.Types;
+import org.jbm.mycc.repl.vm.Builtin;
 import org.jbm.mycc.repl.vm.VM;
+import org.jbm.mycc.repl.vm.builtins.Libc;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -72,6 +80,8 @@ public final class Repl {
 
     private void reset() {
         vm = new VM();
+        bound.clear();
+        vm.out(new PrintStream(new ConsoleStream(), true, StandardCharsets.ISO_8859_1));
         printer = new ValuePrinter(vm, types);
         kept.clear();
         results = 0;
@@ -81,6 +91,54 @@ public final class Repl {
 
     public VM vm() {
         return vm;
+    }
+
+    // The library is bound one name at a time, exactly while a header or
+    // a prototype declares it: nothing is provided that the program has
+    // not asked for, and dropping the include withdraws it again.
+    private final Map<String, Builtin> library = Libc.all();
+    private final Set<String> bound = new HashSet<>();
+
+    private void bindDeclared(Compiler.Compiled compiled) {
+        Set<String> declared = new HashSet<>();
+        for (Decl d : compiled.ast()) {
+            if (d instanceof Decl.Declaration decl) {
+                for (Decl.InitDeclarator id : decl.declarators()) {
+                    if (id.type().isPresent() && id.type().get() instanceof Type.Function) {
+                        declared.add(id.name().text);
+                    }
+                }
+            }
+        }
+        for (String name : declared) {
+            if (library.containsKey(name) && bound.add(name)) {
+                vm.bind(name, library.get(name));
+            }
+        }
+        for (String name : new ArrayList<>(bound)) {
+            if (!declared.contains(name)) {
+                vm.unbind(name);
+                bound.remove(name);
+            }
+        }
+    }
+
+    // The program's output, byte by byte from the builtins, to the console.
+    private final class ConsoleStream extends OutputStream {
+        private final ByteArrayOutputStream pending = new ByteArrayOutputStream();
+
+        @Override
+        public void write(int b) {
+            pending.write(b);
+        }
+
+        @Override
+        public void flush() {
+            if (pending.size() > 0) {
+                console.write(pending.toString(StandardCharsets.ISO_8859_1));
+                pending.reset();
+            }
+        }
     }
 
     /** The last successful compile: the typed tree and syntax tree completion reads. */
@@ -348,9 +406,13 @@ public final class Repl {
 
     // The module into the VM; a fault is reported and nothing is kept.
     private boolean load(Compiler.Compiled compiled, Trial trial, int skipLines, int skipColumns, String typed) {
+        bindDeclared(compiled);
         try {
             vm.step(compiled.tac());
             return true;
+        } catch (Libc.Exit e) {
+            console.print("|  " + e.getMessage());
+            return false;
         } catch (IllegalStateException e) {
             report("fault", e.getMessage(), trial, skipLines, skipColumns, typed);
             return false;
@@ -712,6 +774,7 @@ public final class Repl {
         for (String n : line.get().names()) {
             vm.drop(n);
         }
+        bindDeclared(last);
         vm.step(last.tac());
         console.print("|  dropped " + String.join(", ", line.get().names()));
     }

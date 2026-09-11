@@ -109,6 +109,26 @@ public class Memory {
         return java.util.Arrays.copyOfRange(bytes, i, i + count);
     }
 
+    /** The NUL-terminated string at the address, one byte per character. */
+    public String string(long address) {
+        int start = index(address, 1);
+        int end = start;
+        while (end < bytes.length && bytes[end] != 0) {
+            end++;
+        }
+        if (end == bytes.length) {
+            throw new IllegalStateException("unterminated string at 0x" + Long.toHexString(address));
+        }
+        return new String(bytes, start, end - start, java.nio.charset.StandardCharsets.ISO_8859_1);
+    }
+
+    /** Writes the string and its NUL at the address. */
+    public void string(long address, String s) {
+        byte[] data = s.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        write(address, data);
+        storeInt(address + data.length, 8, 0);
+    }
+
     /** The bytes written at the address. */
     public void write(long address, byte[] data) {
         int i = index(address, data.length);

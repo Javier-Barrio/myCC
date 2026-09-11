@@ -6,8 +6,7 @@ cshell> SQUARE(12)
 $2 ==> 144
 cshell> #include <stdio.h>
 cshell> printf("hi\n")
-|  fault: no definition for @printf at 1:7
-|  printf("hi\n")
-|        ^
+hi
+$3 ==> 3
 cshell> sizeof(size_t)
-$3 ==> 8
+$4 ==> 8
