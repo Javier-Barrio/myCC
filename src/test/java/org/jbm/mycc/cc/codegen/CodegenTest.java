@@ -73,6 +73,59 @@ class CodegenTest {
     }
 
     @Test
+    void integerArithmeticExtendsPerTheModifier() {
+        String asm = function("int f(int a, int b) { return a * b; }");
+        assertTrue(asm.contains("""
+                  # %t0 = mul.s32 %a, %b
+                  movslq -4(%rbp), %rax
+                  movslq -8(%rbp), %rcx
+                  imulq %rcx, %rax
+                  movslq %eax, %rax
+                  movl %eax, -12(%rbp)
+                """), asm);
+        String div = function("unsigned f(unsigned a, unsigned b) { return a / b; }");
+        assertTrue(div.contains("""
+                  # %t0 = udiv.u32 %a, %b
+                  movl -4(%rbp), %eax
+                  movl -8(%rbp), %ecx
+                  movl %eax, %eax
+                  movl %ecx, %ecx
+                  xorl %edx, %edx
+                  divq %rcx
+                  movl %eax, %eax
+                  movl %eax, -12(%rbp)
+                """), div);
+        String shift = function("char f(char c) { return c >> 1; }");
+        assertTrue(shift.contains("sarq %cl, %rax"), shift);
+    }
+
+    @Test
+    void comparisonsSetAByte() {
+        String asm = function("int f(int a, int b) { return a < b; }");
+        assertTrue(asm.contains("""
+                  # %t0 = slt %a, %b
+                  movslq -4(%rbp), %rax
+                  movslq -8(%rbp), %rcx
+                  cmpq %rcx, %rax
+                  setl %al
+                  movzbq %al, %rax
+                  movl %eax, -12(%rbp)
+                """), asm);
+        String fl = function("int f(double a, double b) { return a < b; }");
+        assertTrue(fl.contains("ucomisd %xmm0, %xmm1\n  seta %al"), fl);
+    }
+
+    @Test
+    void conversionsAndFloatingConstants() {
+        String asm = function("double f(int i) { return i * 2.5; }");
+        assertTrue(asm.contains("cvtsi2sdq %rax, %xmm0"), asm);
+        assertTrue(asm.contains("movsd .LC0(%rip), %xmm0"), asm);
+        assertTrue(asm.contains(".LC0:\n  .quad 4612811918334230528   # 2.5"), asm);
+        String back = function("unsigned f(double d) { return d; }");
+        assertTrue(back.contains("btcq $63, %rax"), back);
+    }
+
+    @Test
     void plainModeHasNoComments() {
         String plain = Codegen.emit(org.jbm.mycc.cc.Compiler.compile("int main(void) { return 1; }",
                 org.jbm.mycc.cc.cpp.BundledHeaders.INSTANCE, "t.c",
