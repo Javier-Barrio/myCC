@@ -1,8 +1,8 @@
-# The REPL: `org.jbm.repl`
+# The REPL: `org.jbm.mycc.repl`
 
 The interactive shell in the spirit of `jshell`, built on the compiler
-and the VM. It lives in `org.jbm.mycc.repl`, with the VM in `org.jbm.mycc.repl.vm`; the VM
-moves into it later, so nothing here reaches into the VM beyond its
+and the VM. It lives in `org.jbm.mycc.repl`, with the VM in
+`org.jbm.mycc.repl.vm`; the shell reaches into the VM only through its
 public entry points. This supersedes the shell sections of
 `cshell-plan.md`; the compiler and VM decisions there stand.
 
