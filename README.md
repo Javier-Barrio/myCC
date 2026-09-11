@@ -66,11 +66,16 @@ A session can also be piped in: `echo '6 * 7' | ./gradlew -q cshell --console=pl
 
 ## Compiling a file
 
-`./gradlew -q run` is not defined; `org.jbm.mycc.Main` prints the syntax
-tree, the typed tree and the TAC of a file:
+`org.jbm.mycc.Main` prints the syntax tree, the typed tree and the TAC
+of a file, or with `-S` its x86-64 assembly, `-S -a` with each TAC
+instruction as a comment before the instructions it became:
 
 ```
-java -cp build/classes/java/main:<annotations jar> org.jbm.mycc.Main file.c [-I dir]
+CP=build/classes/java/main:$(find ~/.gradle -name 'annotations-26*.jar' | head -1)
+java -cp $CP org.jbm.mycc.Main file.c [-I dir]
+java -cp $CP org.jbm.mycc.Main -S -a file.c > file.s
+gcc -o prog file.s          # AT&T syntax for the GNU assembler; the C library is glibc's
 ```
 
-Without a file it compiles its built-in sample program.
+Without a file it compiles its built-in sample program. In the shell,
+`/asm name` shows a function's assembly the same way.
