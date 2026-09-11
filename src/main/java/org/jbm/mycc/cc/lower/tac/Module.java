@@ -23,6 +23,46 @@ public final class Module {
         this.target = target;
     }
 
+    /** The size in bytes of a memory type, as the compiler laid it out for this module's target. */
+    public long sizeOf(@NonNull Type t) {
+        if (t instanceof Type.Int i) {
+            return i.width() / 8;
+        }
+        if (t instanceof Type.Float f) {
+            return f.width() <= 64 ? f.width() / 8 : 16;
+        }
+        if (t instanceof Type.Ptr) {
+            return target.pointerWidth() / 8;
+        }
+        if (t instanceof Type.Array a) {
+            return sizeOf(a.element()) * a.count();
+        }
+        if (t instanceof Type.Struct st) {
+            return struct(st.name()).size();
+        }
+        throw new IllegalArgumentException("no size for " + t.spelling());
+    }
+
+    /** The alignment in bytes of a memory type. */
+    public int alignOf(@NonNull Type t) {
+        if (t instanceof Type.Array a) {
+            return alignOf(a.element());
+        }
+        if (t instanceof Type.Struct st) {
+            return struct(st.name()).align();
+        }
+        return (int) Math.min(sizeOf(t), 16);
+    }
+
+    public StructDef struct(@NonNull String name) {
+        for (StructDef s : structs) {
+            if (s.name().equals(name)) {
+                return s;
+            }
+        }
+        throw new IllegalArgumentException("unknown structure %" + name);
+    }
+
     /** Every symbol, in the order the writer prints them: globals, their declarations, function declarations, functions. */
     public List<Symbol> symbols() {
         List<Symbol> all = new ArrayList<>();
