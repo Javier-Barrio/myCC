@@ -1,0 +1,1510 @@
+package org.jbm.mycc.cc.sema;
+
+import org.jbm.mycc.cc.lower.arch.Ilp32;
+import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.parse.ParseException;
+import org.jbm.mycc.cc.parse.ast.Decl;
+import org.jbm.mycc.cc.cpp.CppTokenizer;
+import org.jbm.mycc.cc.cpp.Scanner;
+import org.jbm.mycc.cc.cpp.TokenConversion;
+import org.jbm.mycc.cc.parse.Parser;
+import org.jbm.mycc.cc.sema.*;
+import org.jbm.mycc.cc.sema.tast.StringData;
+import org.jbm.mycc.cc.sema.tast.TExpr;
+import org.jbm.mycc.cc.sema.tast.TStmt;
+import org.jbm.mycc.cc.sema.tast.TypedPrinter;
+import org.jbm.mycc.cc.sema.types.Types;
+import org.junit.jupiter.api.Test;
+
+import java.util.Comparator;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The typing pass over the full pipeline. Declared types are rendered as
+ * {@code name: type} in declaration order.
+ */
+class TyperTest {
+
+    private static List<Decl> parse(String source) {
+        return Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source)))));
+    }
+
+    private static Bindings type(String source, Types types) {
+        var unit = parse(source);
+        var bindings = Resolver.resolve(unit);
+        Typer.type(unit, bindings, types);
+        return bindings;
+    }
+
+    /** The typed unit, printed one item per line. */
+    private static String unit(String source) {
+        var unit = parse(source);
+        return TypedPrinter.print(Typer.type(unit, Resolver.resolve(unit)));
+    }
+
+    /** The printed definition of the last function in {@code source}. */
+    private static String function(String source) {
+        var unit = parse(source);
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        return TypedPrinter.print(typed.functions().get(typed.functions().size() - 1));
+    }
+
+    /** The printed body of {@code void f(void) { body }} after {@code decls}. */
+    private static String body(String decls, String body) {
+        var unit = parse(decls + "\nvoid f(void) { " + body + " }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        return TypedPrinter.print(typed.functions().get(typed.functions().size() - 1).body());
+    }
+
+    private static Bindings type(String source) {
+        return type(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    /** File-scope symbols as {@code name: type}. */
+    private static List<String> declaredTypes(String source) {
+        return type(source).fileScope.stream().map(s -> s.name + ": " + s.type().spelling()).toList();
+    }
+
+    /** Every declarator and named parameter in the unit, in source order. */
+    private static List<String> allTypes(String source) {
+        var b = type(source);
+        var symbols = new java.util.ArrayList<Symbol>();
+        symbols.addAll(b.declarators.values());
+        symbols.addAll(b.functions.values());
+        symbols.addAll(b.parameters.values());
+        return symbols.stream().distinct()
+                .sorted(Comparator.comparingInt((Symbol s) -> s.declaredAt.line).thenComparingInt(s -> s.declaredAt.column))
+                .map(s -> s.name + ": " + s.type().spelling()).toList();
+    }
+
+    private static SemaException fails(String source) {
+        return assertThrows(SemaException.class, () -> type(source));
+    }
+
+    /** Types {@code src} as an expression statement in a function after {@code decls}; prints the tree. */
+    private static String expr(String decls, String src) {
+        return exprOn(new Types(X86_64SysV.INSTANCE), decls, src);
+    }
+
+    private static String exprOn(Types types, String decls, String src) {
+        var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), types);
+        return TypedPrinter.print(typer.expressionStatements.get(typer.expressionStatements.size() - 1));
+    }
+
+    private static TExpr exprTree(String decls, String src) {
+        var unit = parse(decls + "\nvoid probe__(void) { " + src + "; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        return typer.expressionStatements.get(typer.expressionStatements.size() - 1);
+    }
+
+    private static SemaException exprFails(String decls, String src) {
+        return assertThrows(SemaException.class, () -> expr(decls, src));
+    }
+
+    // ---- expressions: references, literals, arithmetic -----------------------------------
+
+    @Test
+    void referencesAndLiterals() {
+        assertEquals("a:int", expr("int a;", "a"));
+        assertEquals("f:int (void)", expr("int f(void);", "f"));
+        assertEquals("5:int", expr("", "5"));
+        assertEquals("2147483648:long", expr("", "2147483648"));
+        assertEquals("9223372036854775807:long", expr("", "9223372036854775807"));
+        assertTrue(exprFails("", "9223372036854775808").getMessage().contains("too large"));
+    }
+
+    @Test
+    void integerConstantsTakeTheFirstTypeThatHoldsThem() {
+        // 6.4.5.2p6: decimal constants never become unsigned by size; others do.
+        assertEquals("4294967295:long", expr("", "4294967295"));
+        assertEquals("4294967295:unsigned int", expr("", "0xFFFFFFFF"));
+        assertEquals("-9223372036854775808:unsigned long", expr("", "0x8000000000000000"));
+        assertEquals("-1:unsigned long", expr("", "18446744073709551615u"));
+        assertEquals("1:unsigned int", expr("", "1u"));
+        assertEquals("1:long", expr("", "1l"));
+        assertEquals("1:unsigned long", expr("", "1UL"));
+        assertEquals("1:unsigned long", expr("", "1lu"));
+        assertEquals("1:long long", expr("", "1ll"));
+        assertEquals("1:unsigned long long", expr("", "1ull"));
+        assertEquals("7:int", expr("", "07"));
+        assertEquals("16:int", expr("", "0x10"));
+        assertEquals("5:int", expr("", "0b101"));
+        assertEquals("8:int", expr("", "0o10"));
+        assertEquals("1000000:int", expr("", "1'000'000"));
+        assertEquals("0:int", expr("", "0"));
+        assertEquals("2147483648:unsigned int", expr("", "0x80000000"));
+        assertTrue(exprFails("", "0x10000000000000000").getMessage().contains("too large"));
+        assertTrue(exprFails("", "18446744073709551615").getMessage().contains("too large for its type"));
+    }
+
+    @Test
+    void floatingConstants() {
+        assertEquals("1.5:double", expr("", "1.5"));
+        assertEquals("1.5:float", expr("", "1.5f"));
+        assertEquals("1.5:long double", expr("", "1.5L"));
+        assertEquals("1000.0:double", expr("", "1e3"));
+        assertEquals("16.0:double", expr("", "0x1p4"));
+        assertEquals("1.5:double", expr("", "0x1.8p0"));
+        assertEquals("0.1:double", expr("", ".1"));
+        assertEquals("0.10000000149011612:float", expr("", "0.1f"), "rounded to float precision");
+        assertTrue(exprFails("", "1.0i").getMessage().contains("not supported"));
+        assertTrue(exprFails("", "1.0df").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void characterConstants() {
+        assertEquals("97:int", expr("", "'a'"));
+        assertEquals("10:int", expr("", "'\\n'"));
+        assertEquals("39:int", expr("", "'\\''"));
+        assertEquals("0:int", expr("", "'\\0'"));
+        assertEquals("-1:int", expr("", "'\\xff'"), "char is signed on x86-64");
+        assertEquals("255:int", exprOn(new Types(Ilp32.INSTANCE), "", "'\\xff'"), "unsigned on the ILP32 target");
+        assertEquals("120:int", expr("", "L'x'"), "wchar_t is int");
+        assertEquals("120:unsigned short", expr("", "u'x'"));
+        assertEquals("120:unsigned int", expr("", "U'x'"));
+        assertEquals("120:unsigned char", expr("", "u8'x'"));
+        assertEquals("233:unsigned int", expr("", "U'\\u00e9'"));
+        assertEquals("1:bool", expr("", "true"));
+        assertEquals("0:bool", expr("", "false"));
+        assertTrue(exprFails("", "'ab'").getMessage().contains("multi-character"));
+        assertTrue(exprFails("", "'\\q'").getMessage().contains("unknown escape"));
+    }
+
+    @Test
+    void stringLiteralsAreAnonymousStaticArrays() {
+        assertEquals("\"ab\":char [3]", expr("", "\"ab\""));
+        assertEquals("\"a\" \"b\":char [3]", expr("", "\"a\" \"b\""));
+        assertEquals("\"a\\n\":char [3]", expr("", "\"a\\n\""));
+        assertEquals("u8\"a\":unsigned char [2]", expr("", "u8\"a\""));
+        assertEquals("u\"a\":unsigned short [2]", expr("", "u\"a\""));
+        assertEquals("U\"a\":unsigned int [2]", expr("", "U\"a\""));
+        assertEquals("L\"ab\":int [3]", expr("", "L\"ab\""));
+        assertEquals("\"\":char [1]", expr("", "\"\""));
+        assertTrue(exprFails("", "u\"a\" U\"b\"").getMessage().contains("cannot concatenate"));
+
+        var unit = parse("void f(void) { \"h\\xffi\"; \"\\u00e9\"; L\"\\xffff\"; R\"x(a\\n)x\"; \"\" \"\"; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        var strings = typer.strings();
+        assertEquals(5, strings.size());
+        assertEquals(List.of(104, 255, 105, 0), units(strings.get(0)));
+        assertEquals(List.of(0xC3, 0xA9, 0), units(strings.get(1)), "UTF-8 encoded");
+        assertEquals(List.of(0xFFFF, 0), units(strings.get(2)), "one wchar_t unit");
+        assertEquals(List.of(97, 92, 110, 0), units(strings.get(3)), "raw: backslash and n stay");
+        assertEquals(List.of(0), units(strings.get(4)));
+        assertEquals("char [4]", strings.get(0).symbol().type().spelling());
+        assertTrue(strings.get(0).symbol() instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.STATIC);
+        assertNotSame(strings.get(4).symbol(), strings.get(3).symbol(), "each literal is its own object");
+    }
+
+    private static List<Integer> units(StringData s) {
+        return java.util.Arrays.stream(s.units()).boxed().toList();
+    }
+
+    @Test
+    void floatingConversions() {
+        assertEquals("(add:double (int-to-float:double 1:int) 1.5:double)", expr("", "1 + 1.5"));
+        assertEquals("(add:float (rv:float f:float) (int-to-float:float 1:int))", expr("float f;", "f + 1"));
+        assertEquals("(mul:double (float-to-float:double (rv:float f:float)) (rv:double d:double))",
+                expr("float f; double d;", "f * d"));
+        assertEquals("(div:long double (rv:long double l:long double) (float-to-float:long double 2.0:double))",
+                expr("long double l;", "l / 2.0"));
+        // 6.3.2.2: with a floating operand the integer one converts directly,
+        // without an intermediate integer promotion.
+        assertEquals("(sub:float (rv:float f:float) (int-to-float:float (rv:char c:char)))",
+                expr("float f; char c;", "f - c"));
+    }
+
+    @Test
+    void additionPromotesAndConverts() {
+        assertEquals("(add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))", expr("int a; char b;", "a + b"));
+        assertEquals("(add:int (rv:int a:int) 1:int)", expr("int a;", "a + 1"));
+        assertEquals("(add:int (int-to-int:int (rv:short s:short)) (int-to-int:int (rv:unsigned char c:unsigned char)))",
+                expr("short s; unsigned char c;", "s + c"));
+        assertEquals("(add:unsigned int (int-to-int:unsigned int (rv:int a:int)) (rv:unsigned int u:unsigned int))",
+                expr("int a; unsigned u;", "a + u"));
+        assertEquals("(add:long (rv:long l:long) (int-to-int:long (rv:unsigned int u:unsigned int)))",
+                expr("long l; unsigned u;", "l + u"));
+        assertEquals("(add:unsigned long (int-to-int:unsigned long (rv:long l:long)) (rv:unsigned long u:unsigned long))",
+                expr("long l; unsigned long u;", "l + u"));
+        // The harness returns the statement's operand as typed; lvalue
+        // conversion for the void context is the statement's job (step 13).
+        assertEquals("c:const int", expr("const int c;", "c"));
+        assertEquals("(add:int (rv:int c:const int) 1:int)", expr("const int c;", "c + 1"));
+    }
+
+    @Test
+    void theFourArithmeticOperatorsAndPrecedence() {
+        assertEquals("(sub:int (rv:int a:int) (mul:int (rv:int b:int) (rv:int c:int)))",
+                expr("int a, b, c;", "a - b * c"));
+        assertEquals("(div:int (mul:int (rv:int a:int) (rv:int b:int)) (rv:int c:int))",
+                expr("int a, b, c;", "a * b / c"));
+        assertEquals("(mul:int (add:int (rv:int a:int) (rv:int b:int)) 2:int)", expr("int a, b;", "(a + b) * 2"));
+    }
+
+    @Test
+    void parametersAreLvaluesToo() {
+        var unit = parse("int f(int p, char q) { p + q; return 0; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        assertEquals("(add:int (rv:int p:int) (int-to-int:int (rv:char q:char)))",
+                TypedPrinter.print(typer.expressionStatements.get(0)));
+    }
+
+    @Test
+    void integerOnlyOperators() {
+        assertEquals("(rem:int (rv:int a:int) 2:int)", expr("int a;", "a % 2"));
+        assertEquals("(bitand:unsigned int (rv:unsigned int u:unsigned int) (int-to-int:unsigned int 1:int))",
+                expr("unsigned u;", "u & 1"));
+        assertEquals("(bitor:int (int-to-int:int (rv:char c:char)) (int-to-int:int (rv:short s:short)))",
+                expr("char c; short s;", "c | s"));
+        assertEquals("(bitxor:long (rv:long l:long) (int-to-int:long 1:int))", expr("long l;", "l ^ 1"));
+        assertTrue(exprFails("", "1.5 % 2").getMessage().contains("invalid operands to binary %"));
+        assertTrue(exprFails("double d;", "d & 1").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void shiftsPromoteEachOperandAlone() {
+        assertEquals("(shl:int (int-to-int:int (rv:char c:char)) (rv:long l:long))", expr("char c; long l;", "c << l"));
+        assertEquals("(shr:unsigned long (rv:unsigned long u:unsigned long) 1:int)", expr("unsigned long u;", "u >> 1"));
+        assertEquals("(shl:int (int-to-int:int (rv:short s:short)) (int-to-int:int (rv:short s:short)))",
+                expr("short s;", "s << s"));
+        assertTrue(exprFails("int *p;", "p << 1").getMessage().contains("invalid operands to binary <<"));
+        assertTrue(exprFails("", "1 << 1.0").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void comparisonsYieldInt() {
+        assertEquals("(lt:int (rv:int a:int) (int-to-int:int (rv:char b:char)))", expr("int a; char b;", "a < b"));
+        assertEquals("(eq:int (int-to-float:double (rv:int a:int)) (rv:double d:double))", expr("int a; double d;", "a == d"));
+        assertEquals("(ge:int (int-to-int:unsigned int (rv:int a:int)) (rv:unsigned int u:unsigned int))",
+                expr("int a; unsigned u;", "a >= u"));
+        assertEquals("(ne:int 1:int 2:int)", expr("", "1 != 2"));
+        assertEquals("(le:int (rv:int a:int) (rv:int b:int))", expr("int a, b;", "a <= b"));
+        assertEquals("(gt:int (rv:int a:int) (rv:int b:int))", expr("int a, b;", "a > b"));
+        assertEquals("(eq:int (lt:int (rv:int a:int) (rv:int b:int)) (rv:int c:int))", expr("int a, b, c;", "a < b == c"));
+    }
+
+    @Test
+    void logicalOperatorsTestAgainstZero() {
+        assertEquals("(and:int (to-bool:bool (rv:int a:int)) (to-bool:bool (rv:double d:double)))",
+                expr("int a; double d;", "a && d"));
+        assertEquals("(or:int (to-bool:bool (rv:int * p:int *)) (rv:bool b:bool))", expr("int *p; bool b;", "p || b"));
+        assertEquals("(and:int (to-bool:bool (rv:int a:int)) (to-bool:bool (or:int (to-bool:bool (rv:int b:int)) (to-bool:bool (rv:int c:int)))))",
+                expr("int a, b, c;", "a && (b || c)"));
+        assertTrue(exprFails("void f(void);", "f() && 1").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void unaryOperators() {
+        assertEquals("(int-to-int:int (rv:char c:char))", expr("char c;", "+c"), "unary + is just the promotion");
+        assertEquals("(rv:int a:int)", expr("int a;", "+a"));
+        assertEquals("(neg:int (int-to-int:int (rv:short s:short)))", expr("short s;", "-s"));
+        assertEquals("(neg:double (rv:double d:double))", expr("double d;", "-d"));
+        assertEquals("(neg:unsigned int (rv:unsigned int u:unsigned int))", expr("unsigned u;", "-u"));
+        assertEquals("(bitnot:int (int-to-int:int (rv:unsigned char c:unsigned char)))", expr("unsigned char c;", "~c"));
+        assertEquals("(not:int (to-bool:bool (rv:int a:int)))", expr("int a;", "!a"));
+        assertEquals("(not:int (rv:bool b:bool))", expr("bool b;", "!b"));
+        assertEquals("(not:int (to-bool:bool (rv:int * p:int *)))", expr("int *p;", "!p"));
+        assertEquals("(neg:int 1:int)", expr("", "-1"));
+        assertTrue(exprFails("double d;", "~d").getMessage().contains("invalid operand to unary ~"));
+        assertTrue(exprFails("int *p;", "-p").getMessage().contains("invalid operand to unary -"));
+    }
+
+    @Test
+    void conditionalAndComma() {
+        assertEquals("(cond:double (to-bool:bool (rv:int c:int)) (int-to-float:double (rv:int a:int)) (rv:double d:double))",
+                expr("int c, a; double d;", "c ? a : d"));
+        assertEquals("(cond:int (rv:bool b:bool) 1:int (int-to-int:int (rv:char ch:char)))",
+                expr("bool b; char ch;", "b ? 1 : ch"));
+        assertEquals("(comma:int (to-void:void (rv:int a:int)) (rv:int b:int))", expr("int a, b;", "a, b"));
+        assertEquals("(comma:double (to-void:void (add:int (rv:int a:int) 1:int)) (rv:double d:double))",
+                expr("int a; double d;", "a + 1, d"));
+        assertEquals("(cond:int (to-bool:bool (rv:int * p:int *)) 1:int 2:int)", expr("int *p;", "p ? 1 : 2"));
+        assertTrue(exprFails("int *p;", "1 ? p : 2").getMessage().contains("not supported"));
+        assertTrue(exprFails("void f(void);", "f() ? 1 : 2").getMessage().contains("must be scalar"));
+    }
+
+    // ---- pointers -----------------------------------------------------------------------------
+
+    @Test
+    void dereferenceAndAddressOf() {
+        assertEquals("(deref:int (rv:int * p:int *))", expr("int *p;", "*p"));
+        assertEquals("(add:int (rv:int (deref:int (rv:int * p:int *))) 0:int)", expr("int *p;", "*p + 0"));
+        assertEquals("(deref:const int (rv:const int * p:const int *))", expr("const int *p;", "*p"));
+        assertEquals("(addr:int * a:int)", expr("int a;", "&a"));
+        assertEquals("(addr:const int * c:const int)", expr("const int c;", "&c"));
+        assertEquals("(addr:int (*)[3] arr:int [3])", expr("int arr[3];", "&arr"));
+        assertEquals("(rv:int * p:int *)", expr("int *p;", "&*p"), "&*p is p");
+        assertEquals("(fdecay:int (*)(void) f:int (void))", expr("int f(void);", "&f"), "&f is f's decay");
+        assertEquals("(fderef:int (void) (rv:int (*)(void) fp:int (*)(void)))", expr("int (*fp)(void);", "*fp"));
+        assertEquals("(deref:int (rv:int * (deref:int * (rv:int * * pp:int * *))))", expr("int **pp;", "**pp"));
+        assertTrue(exprFails("int a;", "*a").getMessage().contains("indirection requires a pointer"));
+        assertTrue(exprFails("void *v;", "*v").getMessage().contains("pointer to void"));
+        assertTrue(exprFails("int a;", "&(a + 1)").getMessage().contains("address of an rvalue"));
+    }
+
+    @Test
+    void subscriptingIsDereferencedPointerArithmetic() {
+        assertEquals("(deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long (rv:int i:int))))",
+                expr("int a[3]; int i;", "a[i]"));
+        assertEquals("(deref:int (ptradd:int * (rv:int * p:int *) (int-to-int:long 2:int)))", expr("int *p;", "p[2]"));
+        assertEquals("(deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long 1:int)))", expr("int a[3];", "1[a]"));
+        assertEquals("(deref:int (ptradd:int * (decay:int * (deref:int [3] (ptradd:int (*)[3] (decay:int (*)[3] m:int [2][3]) (int-to-int:long 1:int)))) (int-to-int:long 2:int)))",
+                expr("int m[2][3];", "m[1][2]"));
+        assertEquals("(ptradd:int * (decay:int * a:int [3]) (int-to-int:long (rv:int i:int)))", expr("int a[3]; int i;", "&a[i]"));
+        assertEquals("(deref:const char (ptradd:const char * (rv:const char * s:const char *) (rv:long l:long)))",
+                expr("const char *s; long l;", "s[l]"));
+        assertTrue(exprFails("int a;", "a[0]").getMessage().contains("not an array or pointer"));
+        assertTrue(exprFails("int *p;", "p[1.5]").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("void *v;", "v[0]").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int (*fp)(void);", "fp[0]").getMessage().contains("pointer to a function"));
+    }
+
+    @Test
+    void pointerArithmetic() {
+        assertEquals("(ptradd:int * (rv:int * p:int *) (int-to-int:long (rv:int i:int)))", expr("int *p; int i;", "p + i"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (int-to-int:long (rv:int i:int)))", expr("int *p; int i;", "i + p"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (neg:long (int-to-int:long (rv:int i:int))))",
+                expr("int *p; int i;", "p - i"));
+        assertEquals("(ptradd:int * (rv:int * p:int *) (rv:long l:long))", expr("int *p; long l;", "p + l"));
+        assertEquals("(ptrdiff:long (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p - q"));
+        assertEquals("(ptrdiff:long (rv:const int * p:const int *) (rv:int * q:int *))", expr("const int *p; int *q;", "p - q"));
+        assertEquals("(ptrdiff:long (decay:int * a:int [3]) (rv:int * q:int *))", expr("int a[3]; int *q;", "a - q"));
+        assertTrue(exprFails("int *p; int *q;", "p + q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; int i;", "i - p").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; long *q;", "p - q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("void *v;", "v + 1").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int *p; double d;", "p + d").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void pointerComparisonsAndNullPointerConstants() {
+        assertEquals("(eq:int (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p == q"));
+        assertEquals("(lt:int (rv:int * p:int *) (rv:int * q:int *))", expr("int *p, *q;", "p < q"));
+        assertEquals("(ne:int (rv:int * p:int *) (null:int * 0:int))", expr("int *p;", "p != 0"));
+        assertEquals("(eq:int (null:int * 0:int) (rv:int * p:int *))", expr("int *p;", "0 == p"));
+        assertEquals("(eq:int (rv:int * p:int *) (null:int * nullptr:nullptr_t))", expr("int *p;", "p == nullptr"));
+        assertEquals("(eq:int (ptr-to-ptr:void * (rv:int * p:int *)) (rv:void * v:void *))", expr("int *p; void *v;", "p == v"));
+        assertEquals("(eq:int (rv:const int * p:const int *) (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("const int *p; int *q;", "p == q"));
+        assertEquals("(eq:int (ptr-to-ptr:const void * (rv:int * p:int *)) (rv:const void * v:const void *))",
+                expr("int *p; const void *v;", "p == v"));
+        assertEquals("(eq:int (fdecay:int (*)(void) f:int (void)) (null:int (*)(void) 0:int))", expr("int f(void);", "f == 0"));
+        assertTrue(exprFails("int *p; long *q;", "p == q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p; void *v;", "p < v").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p < 0").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p == 1").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int (*f)(void); void *v;", "f == v").getMessage().contains("invalid operands"));
+    }
+
+    @Test
+    void conditionalWithPointerArms() {
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (rv:int * p:int *) (rv:int * q:int *))",
+                expr("int c; int *p, *q;", "c ? p : q"));
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (rv:int * p:int *) (null:int * 0:int))",
+                expr("int c; int *p;", "c ? p : 0"));
+        assertEquals("(cond:const int * (to-bool:bool (rv:int c:int)) (rv:const int * p:const int *) (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("int c; const int *p; int *q;", "c ? p : q"));
+        assertEquals("(cond:void * (to-bool:bool (rv:int c:int)) (ptr-to-ptr:void * (rv:int * p:int *)) (rv:void * v:void *))",
+                expr("int c; int *p; void *v;", "c ? p : v"));
+        assertEquals("(cond:int * (to-bool:bool (rv:int c:int)) (decay:int * a:int [2]) (rv:int * p:int *))",
+                expr("int c; int a[2]; int *p;", "c ? a : p"));
+        assertEquals("(cond:nullptr_t (to-bool:bool (rv:int c:int)) nullptr:nullptr_t nullptr:nullptr_t)",
+                expr("int c;", "c ? nullptr : nullptr"));
+        assertTrue(exprFails("int c; int *p; long *q;", "c ? p : q").getMessage().contains("not supported"));
+    }
+
+    // ---- assignment ---------------------------------------------------------------------------
+
+    @Test
+    void simpleAssignmentConvertsAsIfByAssignment() {
+        assertEquals("(assign:int a:int (rv:int b:int))", expr("int a, b;", "a = b"));
+        assertEquals("(assign:char c:char (int-to-int:char 300:int))", expr("char c;", "c = 300"));
+        assertEquals("(assign:double d:double (int-to-float:double (rv:int a:int)))", expr("double d; int a;", "d = a"));
+        assertEquals("(assign:int a:int (float-to-int:int (rv:double d:double)))", expr("double d; int a;", "a = d"));
+        assertEquals("(assign:bool b:bool (to-bool:bool (rv:int * p:int *)))", expr("bool b; int *p;", "b = p"));
+        assertEquals("(assign:int * p:int * (null:int * 0:int))", expr("int *p;", "p = 0"));
+        assertEquals("(assign:int * p:int * (null:int * nullptr:nullptr_t))", expr("int *p;", "p = nullptr"));
+        assertEquals("(assign:const int * p:const int * (ptr-to-ptr:const int * (rv:int * q:int *)))",
+                expr("const int *p; int *q;", "p = q"));
+        assertEquals("(assign:void * v:void * (ptr-to-ptr:void * (rv:int * q:int *)))", expr("void *v; int *q;", "v = q"));
+        assertEquals("(assign:int * q:int * (ptr-to-ptr:int * (rv:void * v:void *)))", expr("void *v; int *q;", "q = v"));
+        assertEquals("(assign:int * p:int * (decay:int * a:int [3]))", expr("int *p; int a[3];", "p = a"));
+        assertEquals("(assign:int (deref:int (rv:int * p:int *)) 1:int)", expr("int *p;", "*p = 1"));
+        assertEquals("(assign:int (deref:int (ptradd:int * (decay:int * a:int [3]) (int-to-int:long 1:int))) 2:int)",
+                expr("int a[3];", "a[1] = 2"));
+        assertEquals("(assign:int a:int (assign:int b:int 3:int))", expr("int a, b;", "a = b = 3"), "right associative");
+        assertEquals("(assign:int (*)(void) fp:int (*)(void) (fdecay:int (*)(void) f:int (void)))",
+                expr("int (*fp)(void); int f(void);", "fp = f"));
+    }
+
+    @Test
+    void assignmentConstraints() {
+        assertTrue(exprFails("int a;", "1 = a").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("int a, b;", "a + b = 1").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const int c;", "c = 1").getMessage().contains("const-qualified"));
+        assertTrue(exprFails("int a[3];", "a = 0").getMessage().contains("array"));
+        assertTrue(exprFails("int *p; long *q;", "p = q").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p;", "p = 1").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p; double d;", "p = d").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int a; int *p;", "a = p").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int *p; const int *q;", "p = q").getMessage().contains("discards qualifiers"));
+        assertTrue(exprFails("int (*fp)(void); void *v;", "fp = v").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("int f(void);", "f = 0").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const char *s;", "*s = 'a'").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void compoundAssignmentComputesOverTheTargetValue() {
+        assertEquals("(compound-assign:int i:int (add:int (target:int) 2:int))", expr("int i;", "i += 2"));
+        assertEquals("(compound-assign:char c:char (float-to-int:char (add:double (int-to-float:double (target:char)) 1.5:double)))",
+                expr("char c;", "c += 1.5"));
+        assertEquals("(compound-assign:short s:short (int-to-int:short (sub:int (int-to-int:int (target:short)) 1:int)))",
+                expr("short s;", "s -= 1"));
+        assertEquals("(compound-assign:unsigned int u:unsigned int (shl:unsigned int (target:unsigned int) (rv:int n:int)))",
+                expr("unsigned u; int n;", "u <<= n"));
+        assertEquals("(compound-assign:int i:int (rem:int (target:int) (int-to-int:int (rv:char c:char))))",
+                expr("int i; char c;", "i %= c"));
+        assertEquals("(compound-assign:long l:long (bitor:long (target:long) (int-to-int:long 1:int)))", expr("long l;", "l |= 1"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (int-to-int:long (rv:int n:int))))",
+                expr("int *p; int n;", "p += n"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (neg:long (int-to-int:long 1:int))))",
+                expr("int *p;", "p -= 1"));
+        assertEquals("(compound-assign:double d:double (mul:double (target:double) (int-to-float:double (rv:int i:int))))",
+                expr("double d; int i;", "d *= i"));
+        assertEquals("(compound-assign:int (deref:int (rv:int * p:int *)) (add:int (target:int) 1:int))",
+                expr("int *p;", "*p += 1"));
+        assertEquals("(compound-assign:int a:int (add:int (target:int) (compound-assign:int b:int (add:int (target:int) 1:int))))",
+                expr("int a, b;", "a += b += 1"));
+        assertTrue(exprFails("double d;", "d %= 2").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int i; int *p;", "i += p").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p, *q;", "p -= q").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("int *p;", "p *= 2").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("const int c;", "c += 1").getMessage().contains("const-qualified"));
+        assertTrue(exprFails("int a, b;", "a + b += 1").getMessage().contains("not an lvalue"));
+    }
+
+    @Test
+    void prefixIncrementIsCompoundAssignmentAlready() {
+        // Desugar rewrote ++i to i += 1 before typing (6.5.4.1p2).
+        assertEquals("(compound-assign:int i:int (add:int (target:int) 1:int))", expr("int i;", "++i"));
+        assertEquals("(compound-assign:int * p:int * (ptradd:int * (target:int *) (neg:long (int-to-int:long 1:int))))",
+                expr("int *p;", "--p"));
+    }
+
+    @Test
+    void postfixIncrementYieldsTheOldValue() {
+        assertEquals("(assign:int j:int (postfix-assign:int i:int (add:int (target:int) 1:int)))", expr("int i, j;", "j = i++"));
+        assertEquals("(assign:int * q:int * (postfix-assign:int * p:int * (ptradd:int * (target:int *) (int-to-int:long 1:int))))",
+                expr("int *p, *q;", "q = p++"));
+        assertEquals("(assign:int j:int (int-to-int:int (postfix-assign:char c:char (int-to-int:char (sub:int (int-to-int:int (target:char)) 1:int)))))",
+                expr("char c; int j;", "j = c--"));
+        assertEquals("(assign:double e:double (postfix-assign:double d:double (add:double (target:double) (int-to-float:double 1:int))))",
+                expr("double d, e;", "e = d++"));
+        assertTrue(exprFails("bool b; int j;", "j = b++").getMessage().contains("increment"));
+        assertTrue(exprFails("int a, b, j;", "j = (a + b)++").getMessage().contains("not an lvalue"));
+        assertTrue(exprFails("const int c; int j;", "j = c++").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void targetValueSharesTheTargetNode() {
+        var tree = exprTree("int a[4]; int k;", "a[k++] += 1");
+        var outer = (TExpr.CompoundAssign) tree;
+        assertEquals("(compound-assign:int (deref:int (ptradd:int * (decay:int * a:int [4]) (int-to-int:long (postfix-assign:int k:int (add:int (target:int) 1:int))))) (add:int (target:int) 1:int))",
+                TypedPrinter.print(tree));
+        var outerAdd = (TExpr.Add) outer.newValue();
+        var outerTarget = (TExpr.TargetValue) outerAdd.left();
+        assertSame(outer.target(), outerTarget.target(), "the TargetValue refers to the assignment's own target node");
+        var deref = (TExpr.Deref) outer.target();
+        var ptradd = (TExpr.PtrAdd) deref.pointer();
+        var conv = (TExpr.IntToInt) ptradd.index();
+        var inner = (TExpr.PostfixAssign) conv.operand();
+        var innerTarget = (TExpr.TargetValue) ((TExpr.Add) inner.newValue()).left();
+        assertSame(inner.target(), innerTarget.target(), "and the inner one to k, not to the outer target");
+        assertNotSame(outer.target(), innerTarget.target());
+    }
+
+    // ---- calls --------------------------------------------------------------------------------
+
+    @Test
+    void callsConvertArgumentsAsIfByAssignment() {
+        assertEquals("(call:int f:int (void))", expr("int f(void);", "f()"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "f(a)"));
+        assertEquals("(call:int f:int (int) (int-to-int:int (rv:char a:char)))",
+                expr("int f(int); char a;", "f(a)"));
+        assertEquals("(call:void g:void (double, int *) (int-to-float:double 1:int) (null:int * 0:int))",
+                expr("void g(double, int *);", "g(1, 0)"));
+        assertEquals("(call:int f:int (const char *) (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))",
+                expr("int f(const char *);", "f(\"x\")"));
+        assertEquals("(call:int f:int (int *) (decay:int * a:int [3]))", expr("int f(int a[]); int a[3];", "f(a)"));
+        assertEquals("(call:int f:int (int (*)(void)) (fdecay:int (*)(void) g:int (void)))",
+                expr("int f(int g(void)); int g(void);", "f(g)"));
+        assertEquals("(assign:int z:int (icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char)))",
+                expr("int (*fp)(char); char a; int z;", "z = fp(a)"));
+        assertEquals("(icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(*fp)(a)"));
+        assertEquals("(icall:int (rv:int (*)(char) fp:int (*)(char)) (rv:char a:char))", expr("int (*fp)(char); char a;", "(***fp)(a)"));
+        assertEquals("(add:int (call:int f:int (char) (rv:char a:char)) (rv:int b:int))",
+                expr("int f(char); char a; int b;", "f(a) + b"));
+        // A named function stays a direct call however it is spelled (6.5.3.3).
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(*f)(a)"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(&f)(a)"));
+        assertEquals("(call:int f:int (char) (rv:char a:char))", expr("int f(char); char a;", "(**&f)(a)"));
+        assertEquals("(icall:int (rv:int (*)(void) (deref:int (*)(void) (ptradd:int (* *)(void) (decay:int (* *)(void) t:int (*[2])(void)) (int-to-int:long 1:int)))))",
+                expr("int (*t[2])(void);", "t[1]()"));
+    }
+
+    @Test
+    void variadicArgumentsGetDefaultPromotions() {
+        assertEquals("(call:int printf:int (const char *, ...) (ptr-to-ptr:const char * (decay:char * \"%d\":char [3])) (int-to-int:int (rv:char c:char)) (float-to-float:double (rv:float f:float)) (rv:int * p:int *))",
+                expr("int printf(const char *, ...); char c; float f; int *p;", "printf(\"%d\", c, f, p)"));
+        assertEquals("(call:int v:int (int, ...) 1:int)", expr("int v(int, ...);", "v(1)"));
+    }
+
+    @Test
+    void callConstraints() {
+        assertTrue(exprFails("int f(int);", "f()").getMessage().contains("too few arguments"));
+        assertTrue(exprFails("int f(void);", "f(1)").getMessage().contains("too many arguments"));
+        assertTrue(exprFails("int v(int, ...);", "v()").getMessage().contains("too few arguments"));
+        assertTrue(exprFails("int f(int *);", "f(1)").getMessage().contains("incompatible types when passing argument 1"));
+        assertTrue(exprFails("int f(int *); const int *q;", "f(q)").getMessage().contains("discards qualifiers"));
+        assertTrue(exprFails("int a;", "a()").getMessage().contains("not a function"));
+        assertTrue(exprFails("int *p;", "p()").getMessage().contains("not a function"));
+        assertTrue(exprFails("int f(int); void g(void);", "f(g())").getMessage().contains("type void"));
+    }
+
+    // ---- sizeof, alignof, _Countof and constant expressions ---------------------------------------
+
+    @Test
+    void sizeofAlignofAndCountof() {
+        assertEquals("4:unsigned long", expr("", "sizeof(int)"));
+        assertEquals("1:unsigned long", expr("", "sizeof(char)"));
+        assertEquals("8:unsigned long", expr("", "sizeof(int *)"));
+        assertEquals("16:unsigned long", expr("", "sizeof(long double)"));
+        assertEquals("24:unsigned long", expr("", "sizeof(int[2][3])"));
+        assertEquals("12:unsigned long", expr("int a[3];", "sizeof a"), "no decay under sizeof");
+        assertEquals("12:unsigned long", expr("int a[3];", "sizeof(a)"));
+        assertEquals("8:unsigned long", expr("int a[3];", "sizeof(a + 1)"), "decayed in an expression");
+        assertEquals("8:unsigned long", expr("", "sizeof(1 + 1.5)"));
+        assertEquals("4:unsigned long", expr("", "sizeof \"abc\""));
+        assertEquals("4:unsigned long", expr("", "sizeof 'a'"), "a character constant is an int");
+        assertEquals("3:unsigned long", expr("int a[3];", "_Countof a"));
+        assertEquals("5:unsigned long", expr("", "_Countof(int[5])"));
+        assertEquals("2:unsigned long", expr("int m[2][3];", "_Countof(m)"));
+        assertEquals("8:unsigned long", expr("", "alignof(double)"));
+        assertEquals("1:unsigned long", expr("", "alignof(char)"));
+        assertEquals("4:unsigned long", expr("", "alignof(int[7])"));
+        assertEquals("4:unsigned int", exprOn(new Types(Ilp32.INSTANCE), "", "sizeof(long)"));
+        assertEquals("4:unsigned long", expr("int i;", "sizeof(i++)"), "the operand is not evaluated");
+        assertEquals("4:unsigned long", expr("int f(void);", "sizeof f()"));
+        assertTrue(exprFails("", "sizeof(void)").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("int f(void);", "sizeof f").getMessage().contains("function type"));
+        assertTrue(exprFails("", "sizeof(int (void))").getMessage().contains("function type"));
+        assertTrue(exprFails("int *p;", "_Countof p").getMessage().contains("requires an array"));
+        assertTrue(exprFails("", "_Countof(int[])").getMessage().contains("incomplete"));
+        assertTrue(exprFails("", "sizeof(int[])").getMessage().contains("incomplete"));
+        assertTrue(exprFails("", "alignof(void)").getMessage().contains("incomplete"));
+    }
+
+    @Test
+    void sizeofDoesNotCreateStringObjects() {
+        var unit = parse("void f(void) { sizeof \"abc\"; \"kept\"; }");
+        var typer = Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE));
+        assertEquals(1, typer.strings().size());
+        assertEquals("\"kept\"", typer.strings().get(0).symbol().name);
+    }
+
+    private static void holds(String assertion) {
+        type("static_assert(" + assertion + ");");
+    }
+
+    private static String staticAssertFails(String assertion) {
+        return fails("static_assert(" + assertion + ");").getMessage();
+    }
+
+    @Test
+    void integerConstantExpressions() {
+        holds("1");
+        holds("true");
+        holds("7 / 2 == 3 && -7 / 2 == -3 && -7 % 2 == -1 && 7 % -2 == 1");
+        holds("10u / 3 == 3 && 10u % 3 == 1");
+        holds("5 % 3 == 2 && (5 & 3) == 1 && (5 | 3) == 7 && (5 ^ 3) == 6");
+        holds("~0 == -1 && !0 == 1 && !5 == 0 && -(-3) == 3");
+        holds("1 && 2 && !(0 || 0) && (0 || 3)");
+        holds("(1 ? 2 : 3) == 2 && (0 ? 2 : 3) == 3");
+        holds("2 < 3 && 3 <= 3 && 4 > 3 && 3 >= 3 && 1 != 2 && 2 == 2");
+        holds("-8 >> 1 == -4 && 1 << 4 == 16 && 0x80000000u >> 31 == 1");
+        holds("1 << 31 == -2147483647 - 1");
+        holds("-1 > 0u");
+        holds("0xFFFFFFFFu + 1 == 0");
+        holds("18446744073709551615ul + 1 == 0");
+        holds("'\\xff' == -1 && 'a' == 97");
+        holds("2147483647 + 1u == 2147483648u");
+        holds("-2147483647 - 1 < 0");
+        holds("1000000 * 1000000L == 1000000000000");
+        holds("(0 ? 1 / 0 : 1) == 1");
+    }
+
+    @Test
+    void floatingConstantExpressions() {
+        holds("1.5 + 1 == 2.5");
+        holds("1.0f / 2 == 0.5");
+        holds("0.1f != 0.1");
+        holds("1e10 > 1e9 && -1.5 < 0 && !0.0 && 2.5 && (1.5 ? 1 : 0)");
+        assertTrue(staticAssertFails("1.5").contains("integer constant expression"));
+    }
+
+    @Test
+    void constantExpressionErrors() {
+        assertTrue(staticAssertFails("2147483647 + 1").contains("overflow"));
+        assertTrue(staticAssertFails("-2147483647 - 2").contains("overflow"));
+        assertTrue(staticAssertFails("65536 * 65536").contains("overflow"));
+        assertTrue(staticAssertFails("1 / 0").contains("division by zero"));
+        assertTrue(staticAssertFails("1 % 0").contains("division by zero"));
+        assertTrue(staticAssertFails("1 << 40").contains("shift amount"));
+        assertTrue(staticAssertFails("1 << -1").contains("shift amount"));
+        assertTrue(fails("int x; static_assert(x);").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int f(void); static_assert(f());").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((x, 1));").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((x = 1));").getMessage().contains("not a constant expression"));
+        holds("sizeof(int) == 4 && _Countof(int[3]) == 3");
+    }
+
+    @Test
+    void staticAssertionsReportTheirMessage() {
+        var e = fails("static_assert(0, \"boom\");");
+        assertTrue(e.getMessage().contains("static assertion failed: boom"), e.getMessage());
+        assertTrue(fails("static_assert(1 == 2);").getMessage().contains("static assertion failed"));
+        assertTrue(fails("static_assert(0, u\"wide\");").getMessage().contains("wide"));
+        type("void f(void) { static_assert(sizeof(int) == 4, \"in a block\"); }");
+        assertTrue(fails("void f(void) { static_assert(0); }").getMessage().contains("static assertion failed"));
+    }
+
+    @Test
+    void nullPointerConstantsAreFolded() {
+        assertEquals("(assign:int * p:int * (null:int * (sub:int 1:int 1:int)))", expr("int *p;", "p = 1 - 1"));
+        assertEquals("(eq:int (rv:int * p:int *) (null:int * (int-to-int:long 0:int)))", expr("int *p;", "p == 0L")
+                .replace("(null:int * 0:long)", "(null:int * (int-to-int:long 0:int))"));
+        assertTrue(exprFails("int *p;", "p = 1 - 2").getMessage().contains("incompatible types"));
+    }
+
+    // ---- statements and functions ------------------------------------------------------------
+
+    @Test
+    void functionsListParametersAndLocals() {
+        assertEquals("(function f:int (int, char) (params a:int b:char) (locals c:int d:double) "
+                        + "(block (local c:int (add:int (rv:int a:int) (int-to-int:int (rv:char b:char)))) "
+                        + "(block (local d:double (int-to-float:double (rv:int c:int)))) (return (rv:int c:int))))",
+                function("int f(int a, char b) { int c = a + b; { double d = c; } return c; }"));
+        assertEquals("(function g:void (void) (params) (locals) (block))", function("void g(void) {}"));
+        assertEquals("(function h:int (int) (params) (locals) (block (return 1:int)))", function("int h(int) { return 1; }"));
+    }
+
+    @Test
+    void expressionStatementsAndNullStatements() {
+        assertEquals("(block (expr (assign:int a:int 1:int)) (block) (expr (rv:int a:int)) (expr (call:void g:void (void))))",
+                body("int a; void g(void);", "a = 1; ; a; g();"));
+    }
+
+    @Test
+    void ifWhileDoFor() {
+        assertEquals("(block (if (to-bool:bool (rv:int a:int)) (expr (assign:int a:int 0:int)) (expr (assign:int a:int 1:int))))",
+                body("int a;", "if (a) a = 0; else a = 1;"));
+        assertEquals("(block (if (to-bool:bool (rv:int * p:int *)) (block)))", body("int *p;", "if (p) {}"));
+        assertEquals("(block (if (rv:bool b:bool) (block)))", body("bool b;", "if (b) {}"));
+        assertEquals("(block (while (lt:int (rv:int i:int) 10:int) (expr (compound-assign:int i:int (add:int (target:int) 1:int)))))",
+                body("int i;", "while (i < 10) i++;").replace("(to-bool:bool (lt:int (rv:int i:int) 10:int))", "(lt:int (rv:int i:int) 10:int)"));
+        assertEquals("(block (do (block) (to-bool:bool (rv:int i:int))))", body("int i;", "do {} while (i);"));
+        assertEquals("(block (for (init (local k:int 0:int)) (to-bool:bool (lt:int (rv:int k:int) 3:int)) (compound-assign:int k:int (add:int (target:int) 1:int)) (block)))",
+                body("", "for (int k = 0; k < 3; k++) {}"));
+        assertEquals("(block (for (init (expr (assign:int i:int 0:int))) _ _ (break for)))", body("int i;", "for (i = 0;;) break;"));
+        assertEquals("(block (for (init) _ _ (block)))", body("", "for (;;) {}"));
+        assertTrue(fails("void f(void) { void g(void); if (g()) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("void f(void) { void g(void); while (g()) {} }").getMessage().contains("must be scalar"));
+    }
+
+    @Test
+    void selectionHeadersDeclareIntoTheirOwnScope() {
+        assertEquals("(block (block (local x:int 3:int) (if (to-bool:bool (rv:int x:int)) (block))))", body("", "if (int x = 3) {}"));
+        assertEquals("(block (block (local x:int 3:int) (if (gt:int (rv:int x:int) 2:int) (block))))",
+                body("", "if (int x = 3; x > 2) {}").replace("(to-bool:bool (gt:int (rv:int x:int) 2:int))", "(gt:int (rv:int x:int) 2:int)"));
+        assertEquals("(block (block (local c:char (int-to-int:char 65:int)) (switch (int-to-int:int (rv:char c:char)) (cases 65) (block (label case 65) (break switch)))))",
+                body("", "switch (char c = 65) { case 'A': break; }"));
+    }
+
+    @Test
+    void switchCasesAreConvertedToThePromotedType() {
+        assertEquals("(block (switch (int-to-int:int (rv:char c:char)) (cases 1 2...5 default) (block (label case 1) (label case 2...5) (break switch) (label default) (block))))",
+                body("char c;", "switch (c) { case 1: case 2 ... 5: break; default: {} }"));
+        assertEquals("(block (switch (rv:long l:long) (cases -1) (block (label case -1) (block))))", body("long l;", "switch (l) { case -1: {} }"));
+        assertEquals("(block (switch (rv:unsigned int u:unsigned int) (cases 4294967295) (block (label case 4294967295) (block))))",
+                body("unsigned u;", "switch (u) { case -1: {} }"));
+        assertEquals("(block (switch (rv:int i:int) (cases 0) (block (label case 0))))", body("int i;", "switch (i) { case 0: }"));
+        assertTrue(fails("void f(double d) { switch (d) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1: case 1: {} } }").getMessage().contains("duplicate case"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1 ... 3: case 2: {} } }").getMessage().contains("duplicate case"));
+        assertTrue(fails("void f(int i) { switch (i) { case 2: case 1 ... 3: {} } }").getMessage().contains("overlaps"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1 ... 3: case 3 ... 4: {} } }").getMessage().contains("overlapping"));
+        assertTrue(fails("void f(int i) { switch (i) { case 3 ... 1: {} } }").getMessage().contains("empty case range"));
+        assertTrue(fails("void f(int i) { switch (i) { default: default: {} } }").getMessage().contains("multiple default"));
+        assertTrue(fails("void f(int i) { switch (i) { case i: {} } }").getMessage().contains("not a constant"));
+        assertTrue(fails("void f(int i) { switch (i) { case 1.5: {} } }").getMessage().contains("not an integer"));
+    }
+
+    @Test
+    void jumpsShareTheirTargetsWithTheStatementsTheyReach() {
+        assertEquals("(block (label top) (expr (compound-assign:int i:int (add:int (target:int) 1:int))) (if (lt:int (rv:int i:int) 3:int) (goto top)))",
+                body("int i;", "top: i++; if (i < 3) goto top;").replace("(to-bool:bool (lt:int (rv:int i:int) 3:int))", "(lt:int (rv:int i:int) 3:int)"));
+        assertEquals("(block (goto end) (label end))", body("", "goto end; end:"));
+        assertEquals("(block (label outer) (while (rv:bool b:bool) (while (rv:bool b:bool) (block (break while) (continue while) (break while) (continue while)))))",
+                body("bool b;", "outer: while (b) while (b) { break outer; continue outer; break; continue; }"));
+        var unit = parse("void f(int i) { top: if (i) goto top; while (i) { if (i) break; else continue; } }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var items = typed.functions().get(0).body().items();
+        var labeled = (TStmt.Labeled) items.get(0);
+        var ifStmt = (TStmt.If) items.get(1);
+        assertSame(labeled.target(), ((TStmt.Goto) ifStmt.thenBranch()).target());
+        var loop = (TStmt.While) items.get(2);
+        var inner = (TStmt.If) ((TStmt.Block) loop.body()).items().get(0);
+        assertSame(loop.target(), ((TStmt.Break) inner.thenBranch()).target());
+        assertSame(loop.target(), ((TStmt.Continue) inner.elseBranch().orElseThrow()).target());
+    }
+
+    @Test
+    void returnConvertsToTheReturnType() {
+        assertEquals("(function f:double (int) (params a:int) (locals) (block (return (int-to-float:double (rv:int a:int)))))",
+                function("double f(int a) { return a; }"));
+        assertEquals("(function p:const char *(void) (params) (locals) (block (return (ptr-to-ptr:const char * (decay:char * \"x\":char [2])))))",
+                function("const char *p(void) { return \"x\"; }"));
+        assertEquals("(function v:void (void) (params) (locals) (block (return)))", function("void v(void) { return; }"));
+        assertEquals("(function w:void (void) (params) (locals) (block (return (call:void g:void (void)))))",
+                function("void g(void); void w(void) { return g(); }"));
+        assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
+        assertTrue(fails("void f(void) { return 1; }").getMessage().contains("should not return a value"));
+        assertTrue(fails("int *f(void) { return 1; }").getMessage().contains("incompatible types when returning"));
+    }
+
+    @Test
+    void localsStaticsAndExternsInBlocks() {
+        assertEquals("(global s:int 1:int)\n(extern e:int)\n(function f:void (void) (params) (locals a:int) "
+                        + "(block (local a:int) (expr (assign:int a:int (add:int (rv:int s:int) (rv:int e:int))))))",
+                unit("void f(void) { static int s = 1; extern int e; int a; a = s + e; }"));
+        assertTrue(fails("void f(void) { void v; }").getMessage().contains("incomplete type"));
+        assertTrue(fails("void f(void) { typedef int T = 1; }").getMessage().contains("cannot have an initializer"));
+    }
+
+    @Test
+    void globalsKeepTheirDefinitionsInitializer() {
+        assertEquals("(global x:int 3:int)\n(global y:int)\n(global p:const char * &\"hi\":const char *)\n(string \"hi\":char [3])",
+                unit("int x; int x = 3; int y; extern int y; const char *p = \"hi\";"));
+        assertEquals("(global d:double 1.0:double)", unit("double d = 1;"));
+        assertTrue(fails("int f(void) = 1;").getMessage().contains("cannot have an initializer"));
+        assertTrue(fails("int *p = 1;").getMessage().contains("incompatible types when initializing"));
+    }
+
+    // ---- enumerations ------------------------------------------------------------------------
+
+    @Test
+    void enumeratorsAreIntConstantsOfTheEnumsType() {
+        assertEquals(List.of("A: int", "B: int", "C: int", "e: int"), declaredTypes("enum E { A, B = A + 5, C }; enum E e;"));
+        assertEquals("5:int", expr("enum E { A, B = A + 5, C };", "B"));
+        assertEquals("6:int", expr("enum E { A, B = A + 5, C };", "C"));
+        assertEquals("(add:int 6:int (rv:int e:int))", expr("enum E { A, B = A + 5, C } e;", "C + e"));
+        type("enum { X = 3, Y, Z = Y * 2 }; static_assert(Z == 8 && Y == 4);");
+        type("enum E { A, B = A + 5, C }; static_assert(C == 6 && B == 5 && A == 0);");
+        type("enum E { M = -1, N }; static_assert(N == 0);");
+        assertEquals("4:unsigned long", expr("enum E { A };", "sizeof(enum E)"));
+        assertEquals(List.of("Q: int", "T: int", "t: int"), declaredTypes("typedef enum { Q } T; T t;"));
+        assertEquals("(block (switch (rv:int e:int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
+                body("enum E { A, B } e;", "switch (e) { case A: case B: {} }"));
+    }
+
+    @Test
+    void enumUnderlyingTypes() {
+        assertEquals(List.of("X: unsigned char", "v: unsigned char"), declaredTypes("enum F : unsigned char { X = 255 }; enum F v;"));
+        assertEquals("1:unsigned long", expr("enum F : unsigned char { X };", "sizeof(enum F)"));
+        assertEquals(List.of("BIG: long"), declaredTypes("enum G { BIG = 4294967296 };"));
+        assertEquals(List.of("U: unsigned int"), declaredTypes("enum H { U = 4294967295u };"));
+        assertEquals(List.of("M: long", "P: long"), declaredTypes("enum N { M = -1, P = 4294967295u };"));
+        assertEquals(List.of("p: enum_ptr"), declaredTypes("enum Fwd : short; enum Fwd *p;").stream()
+                .map(l -> l.replace("short *", "enum_ptr")).toList());
+        assertTrue(fails("enum F : unsigned char { Y = 256 };").getMessage().contains("not representable"));
+        assertTrue(fails("enum Z *p;").getMessage().contains("incomplete"));
+        assertTrue(fails("enum E { A = 1.5 };").getMessage().contains("integer constant"));
+        assertTrue(fails("int x; enum E { A = x };").getMessage().contains("not a constant"));
+        assertTrue(fails("enum E : double { A };").getMessage().contains("must be an integer type"));
+    }
+
+    // ---- sizes through the constant evaluator, _BitInt -------------------------------------------
+
+    @Test
+    void arraySizesAreIntegerConstantExpressions() {
+        assertEquals(List.of("a: int [5]", "N: int", "b: int [4]", "c: int [4]", "d: char [97]", "e: int [8]", "f: int [4][6]"),
+                declaredTypes("int a[2 + 3]; enum { N = 4 }; int b[N]; int c[sizeof(int)]; char d['a']; int e[1u << 3]; int f[N][N + 2];"));
+        assertEquals("20:unsigned long", expr("int a[2 + 3];", "sizeof a"));
+        assertEquals("(add:unsigned long 3:unsigned long 5:unsigned long)", expr("int a[2 + 3]; enum { N = 3 }; int b[N];", "_Countof b + _Countof a"));
+        assertTrue(fails("int z[0];").getMessage().contains("positive"));
+        assertTrue(fails("int z[-1];").getMessage().contains("positive"));
+        assertTrue(fails("int z[1.5];").getMessage().contains("not an integer"));
+        assertTrue(fails("int n; int v[n];").getMessage().contains("variable length arrays"));
+        type("int f(int n, int a[n]);"); // a VLA parameter adjusts to a pointer, so its size is not needed
+        assertTrue(fails("int z[1 / 0];").getMessage().contains("division by zero"));
+    }
+
+    @Test
+    void bitPreciseIntegers() {
+        assertEquals(List.of("b: _BitInt(7)", "u: unsigned _BitInt(3)", "w: _BitInt(4)"),
+                declaredTypes("_BitInt(7) b; unsigned _BitInt(3) u; _BitInt(2 + 2) w;"));
+        assertEquals("1:unsigned long", expr("", "sizeof(_BitInt(7))"));
+        assertEquals("2:unsigned long", expr("", "sizeof(_BitInt(9))"));
+        assertEquals("8:unsigned long", expr("", "sizeof(_BitInt(33))"));
+        assertEquals("4:unsigned long", expr("", "alignof(unsigned _BitInt(32))"));
+        assertEquals("1:_BitInt(2)", expr("", "1wb"));
+        assertEquals("3:unsigned _BitInt(2)", expr("", "3uwb"));
+        assertEquals("-128:_BitInt(8)", expr("", "-128wb").replace("(neg:_BitInt(9) 128:_BitInt(9))", "-128:_BitInt(8)"));
+        assertEquals("(add:int (int-to-int:int (rv:_BitInt(7) b:_BitInt(7))) 1:int)", expr("_BitInt(7) b;", "b + 1"), "int outranks a narrower _BitInt");
+        assertEquals("(add:_BitInt(7) (rv:_BitInt(7) b:_BitInt(7)) (rv:_BitInt(7) b:_BitInt(7)))", expr("_BitInt(7) b;", "b + b"), "no promotion");
+        assertEquals("(add:_BitInt(64) (rv:_BitInt(64) w:_BitInt(64)) (int-to-int:_BitInt(64) (rv:unsigned int u:unsigned int)))",
+                expr("_BitInt(64) w; unsigned u;", "w + u"), "a wider signed _BitInt holds every unsigned int");
+        assertEquals("(add:unsigned int (int-to-int:unsigned int (rv:unsigned _BitInt(32) b:unsigned _BitInt(32))) (int-to-int:unsigned int (rv:int i:int)))",
+                expr("unsigned _BitInt(32) b; int i;", "b + i"), "int outranks _BitInt(32); neither holds the other, so unsigned int");
+        assertEquals("(add:_BitInt(40) (rv:_BitInt(40) w:_BitInt(40)) (int-to-int:_BitInt(40) (rv:int i:int)))",
+                expr("_BitInt(40) w; int i;", "w + i"));
+        holds("3wb - 1wb == 2wb");
+        holds("3uwb + 1uwb == 0uwb");
+        holds("-2wb < 1wb && 7wb / 2wb == 3wb");
+        assertTrue(staticAssertFails("3wb + 1wb").contains("overflow"));
+        assertTrue(fails("_BitInt(1) x;").getMessage().contains("at least 2"));
+        assertTrue(fails("unsigned _BitInt(0) x;").getMessage().contains("at least 1"));
+        assertTrue(fails("_BitInt(65) x;").getMessage().contains("not supported"));
+        assertTrue(fails("int n; _BitInt(n) x;").getMessage().contains("not a constant"));
+        type("unsigned _BitInt(1) one;");
+    }
+
+    // ---- casts, _Generic, typeof ----------------------------------------------------------------
+
+    @Test
+    void explicitCasts() {
+        assertEquals("(int-to-int:char 300:int)", expr("", "(char)300"));
+        assertEquals("(int-to-float:double 1:int)", expr("", "(double)1"));
+        assertEquals("(float-to-int:int 1.5:double)", expr("", "(int)1.5"));
+        assertEquals("(to-void:void (rv:int x:int))", expr("int x;", "(void)x"));
+        assertEquals("(to-bool:bool (rv:int * p:int *))", expr("int *p;", "(bool)p"));
+        assertEquals("(ptr-to-int:long (rv:int * p:int *))", expr("int *p;", "(long)p"));
+        assertEquals("(int-to-ptr:int * 8:int)", expr("", "(int *)8"));
+        assertEquals("(null:int * 0:int)", expr("", "(int *)0"));
+        assertEquals("(null:void * 0:int)", expr("", "(void *)0"));
+        assertEquals("(ptr-to-ptr:char * (rv:int * p:int *))", expr("int *p;", "(char *)p"));
+        assertEquals("(rv:int x:int)", expr("int x;", "(int)x"), "no node when the type does not change");
+        assertEquals("(rv:int x:int)", expr("int x;", "(const int)x"), "the result is unqualified");
+        assertEquals("(ptr-to-int:long (decay:int * a:int [3]))", expr("int a[3];", "(long)a"));
+        assertEquals("(ptr-to-ptr:int (*)(void) (rv:void * v:void *))", expr("void *v;", "(int (*)(void))v"));
+        assertEquals("(null:int * (null:void * 0:int))", expr("", "(int *)(void *)0"));
+        assertEquals("(assign:int * p:int * (null:int * (null:void * 0:int)))", expr("int *p;", "p = (void *)0"),
+                "(void *)0 is still a null pointer constant");
+        assertEquals("(null:nullptr_t 0:int)", expr("", "(typeof(nullptr))0"));
+        assertTrue(exprFails("int *p;", "(float)p").getMessage().contains("cannot cast"));
+        assertTrue(exprFails("", "(int *)1.5").getMessage().contains("cannot cast"));
+        assertTrue(exprFails("int x;", "(int[3])x").getMessage().contains("non-scalar type"));
+        assertTrue(exprFails("void v(void);", "(int)v()").getMessage().contains("non-scalar type"));
+        assertTrue(exprFails("", "(typeof(nullptr))1").getMessage().contains("null pointer constant"));
+        assertTrue(exprFails("", "(int)nullptr").getMessage().contains("cannot cast"));
+    }
+
+    @Test
+    void castsFoldInConstantExpressions() {
+        holds("(char)300 == 44 && (unsigned char)-1 == 255 && (short)65535 == -1");
+        holds("(int)2.9 == 2 && (int)-2.9 == -2 && (bool)0.5 == 1 && (unsigned)-1 == 4294967295u");
+        holds("(long)1 << 40 == 1099511627776 && (float)0.1 != 0.1 && (double)(float)0.5 == 0.5");
+        holds("(_BitInt(4))7 + (_BitInt(4))-8 == -1");
+        assertTrue(staticAssertFails("(int)1e10").contains("out of range"));
+        holds("(_BitInt(4))8 == -8");
+        holds("(unsigned _BitInt(3))9 == 1");
+    }
+
+    @Test
+    void genericSelection() {
+        String assoc = "_Generic(x, int: 1, double: 2.5, char *: 3u, default: 'c')";
+        assertEquals("1:int", expr("int x;", assoc));
+        assertEquals("2.5:double", expr("double x;", assoc));
+        assertEquals("3:unsigned int", expr("char x[4];", assoc), "the controlling array decays");
+        assertEquals("99:int", expr("float x;", assoc), "default");
+        assertEquals("1:int", expr("const int x;", assoc), "lvalue conversion drops const");
+        assertEquals("1:int", expr("", "_Generic(int, int: 1, default: 2)"), "a type-name controls");
+        assertEquals("y:int", expr("int y;", "_Generic(1, int: y)"), "the chosen expression is typed as itself");
+        assertEquals("1:int", expr("int f(void);", "_Generic(f, int (*)(void): 1, default: 0)"));
+        assertEquals("(add:int 2:int (rv:int y:int))", expr("int x, y;", "_Generic(x++, int: 2) + y"), "the controlling expression is not evaluated");
+        assertTrue(exprFails("float x;", "_Generic(x, int: 1)").getMessage().contains("no _Generic association"));
+        assertTrue(exprFails("int x;", "_Generic(x, int: 1, signed int: 2)").getMessage().contains("compatible"));
+        assertTrue(exprFails("int x;", "_Generic(x, default: 1, default: 2)").getMessage().contains("duplicate default"));
+        assertTrue(exprFails("int x;", "_Generic(x, int[]: 1, default: 2)").getMessage().contains("complete object type"));
+    }
+
+    @Test
+    void typeofOfAnExpression() {
+        assertEquals(List.of("x: int", "y: int", "a: int [3]", "b: int [3]", "p: int *", "q: int *", "d: double",
+                        "cx: const int", "cy: const int", "u: int", "f: int (void)", "g: int (void)", "fp: int (*)(void)",
+                        "cp: const int *", "r: const int", "s: unsigned long"),
+                declaredTypes("int x; typeof(x) y; int a[3]; typeof(a) b; int *p; typeof(p + 1) q; typeof(1.5) d; "
+                        + "const int cx; const typeof(x) cy; typeof_unqual(cx) u; int f(void); typeof(f) g; typeof(f) *fp; "
+                        + "const int *cp; typeof(*cp) r; typeof(sizeof 1) s;"));
+        assertEquals("4:unsigned long", expr("int x;", "sizeof(typeof(x++))"));
+        assertEquals(List.of("i: int", "j: int"), declaredTypes("int i; typeof(i++) j;"));
+        var unit = parse("void f(void) { \"s\"; typeof(\"abc\") t; }");
+        assertEquals(1, Typer.run(unit, Resolver.resolve(unit), new Types(X86_64SysV.INSTANCE)).strings().size(),
+                "a typeof operand is not evaluated, so its string literal creates no object");
+    }
+
+    // ---- structures and unions -------------------------------------------------------------------
+
+    @Test
+    void recordTypesAndTheirLayout() {
+        assertEquals(List.of("s: struct S", "p: struct S *", "u: union U", "a: struct <anonymous>"),
+                declaredTypes("struct S { char c; int i; } s; struct S *p; union U { char c; double d; } u; struct { int x; } a;"));
+        assertEquals("8:unsigned long", expr("struct S { char c; int i; };", "sizeof(struct S)"));
+        assertEquals("4:unsigned long", expr("struct S { char c; int i; };", "alignof(struct S)"));
+        assertEquals("16:unsigned long", expr("union U { char c[9]; double d; };", "sizeof(union U)"));
+        assertEquals("24:unsigned long", expr("struct S { char c; int i; } a[3];", "sizeof a"));
+        assertEquals("12:unsigned long", expr("struct In { char c; int i; }; struct Out { struct In in; char d; };", "sizeof(struct Out)"));
+        assertEquals("8:unsigned long", expr("struct A { char tag; union { int x; float y; }; };", "sizeof(struct A)"));
+        assertEquals("4:unsigned long", expr("struct F { int n; char data[]; };", "sizeof(struct F)"));
+        assertEquals("16:unsigned long", expr("struct N { int v; struct N *next; };", "sizeof(struct N)"), "self-reference through a pointer");
+        assertEquals("(add:int (rv:int i:int) 1:int)", expr("struct S { int a; static_assert(sizeof(int) == 4); }; int i;", "i + 1"));
+        assertEquals("2:unsigned long", expr("typedef struct { char a, b; } P; P p;", "sizeof p"));
+        assertEquals("8:unsigned long", expr("struct S { int a; }; struct S; struct S *p;", "sizeof p"));
+    }
+
+    @Test
+    void recordConstraints() {
+        assertTrue(fails("struct S { struct S s; };").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct S { void v; };").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct S { int a; int a; };").getMessage().contains("duplicate member"));
+        assertTrue(fails("struct S { char data[]; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("struct S { char data[]; int n; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("union U { int n; char data[]; };").getMessage().contains("flexible array member"));
+        assertTrue(fails("struct S { int f(void); };").getMessage().contains("function type"));
+        assertTrue(fails("struct S { struct T { int x; }; };").getMessage().contains("does not declare a member"));
+        assertTrue(fails("struct S { static_assert(0, \"in struct\"); int a; };").getMessage().contains("in struct"));
+        assertTrue(fails("struct S { int a; struct { int a; }; };").getMessage().contains("duplicate member"));
+        assertTrue(fails("struct Inc; void f(void) { struct Inc x; }").getMessage().contains("incomplete type"));
+        assertTrue(fails("struct Inc; int s = sizeof(struct Inc);").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("struct S { int a; } s;", "s = 1").getMessage().contains("incompatible types"));
+    }
+
+    @Test
+    void recordValuesAssignAndPass() {
+        assertEquals("(assign:struct S s:struct S (rv:struct S t:struct S))", expr("struct S { int a; } s, t;", "s = t"));
+        assertEquals("(call:struct S f:struct S (struct S) (rv:struct S s:struct S))",
+                expr("struct S { int a; } s; struct S f(struct S);", "f(s)"));
+        assertEquals("(function g:struct S (struct S) (params x:struct S) (locals) (block (return (rv:struct S x:struct S))))",
+                function("struct S { int a; }; struct S g(struct S x) { return x; }"));
+        assertEquals("(assign:struct S s:struct S (call:struct S f:struct S (void)))",
+                expr("struct S { int a; } s; struct S f(void);", "s = f()"));
+        assertEquals("(cond:struct S (to-bool:bool (rv:int c:int)) (rv:struct S s:struct S) (rv:struct S t:struct S))",
+                expr("struct S { int a; } s, t; int c;", "c ? s : t"));
+        assertTrue(exprFails("struct S { int a; } s; struct T { int a; } t; int c;", "c ? s : t").getMessage().contains("not supported"));
+        assertTrue(exprFails("struct S { int a; } s; struct T { int a; } t;", "s = t").getMessage().contains("incompatible types"));
+        assertTrue(exprFails("struct S { int a; } s;", "s + 1").getMessage().contains("invalid operands"));
+        assertTrue(exprFails("struct S { int a; } s;", "!s").getMessage().contains("invalid operand"));
+        assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
+    }
+
+    @Test
+    void memberAccess() {
+        String s = "struct S { char c; int i; } s; struct S *p; const struct S cs;";
+        assertEquals("(member:int s:struct S i)", expr(s, "s.i"));
+        assertEquals("(add:int (rv:int (member:int s:struct S i)) 0:int)", expr(s, "s.i + 0"));
+        assertEquals("(member:int (deref:struct S (rv:struct S * p:struct S *)) i)", expr(s, "p->i"));
+        assertEquals("(member:int (deref:struct S (rv:struct S * p:struct S *)) i)", expr(s, "(*p).i"));
+        assertEquals("(member:const int cs:const struct S i)", expr(s, "cs.i"), "the base's qualifiers apply");
+        assertEquals("(assign:int (member:int s:struct S i) 1:int)", expr(s, "s.i = 1"));
+        assertEquals("(addr:int * (member:int s:struct S i))", expr(s, "&s.i"));
+        assertEquals("(addr:char * (member:char (deref:struct S (rv:struct S * p:struct S *)) c))", expr(s, "&p->c"));
+        assertEquals("(compound-assign:int (member:int s:struct S i) (add:int (target:int) 1:int))", expr(s, "s.i++"), "void context: desugared");
+        assertEquals("(member:int (member:struct In out:struct Out in) i)",
+                expr("struct In { int i; }; struct Out { struct In in; } out;", "out.in.i"));
+        assertEquals("(member:int a:struct A x)", expr("struct A { char tag; union { int x; float y; }; } a;", "a.x"), "anonymous member flattened");
+        assertEquals("(deref:int (ptradd:int * (decay:int * (deref:int [3] (ptradd:int (*)[3] (decay:int (*)[3] (member:int [2][3] s:struct M m)) (int-to-int:long 1:int)))) (int-to-int:long 2:int)))",
+                expr("struct M { int m[2][3]; } s;", "s.m[1][2]"));
+        assertTrue(exprFails(s, "s.z").getMessage().contains("no member named 'z'"));
+        assertTrue(exprFails(s, "p.i").getMessage().contains("not a structure or union"));
+        assertTrue(exprFails(s, "s->i").getMessage().contains("not a pointer to a structure"));
+        assertTrue(exprFails("int x;", "x.i").getMessage().contains("not a structure or union"));
+        assertTrue(exprFails("struct Inc *p;", "p->i").getMessage().contains("incomplete type"));
+        assertTrue(exprFails(s, "cs.i = 1").getMessage().contains("const-qualified"));
+    }
+
+    @Test
+    void structRvaluesAreMaterializedForMemberAccess() {
+        String decls = "struct S { int i; char c; } s; struct S f(void);";
+        assertEquals("(member:int (materialize:struct S (call:struct S f:struct S (void))) i)",
+                expr(decls, "f().i"));
+        assertEquals("(member:char (materialize:struct S (assign:struct S s:struct S (rv:struct S s:struct S))) c)",
+                expr(decls, "(s = s).c"));
+        var unit = parse(decls + " void g(void) { f().i; f().c; sizeof f().i; }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var g = typed.functions().get(0);
+        assertEquals(2, g.locals().size(), "one temporary per evaluated materialization");
+        assertEquals("struct S", g.locals().get(0).type().spelling());
+        assertTrue(g.locals().get(0) instanceof Symbol.Variable v && v.storage == Symbol.Variable.Storage.AUTOMATIC);
+        // s.m on a non-lvalue is not an lvalue (6.5.3.4p3): readable, but not writable or addressable.
+        assertTrue(exprFails(decls, "f().i = 1").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "f().i += 1").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "f().i++").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "++f().i").getMessage().contains("member of a temporary"));
+        assertTrue(exprFails(decls, "&f().i").getMessage().contains("address of a member of a temporary"));
+        assertTrue(exprFails("struct T { struct S { int i; } s; } g(void);", "g().s.i = 1").getMessage().contains("member of a temporary"));
+        assertEquals("(add:int (rv:int (member:int (materialize:struct S (call:struct S f:struct S (void))) i)) 1:int)",
+                expr(decls, "f().i + 1"), "reading a member of a temporary is fine");
+        assertTrue(exprFails("struct S { int i; } f(void);", "&f()").getMessage().contains("address of an rvalue"));
+    }
+
+    @Test
+    void bitFieldInitializerItemsCarryTheirPlacement() {
+        assertEquals("(local b:struct B (init (0:4/4 (int-to-int:unsigned int 3:int)) (0:0/4 (int-to-int:unsigned int 1:int)) (3:4/1 (to-bool:bool 1:int))))",
+                body("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; };", "struct B b = {.hi = 3, .lo = 1, .flag = 1};")
+                        .replaceAll("^\\(block |\\)$", ""));
+        assertEquals("(global g:struct B (init (0:4/4 3:unsigned int) (3:4/1 1:bool)))",
+                unit("struct B { unsigned lo : 4; unsigned hi : 4; int wide : 20; bool flag : 1; }; struct B g = {.hi = 3, .flag = 1};"));
+    }
+
+    @Test
+    void bitFields() {
+        String s = "struct B { unsigned u : 3; int i : 5; unsigned w : 32; bool f : 1; char c : 2; long l : 40; } b;";
+        assertEquals("4:unsigned long", expr("struct B { unsigned u : 3; int i : 5; };", "sizeof(struct B)"));
+        assertEquals("16:unsigned long", expr(s, "sizeof b"));
+        assertEquals("(member:unsigned int b:struct B u:0/3)", expr(s, "b.u"));
+        assertEquals("(add:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))) 1:int)",
+                expr(s, "b.u + 1"), "an unsigned bit-field narrower than int promotes to int");
+        assertEquals("(add:unsigned int (rv:unsigned int (member:unsigned int b:struct B w:0/32)) (int-to-int:unsigned int 1:int))",
+                expr(s, "b.w + 1"), "a full-width unsigned one stays unsigned");
+        assertEquals("(add:int (rv:int (member:int b:struct B i:3/5)) 1:int)", expr(s, "b.i + 1"));
+        assertEquals("(add:int (int-to-int:int (rv:bool (member:bool b:struct B f:0/1))) 1:int)", expr(s, "b.f + 1"));
+        assertEquals("(neg:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))))", expr(s, "-b.u"));
+        assertEquals("(lt:int (int-to-int:int (rv:unsigned int (member:unsigned int b:struct B u:0/3))) -1:int)",
+                expr(s, "b.u < -1").replace("(neg:int 1:int)", "-1:int"));
+        assertEquals("(add:long (rv:long (member:long b:struct B l:3/40)) (int-to-int:long 1:int))", expr(s, "b.l + 1"));
+        assertEquals("(assign:unsigned int (member:unsigned int b:struct B u:0/3) (int-to-int:unsigned int 9:int))", expr(s, "b.u = 9"));
+        assertEquals("(compound-assign:int (member:int b:struct B i:3/5) (add:int (target:int) 1:int))", expr(s, "b.i += 1"));
+        assertTrue(exprFails(s, "&b.u").getMessage().contains("address of a bit-field"));
+        assertTrue(exprFails(s, "sizeof b.u").getMessage().contains("sizeof applied to a bit-field"));
+        assertTrue(fails("struct S { int a : 33; };").getMessage().contains("exceeds its type"));
+        assertTrue(fails("struct S { bool a : 2; };").getMessage().contains("exceeds its type"));
+        assertTrue(fails("struct S { int a : -1; };").getMessage().contains("negative"));
+        assertTrue(fails("struct S { int a : 0; };").getMessage().contains("zero width"));
+        assertTrue(fails("struct S { double d : 3; };").getMessage().contains("non-integer"));
+        assertTrue(fails("int n; struct S { int a : n; };").getMessage().contains("not a constant"));
+        assertTrue(fails("struct S { int a : 1; int a : 1; };").getMessage().contains("duplicate member"));
+        type("struct S { int : 0; int a : 1; unsigned : 3; };");
+    }
+
+    // ---- initializers ---------------------------------------------------------------------------
+
+    /** The printed initializer of the global declared last in {@code source}. */
+    private static String init(String source) {
+        var unit = parse(source);
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var g = typed.globals().get(typed.globals().size() - 1);
+        String line = TypedPrinter.print(typed).lines().filter(l -> l.startsWith("(global " + g.symbol().name + ":")).findFirst().orElseThrow();
+        return line.substring("(global ".length(), line.length() - 1);
+    }
+
+    @Test
+    void scalarAndBracedScalarInitializers() {
+        assertEquals("x:int 3:int", init("int x = 3;"));
+        assertEquals("x:int 3:int", init("int x = {3};"));
+        assertEquals("x:int 3:int", init("int x = {{3}};"));
+        assertEquals("x:int (init)", init("int x = {};"));
+        assertEquals("p:int * null:int *", init("int *p = {0};"));
+        assertTrue(fails("int x = {1, 2};").getMessage().contains("excess elements"));
+        assertTrue(fails("int x = {.a = 1};").getMessage().contains("designator"));
+        assertTrue(fails("int x = {[0] = 1};").getMessage().contains("designator"));
+    }
+
+    @Test
+    void arrayInitializers() {
+        assertEquals("a:int [3] (init (0 1:int) (4 2:int) (8 3:int))", init("int a[3] = {1, 2, 3};"));
+        assertEquals("a:int [3] (init (0 1:int))", init("int a[3] = {1};"));
+        assertEquals("a:int [3] (init)", init("int a[3] = {};"));
+        assertEquals("a:int [3] (init (0 1:int) (4 2:int) (8 3:int))", init("int a[] = {1, 2, 3};"), "size completed");
+        assertEquals("a:int [4] (init (0 1:int) (12 2:int))", init("int a[] = {1, [3] = 2};"), "completed from the highest index");
+        assertEquals("a:int [4] (init (12 9:int) (0 1:int))", init("int a[4] = {[3] = 9, [0] = 1};"), "items in source order");
+        assertEquals("a:int [4] (init (4 5:int) (8 6:int))", init("int a[4] = {[1] = 5, 6};"), "continues after a designator");
+        assertEquals("d:double [2] (init (0 1.0:double) (8 2.5:double))", init("double d[2] = {1, 2.5};"));
+        assertEquals("a:int [4] (init (4 1:int) (4 2:int))", init("int a[4] = {[1] = 1, [1] = 2};"), "later overrides");
+        assertEquals("m:int [2][2] (init (0 1:int) (4 2:int) (8 3:int) (12 4:int))", init("int m[2][2] = {{1, 2}, {3, 4}};"));
+        assertEquals("m:int [2][2] (init (0 1:int) (4 2:int) (8 3:int) (12 4:int))", init("int m[2][2] = {1, 2, 3, 4};"), "brace elision");
+        assertEquals("m:int [2][2] (init (0 1:int) (8 3:int) (12 4:int))", init("int m[2][2] = {{1}, 3, 4};"));
+        assertEquals("m:int [2][2] (init (0 1:int) (8 2:int))", init("int m[][2] = {1, [1] = 2};"), "a designator ends an elided row");
+        assertEquals("m:int [3][2] (init (8 1:int) (12 2:int) (16 3:int))", init("int m[][2] = {[1] = 1, 2, 3};"));
+        assertEquals("m:int [2][2] (init (4 7:int) (8 8:int))", init("int m[2][2] = {[0][1] = 7, 8};"), "nested designators");
+        assertTrue(fails("int a[2] = {1, 2, 3};").getMessage().contains("excess elements"));
+        assertTrue(fails("int m[2][2] = {{1, 2, 3}, {4}};").getMessage().contains("excess elements"));
+        assertTrue(fails("int a[2] = {[2] = 1};").getMessage().contains("exceeds the array bounds"));
+        assertTrue(fails("int a[2] = {[-1] = 1};").getMessage().contains("negative"));
+        assertTrue(fails("int n; int a[2] = {[n] = 1};").getMessage().contains("not a constant"));
+        assertTrue(fails("int a[2] = {.x = 1};").getMessage().contains("member designator in initializer for an array"));
+        assertTrue(fails("int m[2][2] = {[0].x = 1};").getMessage().contains("member designator"));
+        assertTrue(fails("int a[] = {};").getMessage().contains("unknown size"));
+        assertTrue(fails("int a[2] = 1;").getMessage().contains("brace-enclosed"));
+        assertTrue(fails("int m[2][] = {{1}};").getMessage().contains("incomplete element type"));
+    }
+
+    @Test
+    void stringInitializers() {
+        assertEquals("s:char [6] (init (0 104:int) (1 101:int) (2 108:int) (3 108:int) (4 111:int))"
+                        .replaceAll("(\\d+):int", "$1:char"), init("char s[] = \"hello\";"));
+        assertEquals("s:char [6] (init (0 104:char) (1 105:char))", init("char s[6] = \"hi\";"));
+        assertEquals("s:char [2] (init (0 104:char) (1 105:char))", init("char s[2] = \"hi\";"), "no room for the null: allowed");
+        assertEquals("s:char [3] (init (0 104:char) (1 105:char))", init("char s[3] = {\"hi\"};"));
+        assertEquals("s:unsigned char [2] (init (0 120:unsigned char))", init("unsigned char s[] = u8\"x\";"));
+        assertEquals("s:char [2] (init (0 -1:char))", init("char s[] = \"\\xff\";"), "sign-extended into char");
+        assertEquals("w:int [3] (init (0 97:int) (4 98:int))", init("int w[] = L\"ab\";"), "wchar_t is int");
+        assertEquals("u:unsigned short [2] (init (0 97:unsigned short))", init("unsigned short u[] = u\"a\";"));
+        assertEquals("n:char [2][3] (init (0 97:char) (1 98:char) (3 99:char))", init("char n[2][3] = {\"ab\", \"c\"};"));
+        assertEquals("e:char [1] (init)", init("char e[] = \"\";"));
+        assertTrue(fails("char s[2] = \"abc\";").getMessage().contains("too long"));
+        assertTrue(fails("int w[] = \"ab\";").getMessage().contains("matching character type"));
+        assertTrue(fails("char s[] = L\"ab\";").getMessage().contains("matching character type"));
+        var unit = parse("char s[] = \"copied\"; const char *p = \"kept\";");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        assertEquals(List.of("\"kept\""), typed.strings().stream().map(d -> d.symbol().name).toList(),
+                "a string copied into an array is not a separate object");
+    }
+
+    @Test
+    void recordInitializers() {
+        String s = "struct S { char c; int i; double d; };";
+        assertEquals("v:struct S (init (0 1:char) (4 2:int) (8 3.0:double))", init(s + " struct S v = {1, 2, 3};"));
+        assertEquals("v:struct S (init (0 1:char))", init(s + " struct S v = {1};"));
+        assertEquals("v:struct S (init (8 2.5:double) (0 1:char))", init(s + " struct S v = {.d = 2.5, .c = 1};"));
+        assertEquals("v:struct S (init (4 7:int) (8 8.0:double))", init(s + " struct S v = {.i = 7, 8};"));
+        assertEquals("v:struct S (init)", init(s + " struct S v = {};"));
+        assertEquals("(block (local v:struct S (init (0 (rv:struct S w:struct S)))))", body(s + " struct S w;", "struct S v = w;"));
+        assertEquals("(block (local arr:struct S [2] (init (0 (rv:struct S w:struct S)) (16 (rv:struct S w:struct S)))))",
+                body(s + " struct S w;", "struct S arr[2] = {w, w};"), "a subobject of record type takes a value of that type");
+        assertEquals("(block (local arr:struct S [2] (init (0 (rv:struct S w:struct S)) (20 5:int))))",
+                body(s + " struct S w;", "struct S arr[2] = {w, [1].i = 5};"));
+        assertTrue(fails(s + " struct S w; void f(void) { struct S v = {w}; }").getMessage().contains("incompatible types"),
+                "the first item targets the first member");
+        assertEquals("o:struct Out (init (0 1:int) (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {{1, 2}, 3};"));
+        assertEquals("o:struct Out (init (0 1:int) (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {1, 2, 3};"), "brace elision");
+        assertEquals("o:struct Out (init (4 2:int) (8 3:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {.in.y = 2, 3};"));
+        assertEquals("(block (local o:struct Out (init (0 (rv:struct In i:struct In)) (8 3:int))))",
+                body("struct In { int x, y; }; struct Out { struct In in; int b; }; struct In i;", "struct Out o = {i, 3};"));
+        assertEquals("a:struct A (init (0 1:char) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, 2, 3};"), "into an anonymous member");
+        assertEquals("a:struct A (init (0 1:char) (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {1, {2, 3}};"));
+        assertEquals("a:struct A (init (8 3:int) (4 2:int))", init("struct A { char tag; struct { int x, y; }; }; struct A a = {.y = 3, .x = 2};"), "anonymous members are designatable");
+        assertEquals("a:struct A (init (4 2:int) (8 3:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, 3};"));
+        assertEquals("a:struct A (init (4 2:int) (12 9:int))", init("struct A { char tag; struct { int x, y; }; int z; }; struct A a = {.x = 2, .z = 9};"));
+        assertEquals("b:struct B (init (0:0/3 5:int) (0:3/4 2:unsigned int))", init("struct B { int f : 3; unsigned g : 4; }; struct B b = {5, 2};"),
+                "two bit-fields in one storage unit");
+        assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (16 3:char))", init(s + " struct S arr[2] = {{1, 2}, {3}};"));
+        assertEquals("arr:struct S [2] (init (0 1:char) (4 2:int) (8 3.0:double) (16 4:char))", init(s + " struct S arr[] = {1, 2, 3, 4};"));
+        assertEquals("arr:struct S [2] (init (20 7:int) (24 8.0:double))", init(s + " struct S arr[2] = {[1].i = 7, 8};"),
+                "continues forward from the designated subobject");
+        assertTrue(fails(s + " struct S arr[2] = {[1].d = 7, 8};").getMessage().contains("excess elements"));
+        assertTrue(fails(s + " struct S v = {.i.x = 1};").getMessage().contains("non-aggregate"));
+        assertTrue(fails(s + " struct S v = {1, 2, 3, 4};").getMessage().contains("excess elements"));
+        assertTrue(fails(s + " struct S v = {.z = 1};").getMessage().contains("no member"));
+        assertTrue(fails(s + " struct S v = {[0] = 1};").getMessage().contains("array designator"));
+        assertTrue(fails(s + " struct S v = 1;").getMessage().contains("incompatible types"));
+        assertTrue(fails("struct T { int x; }; " + s + " struct T t; struct S v = t;").getMessage().contains("incompatible types"));
+        assertTrue(fails("struct Inc; struct Inc v = {1};").getMessage().contains("incomplete type"));
+        assertEquals("o:struct Out (init (0 1:int))", init("struct In { int x, y; }; struct Out { struct In in; int b; }; struct Out o = {.in = 1};"),
+                "a designated aggregate takes an expression by brace elision");
+    }
+
+    @Test
+    void unionInitializers() {
+        String u = "union U { int i; double d; char c; };";
+        assertEquals("v:union U (init (0 1:int))", init(u + " union U v = {1};"));
+        assertEquals("v:union U (init (0 2.5:double))", init(u + " union U v = {.d = 2.5};"));
+        assertEquals("v:union U (init (0 3:char))", init(u + " union U v = {.c = 3};"));
+        assertEquals("v:union U (init (0 1:int) (0 2.5:double))", init(u + " union U v = {.i = 1, .d = 2.5};"), "the last one wins");
+        assertEquals("v:union U (init)", init(u + " union U v = {};"));
+        assertTrue(fails(u + " union U v = {1, 2};").getMessage().contains("excess elements"));
+    }
+
+    @Test
+    void localInitializersAndSizeCompletion() {
+        assertEquals("(block (local a:int [2] (init (0 1:int) (4 (rv:int x:int)))) (local s:char [3] (init (0 104:char) (1 105:char))) "
+                        + "(local v:struct S (init (0 (rv:int x:int)) (4 (call:int g:int (void))))))",
+                body("struct S { int a, b; }; int x; int g(void);", "int a[] = {1, x}; char s[] = \"hi\"; struct S v = {x, g()};"));
+        assertEquals("8:unsigned long", expr("int a[] = {1, 2};", "sizeof a"));
+        assertEquals(List.of("a: int [2]"), declaredTypes("int a[] = {1, 2};"));
+    }
+
+    // ---- address constants and static initializers -------------------------------------------
+
+    @Test
+    void addressConstants() {
+        assertEquals("p:int * &x:int *", init("int x; int *p = &x;"));
+        assertEquals("p:int * &a:int *", init("int a[3]; int *p = a;"));
+        assertEquals("p:int * &a+8:int *", init("int a[3]; int *p = &a[2];"));
+        assertEquals("p:int * &a+8:int *", init("int a[3]; int *p = a + 2;"));
+        assertEquals("p:int * &a+4:int *", init("int a[3]; int *p = a + 3 - 2;"));
+        assertEquals("p:int * &s+4:int *", init("struct S { char c; int i; } s; int *p = &s.i;"));
+        assertEquals("p:int * &arr+12:int *", init("struct S { char c; int i; } arr[2]; int *p = &arr[1].i;"));
+        assertEquals("p:int * &m+12:int *", init("int m[2][2]; int *p = &m[1][1];"));
+        assertEquals("p:int * &m+8:int *", init("int m[2][2]; int *p = m[1];"));
+        assertEquals("p:char * &\"abc\"+1:char *", init("char *p = \"abc\" + 1;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = f;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = &f;"));
+        assertEquals("fp:int (*)(void) &f:int (*)(void)", init("int f(void); int (*fp)(void) = *f;"));
+        assertEquals("v:void * &x:void *", init("int x; void *v = &x;"));
+        assertEquals("v:const int * &x:const int *", init("int x; const int *v = &x;"));
+        assertEquals("p:int * null:int *", init("int *p = 0;"));
+        assertEquals("p:int * null:int *", init("int *p = nullptr;"));
+        assertEquals("p:int * null:int *", init("int *p = (void *)0;"));
+        assertEquals("p:int * 8:int *", init("int *p = (int *)8;"));
+        assertEquals("p:int * &x:int *", init("int x; int *p = &*&x;"));
+        assertEquals("p:int * &x:int *", init("int x; int *p = 1 ? &x : 0;"));
+        assertEquals("pp:int * * &p:int * *", init("int *p; int **pp = &p;"));
+        assertEquals("q:int * &s:int *", init("static int s; int *q = &s;"));
+        assertEquals("(block (local l:int) (local p:int * (addr:int * l:int)))", body("", "int l; int *p = &l;"), "a local's address is not constant, and need not be");
+        assertEquals("(global g:int)\n(global p:int * &g:int *)\n(function f:void (void) (params) (locals) (block))",
+                unit("int g; void f(void) { static int *p = &g; }"), "a block-scope static is a global with a constant initializer");
+    }
+
+    @Test
+    void staticInitializersMustBeConstant() {
+        assertTrue(fails("int y; int x = y;").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int f(void); int x = f();").getMessage().contains("not a constant expression"));
+        assertTrue(fails("void g(void) { int l; static int *p = &l; }").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; long l = (long)&x;").getMessage().contains("not a constant expression"));
+        assertTrue(fails("struct S { int b : 3; } s; int *p = &s.b;").getMessage().contains("address of a bit-field"));
+        assertTrue(fails("int a[2] = {1, a[0]};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("struct S { int i; } s = {s.i};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; int *p = &x + x;").getMessage().contains("not a constant expression"));
+    }
+
+    @Test
+    void addressConstantsInConstantExpressions() {
+        type("int x; static_assert(&x == &x); static_assert(&x != 0); static_assert(!!&x);");
+        assertTrue(fails("int x; static_assert(&x);").getMessage().contains("integer constant expression"));
+        type("int a[3]; static_assert(a + 1 == &a[1]); static_assert(&a[2] > a); static_assert(a != a + 1);");
+        type("int x, y; static_assert(&x != &y);");
+        type("int x; static_assert((void *)0 == 0); static_assert(nullptr == nullptr);");
+        assertTrue(fails("int x, y; static_assert(&x < &y);").getMessage().contains("not a constant expression"));
+        assertTrue(fails("int x; static_assert((long)&x);").getMessage().contains("not a constant expression"));
+    }
+
+    // ---- compound literals -------------------------------------------------------------------
+
+    @Test
+    void compoundLiterals() {
+        assertEquals("(lit:int [3] (init (0 1:int) (4 2:int) (8 3:int)))", expr("", "(int[]){1, 2, 3}"));
+        assertEquals("(lit:struct S (init (0 (rv:int x:int)) (4 2:int)))", expr("struct S { int a, b; }; int x;", "(struct S){x, 2}"));
+        assertEquals("(add:int (rv:int (member:int (lit:struct S (init (0 1:int))) a)) 0:int)", expr("struct S { int a, b; };", "(struct S){1}.a + 0"));
+        assertEquals("(call:int f:int (int *) (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))",
+                expr("int f(int *);", "f((int[2]){1, 2})"));
+        assertEquals("(assign:int * p:int * (decay:int * (lit:int [2] (init (0 1:int) (4 2:int)))))", expr("int *p;", "p = (int[2]){1, 2}"));
+        assertEquals("(addr:struct S * (lit:struct S (init)))", expr("struct S { int a; };", "&(struct S){}"));
+        assertEquals("(assign:int (member:int (lit:struct S (init)) a) 5:int)", expr("struct S { int a; };", "(struct S){}.a = 5"), "a modifiable lvalue");
+        assertEquals("(lit:int 7:int)", expr("", "(int){7}"));
+        assertEquals("(lit:const char [3] (init (0 104:char) (1 105:char)))", expr("", "(const char[]){\"hi\"}"));
+        assertEquals("12:unsigned long", expr("", "sizeof (int[]){1, 2, 3}"));
+        assertEquals("(add:int (rv:int (lit:int 1:int)) (rv:int (member:int (lit:struct S (init (0 2:int))) a)))",
+                expr("struct S { int a; };", "(int){1} + (struct S){2}.a"));
+        assertTrue(exprFails("struct Inc;", "(struct Inc){}").getMessage().contains("incomplete type"));
+        assertTrue(exprFails("", "(int (void)){}").getMessage().contains("compound literal of type"));
+        assertTrue(exprFails("", "(int[2]){1, 2, 3}").getMessage().contains("excess"));
+        assertTrue(exprFails("", "(register int){1}").getMessage().contains("not supported"));
+    }
+
+    @Test
+    void compoundLiteralStorage() {
+        var unit = parse("struct S { int a; }; int *gp = (int[]){1, 2}; struct S *gs = &(struct S){3};\n"
+                + "void f(int x) { (int[]){x}; (struct S){x}.a; (static int){4}; sizeof (int[]){x}; }");
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        var lines = TypedPrinter.print(typed).lines().filter(l -> l.startsWith("(global")).toList();
+        // A literal in a global's initializer is registered before the global itself.
+        assertEquals(List.of("(global <literal5>:int [2] (init (0 1:int) (4 2:int)))", "(global gp:int * &<literal5>:int *)",
+                        "(global <literal6>:struct S (init (0 3:int)))", "(global gs:struct S * &<literal6>:struct S *)",
+                        "(global <literal9>:int 4:int)"),
+                lines, "file-scope and static literals are globals with constant initializers");
+        var f = typed.functions().get(0);
+        assertEquals(List.of("<literal7>", "<literal8>"), f.locals().stream().map(s -> s.name).toList(),
+                "block-scope literals are locals; the one under sizeof creates no object");
+        assertEquals("int [1]", f.locals().get(0).type().spelling());
+        assertTrue(fails("int x; int *p = (int[]){x};").getMessage().contains("not a constant expression"));
+        assertTrue(fails("void f(int x) { (static int){x}; }").getMessage().contains("not a constant expression"));
+    }
+
+    // ---- tentative definitions, externs, completeness, auto --------------------------------------
+
+    @Test
+    void tentativeDefinitionsAndExterns() {
+        assertEquals("(global a:int)", unit("int a;"));
+        assertEquals("(global a:int)", unit("int a; int a;"));
+        assertEquals("(global a:int 2:int)", unit("int a; int a = 2; int a;"));
+        assertEquals("(extern a:int)", unit("extern int a;"));
+        assertEquals("(global a:int)", unit("extern int a; int a;"), "a non-extern declaration makes it a definition");
+        assertEquals("(global a:int 1:int)", unit("extern int a = 1;"));
+        assertEquals("(global s:int)", unit("static int s;"));
+        assertEquals("(global a:int [1])", unit("int a[];"), "an incomplete array completes to one element");
+        assertEquals(List.of("a: int [1]"), declaredTypes("int a[];"));
+        assertEquals("(global a:int [3])", unit("int a[]; int a[3];"));
+        assertEquals("(global a:int [2] (init (0 1:int) (4 2:int)))", unit("int a[]; int a[] = {1, 2};"));
+        assertEquals("(extern a:int [])", unit("extern int a[];"));
+        assertEquals("(extern s:struct Inc)", unit("struct Inc; extern struct Inc s;"));
+        assertEquals("(global s:struct S)", unit("struct S; struct S s; struct S { int a; };"), "completed later in the unit");
+        assertEquals("(extern e:int)\n(function f:void (void) (params) (locals) (block))", unit("void f(void) { extern int e; }"));
+        assertEquals("(global e:int)\n(function f:void (void) (params) (locals) (block))", unit("void f(void) { extern int e; } int e;"));
+        assertEquals("(function f:void (void) (params) (locals) (block))", unit("typedef void F(void); F f; void f(void) {}"),
+                "an object declared with a function type is a function declaration");
+        assertTrue(fails("struct Inc; struct Inc s;").getMessage().contains("storage size"));
+        assertTrue(fails("struct Inc; static struct Inc s;").getMessage().contains("storage size"));
+        assertTrue(fails("void v;").getMessage().contains("storage size"));
+        assertTrue(fails("int a[2]; int a[3];").getMessage().contains("conflicting types"));
+    }
+
+    @Test
+    void autoInfersTheInitializersType() {
+        assertEquals(List.of("fn: int (void)", "a: int", "b: double", "arr: int [2]", "c: int *", "d: char *", "f: int (*)(void)"),
+                declaredTypes("int fn(void); auto a = 1; auto b = 1.5; int arr[2]; auto c = arr; auto d = \"x\"; auto f = fn;"));
+        assertEquals("(block (local g:int (rv:int ci:const int)))", body("const int ci = 3;", "auto g = ci;"), "auto drops qualifiers");
+        assertEquals("(block (local e:struct S (init (0 (rv:struct S s:struct S)))))", body("struct S { int m; } s;", "auto e = s;"));
+        assertEquals("(block (local x:int 1:int) (local y:double (int-to-float:double (rv:int x:int))))", body("", "auto x = 1; auto y = x + 0.5;")
+                .replace("(add:double (int-to-float:double (rv:int x:int)) 0.5:double)", "(int-to-float:double (rv:int x:int))"));
+        assertEquals("(global v:int)\n(global p:int * &v:int *)", unit("int v; auto p = &v;"));
+        assertThrows(ParseException.class, () -> parse("auto x;"), "the parser already requires an initializer");
+        assertTrue(fails("auto x = {1};").getMessage().contains("needs an initializer that is an expression"));
+        assertTrue(fails("void f(void); auto x = f();").getMessage().contains("cannot infer 'void'"));
+        assertTrue(fails("auto x = x;").getMessage().contains("own auto initializer"));
+    }
+
+    // ---- remaining constant and statement rules --------------------------------------------------
+
+    @Test
+    void floatingAndCharacterConstantRules() {
+        holds("(int)2.9 == 2 && (int)-2.9 == -2 && (long)1e18 == 1000000000000000000");
+        holds("(bool)0.1 == 1 && (bool)-0.0 == 0 && !0.0 && (0.5 || 0) == 1");
+        holds("(unsigned char)255.9 == 255 && (char)-1.5 == -1");
+        holds("(1 < 2.5) == 1 && (2.5 == 2.5f) == 0 || 1");
+        holds("'\\n' == 10 && '\\0' == 0 && L'a' == 97 && u8'a' == 97");
+        holds("1000000000000000000000.0 > 1e20");
+        assertTrue(staticAssertFails("(int)1e100").contains("out of range"));
+        assertTrue(staticAssertFails("(unsigned)-1.0").contains("out of range"));
+        assertEquals("(block (switch (rv:int c:int) (cases 65 10) (block (label case 65) (label case 10) (block))))",
+                body("int c;", "switch (c) { case 'A': case '\\n': {} }"), "character constants label cases");
+        assertEquals("(block (switch (rv:int c:int) (cases 3) (block (label case 3) (block))))",
+                body("int c;", "switch (c) { case 3wb: {} }"), "a bit-precise constant converts to the switch type");
+    }
+
+    @Test
+    void remainingStatementChecks() {
+        assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
+        assertTrue(fails("void f(void) { return 0; }").getMessage().contains("should not return a value"));
+        assertTrue(fails("void f(void) { switch (1.5) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(int *p) { switch (p) {} }").getMessage().contains("not an integer"));
+        assertTrue(fails("void f(void) { case 1: ; }").getMessage().contains("not within a switch"));
+        assertTrue(fails("void f(void) { break; }").getMessage().contains("not within"));
+        assertTrue(fails("void f(void) { goto nowhere; }").getMessage().contains("not defined"));
+        assertTrue(fails("struct S { int a; }; void f(struct S s) { if (s) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("struct S { int a; }; void f(struct S s) { for (; s;) {} }").getMessage().contains("must be scalar"));
+        assertTrue(fails("void f(void) { void v = 1; }").getMessage().contains("incomplete type 'void'"));
+        type("int f(void) { for (int i = 0; i < 3; i++) { if (i) continue; else break; } return 0; }");
+    }
+
+    @Test
+    void invalidOperands() {
+        assertTrue(exprFails("int *p;", "p * 2").getMessage().contains("invalid operands to binary *"));
+        assertTrue(exprFails("int f(void);", "f + 1").getMessage().contains("pointer to a function"));
+    }
+
+    // ---- scalar declarations --------------------------------------------------------
+
+    @Test
+    void keywordTypesAndQualifiers() {
+        assertEquals(List.of("a: int", "b: unsigned short", "c: signed char", "d: char", "e: long double",
+                        "f: bool", "g: unsigned long long", "h: const int", "i: const volatile int"),
+                declaredTypes("int a; unsigned short b; signed char c; char d; long double e; "
+                        + "bool f; unsigned long long g; const int h; const volatile int i;"));
+    }
+
+    @Test
+    void pointersArraysAndFunctions() {
+        assertEquals(List.of("p: char *", "q: const char *", "r: char * const", "arr: int [3]", "m: int [2][3]",
+                        "fp: int (*)(char)", "ap: int *[4]", "pa: int (*)[4]", "f: int (int *, int (*)(void), int)",
+                        "v: void (void)", "va: int (const char *, ...)", "inc: int [1]"),
+                declaredTypes("char *p; const char *q; char *const r; int arr[3]; int m[2][3]; int (*fp)(char); "
+                        + "int *ap[4]; int (*pa)[4]; int f(int a[], int (*g)(void), const int c); void v(void); "
+                        + "int va(const char *fmt, ...); int inc[];"));
+    }
+
+    @Test
+    void typedefsAreResolvedOnceAndQualified() {
+        assertEquals(List.of("T: int *", "t: int *", "ct: int * const", "A: int [2]", "ca: const int [2]",
+                        "F: int (char)", "fp: int (*)(char)", "g: int (int (*)(char))"),
+                declaredTypes("typedef int *T; T t; const T ct; typedef int A[2]; const A ca; "
+                        + "typedef int F(char); F *fp; int g(F f);"));
+    }
+
+    @Test
+    void typeofOfATypeName() {
+        assertEquals(List.of("x: int", "y: int", "z: const int *", "w: const int"),
+                declaredTypes("typeof(int) x; typeof_unqual(const int) y; typeof(const int *) z; const typeof(int) w;"));
+    }
+
+    @Test
+    void parametersAndLocalsGetTypes() {
+        // The function type drops the parameters' top-level qualifiers
+        // (6.7.7.4p15); the parameter symbol itself keeps them.
+        assertEquals(List.of("f: int (int *, int *, int (*)(int))", "a: int * const", "b: int *",
+                        "h: int (*)(int)", "n: int", "l: char [2]", "inner: int (long)", "k: long"),
+                allTypes("int f(int a[const 3], int b[static 2], int h(int n)) { char l[2]; int inner(long k); return 0; }"));
+    }
+
+    // ---- redeclarations ------------------------------------------------------------------
+
+    @Test
+    void compatibleRedeclarationsCompose() {
+        assertEquals(List.of("a: int [3]"), declaredTypes("int a[]; int a[3]; int a[];"));
+        assertEquals(List.of("g: int (int (*)[3], int (*)[3])"),
+                declaredTypes("int g(int (*)[], int (*)[3]); int g(int (*)[3], int (*)[]);"));
+        assertEquals(List.of("f: int (void)"), declaredTypes("int f(); int f(void) { return 0; }"));
+        assertEquals(List.of("T: int"), declaredTypes("typedef int T; typedef int T;"));
+        assertEquals(List.of("e: int"), declaredTypes("extern int e; int e; int e = 1;"));
+    }
+
+    @Test
+    void conflictingRedeclarationsAreErrors() {
+        assertTrue(fails("int x; long x;").getMessage().contains("conflicting types for 'x'"));
+        fails("int f(void); int f(int);");
+        fails("int a[2]; int a[3];");
+        fails("typedef int T; typedef long T;");
+        fails("int p; int *p;");
+        fails("int f(int); int f(const int *);");
+    }
+
+    // ---- constraints ------------------------------------------------------------------------
+
+    @Test
+    void invalidTypesAreErrors() {
+        assertTrue(fails("int a[0];").getMessage().contains("positive"));
+        assertTrue(fails("int f(void)[3];").getMessage().contains("return an array"));
+        assertTrue(fails("int f(void)(int);").getMessage().contains("return a function"));
+        assertTrue(fails("void a[3];").getMessage().contains("incomplete element type"));
+        assertTrue(fails("int m[][3]; int n[3][];").getMessage().contains("incomplete element type"));
+        assertTrue(fails("int a[const 2];").getMessage().contains("only allowed in a parameter"));
+        assertTrue(fails("_Complex float c;").getMessage().contains("not supported"));
+        assertTrue(fails("int n = 3; int a[n];").getMessage().contains("variable length arrays"));
+        assertTrue(fails("void f(void x);").getMessage().contains("'void'"));
+    }
+
+    @Test
+    void typesAskTheTargetOnlyForNumbers() {
+        var b = type("long l; int *p;", new Types(Ilp32.INSTANCE));
+        assertEquals("long", b.fileScope.get(0).type().spelling());
+        var t = new Types(Ilp32.INSTANCE);
+        assertEquals(4, t.size(b.fileScope.get(0).type()));
+        assertEquals(4, t.size(b.fileScope.get(1).type()));
+    }
+}
