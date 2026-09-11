@@ -134,7 +134,7 @@ class CodegenTest {
         String global = function("int g; int f(void) { return g; }");
         assertTrue(global.contains("leaq g(%rip), %rax"), global);
         String agg = function("struct P { int a; int b; }; struct P f(struct P *p) { struct P q = *p; struct P z = { 0 }; return q; }");
-        assertTrue(agg.contains("movq $8, %rcx\n  movq -16(%rbp), %rsi\n  rep movsb"), agg);
+        assertTrue(agg.contains("movq $8, %rcx\n  movq -8(%rbp), %rsi\n  rep movsb"), agg);
         assertTrue(agg.contains("movq $8, %rcx\n  xorl %eax, %eax\n  rep stosb"), agg);
         String fl = function("float f(float *p) { return *p; }");
         assertTrue(fl.contains("movss (%rcx), %xmm0\n  cvtss2sd %xmm0, %xmm0\n  cvtsd2ss %xmm0, %xmm0\n  movss %xmm0, -12(%rbp)"), fl);
