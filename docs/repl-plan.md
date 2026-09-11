@@ -1,7 +1,7 @@
 # The REPL: `org.jbm.repl`
 
 The interactive shell in the spirit of `jshell`, built on the compiler
-and the VM. It lives in `org.jbm.repl`, beside `org.jbm.vm`; the VM
+and the VM. It lives in `org.jbm.mycc.repl`, with the VM in `org.jbm.mycc.repl.vm`; the VM
 moves into it later, so nothing here reaches into the VM beyond its
 public entry points. This supersedes the shell sections of
 `cshell-plan.md`; the compiler and VM decisions there stand.
@@ -114,12 +114,12 @@ location from the instruction's token; the kept text is unchanged.
 ## Classes
 
 ```
-org.jbm.repl   Repl (the loop, kept lines, line map, classification, commands)
+org.jbm.mycc.repl   Repl (the loop, kept lines, line map, classification, commands)
                Console, JLineConsole, ScriptConsole, Completer
                ValuePrinter
                CShell (main: arguments, JLine, a file to load first)
-org.jbm.cc     Compiler.compileScript(text, headers) -> Compiled(TUnit typed, Module tac, TokenSet tokens)
-org.jbm.vm     VM.bind(String, Builtin); VM.symbols(); VM.addressOf; Memory.read
+org.jbm.mycc.cc     Compiler.compileScript(text, headers) -> Compiled(TUnit typed, Module tac, TokenSet tokens)
+org.jbm.mycc.repl.vm     VM.bind(String, Builtin); VM.symbols(); VM.addressOf; Memory.read
 ```
 
 ## Tests

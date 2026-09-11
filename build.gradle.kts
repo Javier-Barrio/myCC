@@ -7,7 +7,7 @@ plugins {
 // run that on a terminal for line editing, history and completion. The
 // `cshell` task below works for pipes, but Gradle gives it no terminal.
 application {
-    mainClass.set("org.jbm.repl.CShell")
+    mainClass.set("org.jbm.mycc.repl.CShell")
     applicationName = "cshell"
 }
 
@@ -41,7 +41,7 @@ tasks.test {
 tasks.register<JavaExec>("cshell") {
     group = "application"
     description = "Runs the C shell on the terminal"
-    mainClass.set("org.jbm.repl.CShell")
+    mainClass.set("org.jbm.mycc.repl.CShell")
     classpath = sourceSets["main"].runtimeClasspath
     standardInput = System.`in`
 }

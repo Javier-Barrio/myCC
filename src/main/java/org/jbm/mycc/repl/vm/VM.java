@@ -13,6 +13,7 @@ import org.jbm.mycc.cc.lower.tac.TacVisitor;
 import org.jbm.mycc.cc.lower.tac.TargetDesc;
 import org.jbm.mycc.cc.lower.tac.Type;
 import org.jbm.mycc.cc.lower.tac.Var;
+import org.jbm.mycc.repl.vm.builtins.Printf;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -90,6 +91,9 @@ public class VM implements TacVisitor<Void> {
         if (target != null && !target.equals(mod.target)) {
             throw new IllegalStateException("module for " + mod.target.name() + " loaded into a VM running " + target.name());
         }
+
+        builtins.put("printf", new Printf());
+
         target = mod.target;
         for (var s : mod.structs) {
             structs.put(s.name(), s);
@@ -198,7 +202,7 @@ public class VM implements TacVisitor<Void> {
         throw new IllegalStateException("no size for " + t.spelling());
     }
 
-    sealed interface Value permits IntValue, FloatValue {
+    public sealed interface Value permits IntValue, FloatValue {
     }
 
     /** An integer or pointer value, held extended per its variable's type. */
