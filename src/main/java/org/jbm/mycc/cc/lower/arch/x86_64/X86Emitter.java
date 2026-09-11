@@ -34,6 +34,11 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     private Function function;
     private Frame frame;
 
+    // For a function returning an aggregate: the slot holding the hidden
+    // first argument, the address the caller wants the result at.
+    private long intoSlot;
+    private boolean returnsAggregate;
+
     // Floating constants, emitted after the code as 8-byte words in
     // .rodata and loaded PC-relative: the instruction set has no
     // floating immediates.
@@ -69,6 +74,10 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         this.module = module;
         this.function = function;
         this.frame = new Frame(module, function);
+        this.returnsAggregate = module.target.classOf(function.sig.ret()) == RegClass.NONE;
+        if (returnsAggregate) {
+            intoSlot = frame.reserve(8, 8);
+        }
         asm.note(TacWriter.print(function).split("\n")[0].replace(" {", ""));
         if (function.linkage == Linkage.EXTERNAL) {
             asm.directive(".globl " + function.name);
@@ -107,20 +116,47 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     }
 
     // Each parameter from where the caller put it into its slot: the
-    // integer and floating registers in order; the rest is step 5.
+    // integer and floating registers in order, then the stack above the
+    // return address, 8 bytes each. An aggregate arrives as a pointer to
+    // its bytes and is copied. A function returning an aggregate gets
+    // the address to write it at as a hidden first integer argument.
     private void spillParameters() {
         int ints = 0;
         int floats = 0;
+        int stack = 0;
+        if (returnsAggregate) {
+            asm.comment("the result's address from its argument register");
+            asm.insn("movq", "%" + X86Abi.INT_ARGS.get(ints++), intoSlot + "(%rbp)");
+        }
         for (Var p : function.params) {
             RegClass c = module.target.classOf(p.type);
             if (c == RegClass.FLOAT) {
-                asm.comment(p + " from its argument register");
-                writeFloatFromAbi(X86Abi.FLOAT_ARGS.get(floats++), p);
-            } else if (c == RegClass.INT) {
-                asm.comment(p + " from its argument register");
-                write(X86Abi.INT_ARGS.get(ints++), p);
+                if (floats < X86Abi.FLOAT_ARGS.size()) {
+                    asm.comment(p + " from its argument register");
+                    writeFloatFromAbi(X86Abi.FLOAT_ARGS.get(floats++), p);
+                } else {
+                    asm.comment(p + " from the stack");
+                    asm.insn(width(p.type) == 32 ? "movss" : "movsd", (16 + 8 * stack++) + "(%rbp)", "%xmm0");
+                    writeFloatFromAbi("xmm0", p);
+                }
             } else {
-                throw new UnsupportedOperationException("aggregate parameters: step 5");
+                String from;
+                if (ints < X86Abi.INT_ARGS.size()) {
+                    asm.comment(p + " from its argument register");
+                    from = X86Abi.INT_ARGS.get(ints++);
+                } else {
+                    asm.comment(p + " from the stack");
+                    asm.insn("movq", (16 + 8 * stack++) + "(%rbp)", "%rax");
+                    from = "rax";
+                }
+                if (c == RegClass.NONE) {
+                    asm.insn("movq", "%" + from, "%rsi");
+                    asm.insn("leaq", slot(p), "%rdi");
+                    asm.insn("movq", "$" + module.sizeOf(p.type), "%rcx");
+                    asm.insn("rep movsb");
+                } else {
+                    write(from, p);
+                }
             }
         }
     }
@@ -256,9 +292,16 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         return null;
     }
 
+    // A symbol of this module is PC-relative; one from elsewhere, a
+    // library function or object, comes through the GOT, as a position
+    // independent executable requires.
     @Override
     public Void visit(Instr.AddrOfGlobal i) {
-        asm.insn("leaq", i.name() + "(%rip)", "%rax");
+        if (defined(i.name())) {
+            asm.insn("leaq", i.name() + "(%rip)", "%rax");
+        } else {
+            asm.insn("movq", i.name() + "@GOTPCREL(%rip)", "%rax");
+        }
         write("rax", i.dst());
         return null;
     }
@@ -532,6 +575,9 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         return null;
     }
 
+    // The value in %rax or %xmm0 at the width the signature says. An
+    // aggregate's bytes, whose address the operand holds, are copied to
+    // the caller's address, which is returned in %rax.
     @Override
     public Void visit(Instr.Ret i) {
         if (i.value() != null) {
@@ -541,6 +587,12 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 if (width(function.sig.ret()) == 32) {
                     asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
                 }
+            } else if (c == RegClass.NONE) {
+                read(i.value(), "rsi");
+                asm.insn("movq", intoSlot + "(%rbp)", "%rdi");
+                asm.insn("movq", "$" + module.sizeOf(function.sig.ret()), "%rcx");
+                asm.insn("rep movsb");
+                asm.insn("movq", intoSlot + "(%rbp)", "%rax");
             } else {
                 read(i.value(), "rax");
             }
@@ -560,11 +612,109 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     @Override
     public Void visit(Instr.Call i) {
-        throw new UnsupportedOperationException("call: step 5");
+        call(i.sig(), i.args(), i.into(), i.dst(), () -> asm.insn("call", defined(i.callee()) ? i.callee() : i.callee() + "@PLT"));
+        return null;
     }
 
     @Override
     public Void visit(Instr.ICall i) {
-        throw new UnsupportedOperationException("icall: step 5");
+        // %r10 is neither an argument register nor %rax, which a variadic call uses
+        call(i.sig(), i.args(), i.into(), i.dst(), () -> {
+            read(i.callee(), "r10");
+            asm.insn("call", "*%r10");
+        });
+        return null;
+    }
+
+    private boolean defined(String name) {
+        return module.functions.stream().anyMatch(f -> f.name.equals(name))
+                || module.globals.stream().anyMatch(g -> g.name().equals(name));
+    }
+
+    // One argument and how it travels: by its class, single when the
+    // callee's own parameter is an f32.
+    private record Arg(Operand operand, RegClass klass, boolean single) {
+    }
+
+    // SysV: integers and pointers in six registers, floating values in
+    // eight, the rest on the stack right to left with the stack kept
+    // 16-aligned at the call; %al counts the vector registers for a
+    // variadic callee. An aggregate result's address is the hidden first
+    // argument; an aggregate argument is already the pointer the TAC
+    // passes. The result goes from %rax or %xmm0 to dst.
+    private void call(Type.Func sig, java.util.List<Operand> operands, Var into, Var dst, Runnable emitCall) {
+        java.util.List<Arg> args = new java.util.ArrayList<>();
+        if (into != null) {
+            args.add(new Arg(into, RegClass.INT, false));
+        }
+        for (int k = 0; k < operands.size(); k++) {
+            Operand o = operands.get(k);
+            RegClass c = o instanceof Var v ? module.target.classOf(v.type) : o instanceof Operand.FloatImm ? RegClass.FLOAT : RegClass.INT;
+            boolean single = k < sig.params().size() && sig.params().get(k) instanceof Type.Float f && f.width() == 32;
+            args.add(new Arg(o, c == RegClass.NONE ? RegClass.INT : c, single));
+        }
+        java.util.List<Arg> onStack = new java.util.ArrayList<>();
+        java.util.List<String> intRegs = new java.util.ArrayList<>();
+        java.util.List<Arg> intArgs = new java.util.ArrayList<>();
+        java.util.List<String> floatRegs = new java.util.ArrayList<>();
+        java.util.List<Arg> floatArgs = new java.util.ArrayList<>();
+        for (Arg a : args) {
+            if (a.klass() == RegClass.FLOAT && floatRegs.size() < X86Abi.FLOAT_ARGS.size()) {
+                floatRegs.add(X86Abi.FLOAT_ARGS.get(floatRegs.size()));
+                floatArgs.add(a);
+            } else if (a.klass() == RegClass.INT && intRegs.size() < X86Abi.INT_ARGS.size()) {
+                intRegs.add(X86Abi.INT_ARGS.get(intRegs.size()));
+                intArgs.add(a);
+            } else {
+                onStack.add(a);
+            }
+        }
+        int pad = onStack.size() % 2 == 1 ? 8 : 0;
+        if (pad > 0) {
+            asm.insn("subq", "$8", "%rsp");
+        }
+        for (int k = onStack.size() - 1; k >= 0; k--) {
+            Arg a = onStack.get(k);
+            if (a.klass() == RegClass.FLOAT) {
+                readFloat(a.operand(), "xmm0");
+                asm.insn("subq", "$8", "%rsp");
+                if (a.single()) {
+                    asm.insn("cvtsd2ss", "%xmm0", "%xmm0");
+                    asm.insn("movss", "%xmm0", "(%rsp)");
+                } else {
+                    asm.insn("movsd", "%xmm0", "(%rsp)");
+                }
+            } else {
+                read(a.operand(), "rax");
+                asm.insn("pushq", "%rax");
+            }
+        }
+        for (int k = 0; k < intArgs.size(); k++) {
+            read(intArgs.get(k).operand(), intRegs.get(k));
+        }
+        for (int k = 0; k < floatArgs.size(); k++) {
+            readFloat(floatArgs.get(k).operand(), floatRegs.get(k));
+            if (floatArgs.get(k).single()) {
+                asm.insn("cvtsd2ss", "%" + floatRegs.get(k), "%" + floatRegs.get(k));
+            }
+        }
+        if (sig.variadic()) {
+            asm.insn("movl", "$" + floatRegs.size(), "%eax");
+        }
+        emitCall.run();
+        int popped = 8 * onStack.size() + pad;
+        if (popped > 0) {
+            asm.insn("addq", "$" + popped, "%rsp");
+        }
+        if (dst != null) {
+            if (module.target.classOf(dst.type) == RegClass.FLOAT) {
+                if (width(sig.ret()) == 32) {
+                    asm.insn("cvtss2sd", "%xmm0", "%xmm0");
+                }
+                writeFloat("xmm0", dst);
+            } else {
+                write("rax", dst);
+            }
+        }
     }
 }

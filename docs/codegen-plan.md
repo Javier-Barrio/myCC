@@ -134,9 +134,9 @@ gcc -o prog file.s        # links the C library, so printf and malloc are the re
 2. [x] `bin`, `cmp`, `cvt`.
 3. [x] `addrof`, `load`, `store`, aggregates.
 4. [x] `br`, `condbr`, `switch`, `trap`.
-5. [ ] `Abi`: calls with integer, floating, stack and variadic arguments,
+5. [x] `Abi`: calls with integer, floating, stack and variadic arguments,
    `icall`, aggregate arguments and results, parameter spills.
-6. [ ] `Data`; `NativeTest` over the program corpus.
+6. [x] `Data`; `NativeTest` over the program corpus.
 7. [ ] `Main -S` and `-a`; `/asm name` in the shell.
 
 Deferred: register allocation; `f80` on the x87; small aggregates by

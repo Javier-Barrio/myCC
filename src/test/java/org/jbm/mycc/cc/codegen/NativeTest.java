@@ -58,6 +58,46 @@ class NativeTest {
     }
 
     @Test
+    void callsRun() throws Exception {
+        assertEquals(120, Native.run("int fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }\nint main(void) { return fact(5); }").exit());
+        assertEquals(45, Native.run("int sum9(int a, int b, int c, int d, int e, int f, int g, int h, int i) { return a + b + c + d + e + f + g + h + i; }\nint main(void) { return sum9(1, 2, 3, 4, 5, 6, 7, 8, 9); }").exit());
+        assertEquals(1, Native.run("double avg(double a, double b) { return (a + b) / 2; } float half(float f) { return f / 2; }\nint main(void) { return avg(1, 2) == 1.5 && half(3.0f) == 1.5f; }").exit());
+        assertEquals(36, Native.run("int many(int a, char b, short c, long d, long long e, unsigned f, double g, float h, double i, double j, double k, double l, double m, double n, double o) { return a + b + c + d + e + f + g + h + i + j + k + l + m + n + o; }\nint main(void) { return many(1, 2, 3, 4, 5, 6, 7.0, 8.0f, 0, 0, 0, 0, 0, 0, 0); }").exit());
+        assertEquals(5, Native.run("int add(int a, int b) { return a + b; } int apply(int (*f)(int, int), int x) { return f(x, x + 1); }\nint main(void) { int (*g)(int, int) = add; return apply(g, 2); }").exit());
+        assertEquals(1, Native.run("struct P { int x; int y; }; struct P mk(int x, int y) { struct P p; p.x = x; p.y = y; return p; } int area(struct P p) { return p.x * p.y; }\nint main(void) { struct P p = mk(3, 4); return area(p) == 12 && area(mk(2, 5)) == 10 && p.x == 3; }").exit());
+        assertEquals(1, Native.run("struct Big { int v[10]; }; struct Big make(int seed) { struct Big b; for (int i = 0; i < 10; i++) { b.v[i] = seed + i; } return b; } int last(struct Big b) { b.v[9] = 0; return b.v[8]; }\nint main(void) { struct Big b = make(5); int l = last(b); return l == 13 && b.v[9] == 14; }").exit());
+        assertEquals(3, Native.run("int next(void) { static int n = 0; return ++n; }\nint main(void) { next(); next(); return next(); }").exit());
+    }
+
+    @Test
+    void theLibraryIsTheRealOne() throws Exception {
+        Native.Run r = Native.run("""
+                #include <stdio.h>
+                #include <string.h>
+                #include <stdlib.h>
+                int main(void) {
+                    char buf[32];
+                    strcpy(buf, "hello");
+                    strcat(buf, ", world");
+                    int *p = malloc(3 * sizeof(int));
+                    p[0] = 1; p[1] = 2; p[2] = 3;
+                    printf("%s %d %5.2f %c %x %lld|%-4d|\\n", buf, (int) strlen(buf), 3.14159, 'z', 255, 1LL << 40, 7);
+                    printf("%d\\n", p[0] + p[1] + p[2]);
+                    free(p);
+                    return atoi("42");
+                }
+                """);
+        assertEquals("hello, world 12  3.14 z ff 1099511627776|7   |\n6\n", r.out());
+        assertEquals(42, r.exit());
+    }
+
+    @Test
+    void globalsRun() throws Exception {
+        assertEquals(1, Native.run("int a[4] = { 1, 2, 3, 4 }; int *p = a + 1; const char *s = \"hi\"; double d = 2.5; int z; struct B { unsigned lo : 4; int hi : 4; } b = { 15, -3 }; int (*fp)(void); int f(void) { return 9; }\nint main(void) { fp = f; return *p == 2 && s[1] == 'i' && d == 2.5 && z == 0 && b.lo == 15 && b.hi == -3 && fp() == 9 && a[3] == 4; }").exit());
+        assertEquals(49, Native.run(org.jbm.mycc.Main.SOURCE).exit());
+    }
+
+    @Test
     void aMovedValueRuns() throws Exception {
         assertEquals(7, Native.run("int main(void) { char c = 7; int i = c; return i; }").exit());
         assertEquals(200, Native.run("int main(void) { unsigned char c = 200; return c; }").exit());
