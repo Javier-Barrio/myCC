@@ -141,6 +141,43 @@ class CodegenTest {
     }
 
     @Test
+    void callsFollowSysV() {
+        String asm = function("int g(int a, int b, int c, int d, int e, int f, int h, double x, int i); int f(void) { return g(1, 2, 3, 4, 5, 6, 7, 2.5, 9); }");
+        assertTrue(asm.contains("pushq %rax"), asm);
+        assertTrue(asm.contains("movslq -24(%rbp), %r9"), asm);
+        assertTrue(asm.contains("call g@PLT\n  addq $16, %rsp"), asm);
+        String var = function("int printf(const char *, ...); int f(void) { return printf(\"%d %f\", 1, 2.5); }");
+        assertTrue(var.contains("leaq .str."), var);
+        assertTrue(var.contains("movl $1, %eax\n  call printf@PLT"), var);
+        String local = function("static int h(void) { return 1; } int f(void) { return h(); }");
+        assertTrue(local.contains("call h\n"), local);
+        String ptr = function("int (*fp)(int); int f(void) { return fp(3); }");
+        assertTrue(ptr.contains("movq -16(%rbp), %r10\n  call *%r10"), ptr);
+    }
+
+    @Test
+    void aggregatesCrossCallsByAddress() {
+        String asm = function("struct P { int a; int b; }; struct P mk(int a) { struct P p = { a, a }; return p; }");
+        assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -56(%rbp)"), asm);
+        assertTrue(asm.contains("rep movsb\n  movq -56(%rbp), %rax\n  leave"), asm);
+        String param = function("struct P { int a; int b; }; int sum(struct P p) { return p.a + p.b; }");
+        assertTrue(param.contains("movq %rdi, %rsi\n  leaq -8(%rbp), %rdi\n  movq $8, %rcx\n  rep movsb"), param);
+    }
+
+    @Test
+    void globalsAreByteImages() {
+        String all = Native.assembly("int a[4] = { 1, 2, 3, 4 }; int *p = a + 1; const char *s = \"hi\"; double d = 2.5; int z; struct B { unsigned lo : 4; int hi : 4; } b = { 15, -3 }; int main(void) { return 0; }");
+        assertTrue(all.contains(".data\n  .globl a\n  .balign 4\na:\n  .byte 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0\n"), all);
+        assertTrue(all.contains("p:\n  .quad a+4\n"), all);
+        assertTrue(all.contains("s:\n  .quad .str."), all);
+        assertTrue(all.contains(".section .rodata\n  .balign 1\n.str."), all);
+        assertTrue(all.contains(".byte 104, 105, 0\n"), all);
+        assertTrue(all.contains("d:\n  .byte 0, 0, 0, 0, 0, 0, 4, 64\n"), all);
+        assertTrue(all.contains(".bss\n  .globl z\n  .balign 4\nz:\n  .zero 4\n"), all);
+        assertTrue(all.contains("b:\n  .byte 223, 0, 0, 0\n"), all);
+    }
+
+    @Test
     void plainModeHasNoComments() {
         String plain = Codegen.emit(org.jbm.mycc.cc.Compiler.compile("int main(void) { return 1; }",
                 org.jbm.mycc.cc.cpp.BundledHeaders.INSTANCE, "t.c",
