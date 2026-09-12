@@ -13,8 +13,8 @@ The design lives in `docs/`: `tac-plan.md` (the TAC), `lower-plan.md`
 The compiler implements C as of the C2y working draft N3886, which is
 C23 plus a few small additions such as `_Countof`, compiled as C23 by
 default: `bool`, `nullptr`, `typeof`, `auto`, `static_assert`,
-`[[attributes]]`, `constexpr`-era literals, and an empty parameter
-list `()` meaning `(void)`. `-std=c17` compiles older code instead:
+`[[attributes]]`, `constexpr` objects, `_Countof`, and an empty
+parameter list `()` meaning `(void)`. `-std=c17` compiles older code instead:
 `()` declares a function without a prototype, so any arguments may be
 passed, and old-style definitions with an identifier list, `int f(a,
 b) int a; char b; { ... }`, are accepted. The older spellings `_Bool`,
