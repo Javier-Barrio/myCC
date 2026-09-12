@@ -8,9 +8,8 @@ import org.jetbrains.annotations.Nullable;
  * it: a register, an immediate, a memory operand of a base register
  * with a displacement, a symbol (a label or a global, plain or through
  * the PLT), a symbol addressed relative to the instruction pointer
- * (plain or through the GOT). A call or jump through a register or a
- * memory operand takes it as it is; the target being a value rather
- * than a symbol is the operand's kind, and the {@code *} is spelling.
+ * (plain or through the GOT). An {@code icall} or {@code ijmp} takes
+ * its target, a register or memory operand, as it is.
  */
 public sealed interface Operand {
 

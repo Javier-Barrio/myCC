@@ -12,9 +12,24 @@ import java.util.List;
  */
 public sealed interface Item {
 
+    /**
+     * The mnemonics are the target's, with two of the IR's own: {@code icall}
+     * and {@code ijmp} transfer to the value in their register or memory
+     * operand, where {@code call} and {@code jmp} take a symbol. A
+     * transfer with the other kind of operand is invalid.
+     */
     record Insn(@NonNull String mnemonic, @NonNull List<Operand> operands) implements Item {
         public Insn {
             operands = List.copyOf(operands);
+            boolean indirect = mnemonic.equals("icall") || mnemonic.equals("ijmp");
+            boolean direct = mnemonic.equals("call") || mnemonic.equals("jmp");
+            if ((indirect || direct) && operands.size() == 1) {
+                Operand target = operands.get(0);
+                boolean value = target instanceof Operand.Reg || target instanceof Operand.Mem;
+                if (indirect != value) {
+                    throw new IllegalArgumentException(mnemonic + " with " + target);
+                }
+            }
         }
     }
 
