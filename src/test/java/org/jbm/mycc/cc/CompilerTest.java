@@ -31,6 +31,15 @@ class CompilerTest {
     }
 
     @Test
+    void theOldKeywordSpellingsArePredefined() {
+        Compiler.Compiled c = Compiler.compile("_Static_assert(_Alignof(int) == 4, \"\"); _Bool b = 1; _Alignas(16) int a;",
+                BundledHeaders.INSTANCE, "t.c", X64);
+        String tac = TacWriter.print(c.tac());
+        assertTrue(tac.contains("@b : u8 align 1 = { 0 : u8 1 }"), tac);
+        assertTrue(tac.contains("@a : i32"), tac);
+    }
+
+    @Test
     void theTargetIsPredefined() {
         String p = Compiler.predefined(X64);
         assertTrue(p.contains("#define __LP64__ 1\n"), p);

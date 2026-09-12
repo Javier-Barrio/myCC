@@ -1,5 +1,8 @@
 package org.jbm.mycc.cc.sema;
 
+import org.jbm.mycc.cc.parse.ast.BlockItem;
+import java.util.Optional;
+import java.util.ArrayList;
 import lombok.NonNull;
 import org.jbm.mycc.cc.parse.ast.AstRewriter;
 import org.jbm.mycc.cc.parse.ast.Decl;
@@ -42,6 +45,37 @@ public final class Desugar extends AstRewriter {
     public Object visit(Expr.Unary e) {
         if (isIncrement(e.op())) {
             return compoundAssignment(e.op(), rewrite(e.operand()));
+        }
+        return super.visit(e);
+    }
+
+    // ---- statement expressions and builtins ----------------------------------------
+
+    // The last expression statement of ({ ... }) is the value, so its
+    // postfix ++ keeps its result; the others are discarded as usual.
+    @Override
+    public Object visit(Expr.StmtExpr e) {
+        List<BlockItem> items = e.body().items();
+        var out = new ArrayList<BlockItem>(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            BlockItem item = items.get(i);
+            boolean last = i == items.size() - 1;
+            if (last && item instanceof Stmt.ExprStmt s && s.expr().isPresent()) {
+                Expr expr = rewrite(s.expr().get());
+                out.add(expr == s.expr().get() ? s : new Stmt.ExprStmt(s.token(), Optional.of(expr)));
+            } else {
+                out.add(rewrite(item));
+            }
+        }
+        return new Expr.StmtExpr(e.paren(), new Stmt.Compound(e.body().brace(), out));
+    }
+
+    // __builtin_expect(e, c) is e: the hint means nothing here.
+    @Override
+    public Object visit(Expr.Call e) {
+        boolean expect = e.callee() instanceof Expr.Identifier id && id.name().text.equals("__builtin_expect");
+        if (expect && e.arguments().size() == 2) {
+            return rewrite(e.arguments().get(0));
         }
         return super.visit(e);
     }

@@ -1301,6 +1301,12 @@ public final class Parser {
             case PUNCTUATOR -> {
                 if (cur.at("(")) {
                     cur.next();
+                    if (cur.at("{")) {
+                        // ({ ... }), GNU's statement expression.
+                        Stmt.Compound body = parseCompoundStatement(true);
+                        cur.expect(")");
+                        return new Expr.StmtExpr(t, body);
+                    }
                     if (startsCompoundLiteralOrTypeName(cur.peek())) {
                         var storage = parseStorageClassSpecifiers();
                         Type type = parseTypeName();

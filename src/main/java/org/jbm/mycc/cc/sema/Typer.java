@@ -100,6 +100,7 @@ public final class Typer {
         this.literals = new Literals(types);
         this.initializers = new Initializers(types, exprs, constEval);
         exprs.setInitializers(initializers, (symbol, init) -> globals.put(symbol, Optional.of(init)));
+        exprs.setBlocks(this::block);
         builder.setEvaluator(new TypeBuilder.Hooks() {
             @Override
             public TExpr.IntConst evaluate(Expr e, Token at, String what) {

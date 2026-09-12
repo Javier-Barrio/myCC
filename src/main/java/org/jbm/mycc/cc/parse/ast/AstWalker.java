@@ -221,6 +221,12 @@ public abstract class AstWalker implements Visitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visit(Expr.StmtExpr e) {
+        walk(e.body());
+        return null;
+    }
+
     // ---- statements ------------------------------------------------------------
 
     @Override

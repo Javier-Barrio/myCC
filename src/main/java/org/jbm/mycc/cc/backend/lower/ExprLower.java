@@ -41,6 +41,12 @@ final class ExprLower implements TVisitor<Val> {
     // TargetValue.
     private final Map<TExpr.Lvalue, Val> targetValues = new IdentityHashMap<>();
     private int condTemps;
+    // The statement lowering of the same function, for statement expressions.
+    private StmtLower stmts;
+
+    void setStmts(@NonNull StmtLower stmts) {
+        this.stmts = stmts;
+    }
 
     ExprLower(@NonNull Lower lower, @NonNull Builder b, @NonNull Map<Symbol, Var> vars) {
         this.lower = lower;
@@ -939,6 +945,18 @@ final class ExprLower implements TVisitor<Val> {
     public Val visit(TExpr.Comma e) {
         effect(e.left());
         return value(e.right());
+    }
+
+    @Override
+    public Val visit(TExpr.StmtExpr e) {
+        if (stmts == null) {
+            throw new IllegalStateException("a statement expression outside a function");
+        }
+        stmts.lower(e.body());
+        if (e.value().isEmpty()) {
+            return new Val(null, e.type());
+        }
+        return value(e.value().get());
     }
 
     // ---- initialization ----------------------------------------------------------------------------

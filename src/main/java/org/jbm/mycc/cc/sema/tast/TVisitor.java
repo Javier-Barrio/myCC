@@ -82,4 +82,5 @@ public interface TVisitor<R> {
     // ---- conditional and comma ----
     R visit(TExpr.Cond e);
     R visit(TExpr.Comma e);
+    R visit(TExpr.StmtExpr e);
 }

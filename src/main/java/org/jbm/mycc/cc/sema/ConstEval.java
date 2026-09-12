@@ -540,4 +540,9 @@ final class ConstEval implements TVisitor<@Nullable Constant> {
     public Constant visit(TExpr.Comma e) {
         return null;
     }
+
+    @Override
+    public Constant visit(TExpr.StmtExpr e) {
+        return null;
+    }
 }
