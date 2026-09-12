@@ -29,52 +29,68 @@ public class Scanner {
     }
 
     // expand(TS) from the paper, over a stream with directive lines
-    // already removed.
+    // already removed: a loop over a work list, so a long stream does not
+    // recurse once per token. The token at the front is put out, or
+    // replaced by its expansion for the loop to look at again.
     private TokenSet doExpand(TokenSet tokenSet) {
-        if (tokenSet.tokens.isEmpty()) {
-            return TokenSet.empty();
-        }
-
-        var first = tokenSet.tokens.get(0);
-        var rest = new TokenSet(tokenSet.tokens.subList(1, tokenSet.tokens.size()));
-
-        // T is in its own hide set: painted blue, never expanded again.
-        if (hideSetContains(first, first.token.text)) {
-            return new TokenSet(first, doExpand(rest));
-        }
-
-        var definition = definitionOf(first);
-
-        // T is an object-like macro:
-        // expand(subst(ts(T), {}, {}, HS ∪ {T}, {}) • TS')
-        if (definition != null && definition.type == TokenType.OBJECT_MACRO) {
-            var hs = hideSetPlus(first, Optional.empty());
-            var replaced = substitute(TokenSet.fromTokens(definition.expansion),
-                    new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
-            return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(rest));
-        }
-
-        // T is a function-like macro followed by '(' actuals ')':
-        // expand(subst(ts(T), fp(T), actuals, (HS ∩ HS') ∪ {T}, {}) • TS'')
-        if (definition != null && definition.type == TokenType.CALL_MACRO && startsWithOpenParen(rest)) {
-            int close = matchingCloseParen(rest);
-            if (close >= 0) {
-                var closeParen = rest.tokens.get(close);
-                boolean variadic = !definition.params.isEmpty() && definition.params.get(definition.params.size() - 1).text.equals("...");
-                var args = splitArguments(rest.tokens.subList(1, close), definition.params.size(), variadic);
-                var remainder = new TokenSet(rest.tokens.subList(close + 1, rest.tokens.size()));
-
-                var fp = new ArrayList<TokenSet>();
-                definition.params.forEach(p -> fp.add(TokenSet.from(new CppToken(p))));
-
-                var hs = hideSetPlus(first, Optional.of(closeParen));
-                var replaced = substitute(TokenSet.fromTokens(definition.expansion),
-                        fp, args, hs, TokenSet.empty());
-                return doExpand(withLeadingSpace(replaced, first.spaceBefore).concat(remainder));
+        var out = new ArrayList<CppToken>();
+        List<CppToken> work = tokenSet.tokens;
+        int at = 0;
+        while (at < work.size()) {
+            CppToken first = work.get(at);
+            // T is in its own hide set: painted blue, never expanded again.
+            if (hideSetContains(first, first.token.text)) {
+                out.add(first);
+                at++;
+                continue;
             }
-        }
+            Token definition = definitionOf(first);
 
-        return new TokenSet(first, doExpand(rest));
+            // T is an object-like macro:
+            // expand(subst(ts(T), {}, {}, HS ∪ {T}, {}) • TS')
+            if (definition != null && definition.type == TokenType.OBJECT_MACRO) {
+                var hs = hideSetPlus(first, Optional.empty());
+                var replaced = substitute(TokenSet.fromTokens(definition.expansion),
+                        new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
+                work = replacing(withLeadingSpace(replaced, first.spaceBefore), work, at + 1);
+                at = 0;
+                continue;
+            }
+
+            // T is a function-like macro followed by '(' actuals ')':
+            // expand(subst(ts(T), fp(T), actuals, (HS ∩ HS') ∪ {T}, {}) • TS'')
+            if (definition != null && definition.type == TokenType.CALL_MACRO) {
+                List<CppToken> rest = work.subList(at + 1, work.size());
+                int close = startsWithOpenParen(rest) ? matchingCloseParen(rest) : -1;
+                if (close >= 0) {
+                    var closeParen = rest.get(close);
+                    boolean variadic = !definition.params.isEmpty() && definition.params.get(definition.params.size() - 1).text.equals("...");
+                    var args = splitArguments(rest.subList(1, close), definition.params.size(), variadic);
+
+                    var fp = new ArrayList<TokenSet>();
+                    definition.params.forEach(p -> fp.add(TokenSet.from(new CppToken(p))));
+
+                    var hs = hideSetPlus(first, Optional.of(closeParen));
+                    var replaced = substitute(TokenSet.fromTokens(definition.expansion),
+                            fp, args, hs, TokenSet.empty());
+                    work = replacing(withLeadingSpace(replaced, first.spaceBefore), work, at + 1 + close + 1);
+                    at = 0;
+                    continue;
+                }
+            }
+
+            out.add(first);
+            at++;
+        }
+        return new TokenSet(out);
+    }
+
+    // The replacement followed by the work list from `from` on.
+    private static List<CppToken> replacing(TokenSet replacement, List<CppToken> work, int from) {
+        var next = new ArrayList<CppToken>(replacement.tokens.size() + work.size() - from);
+        next.addAll(replacement.tokens);
+        next.addAll(work.subList(from, work.size()));
+        return next;
     }
 
     // subst(IS, FP, AP, HS, OS) from the paper.
@@ -278,19 +294,19 @@ public class Scanner {
         return -1;
     }
 
-    private static boolean startsWithOpenParen(TokenSet ts) {
-        if (ts.tokens.isEmpty()) {
+    private static boolean startsWithOpenParen(List<CppToken> tokens) {
+        if (tokens.isEmpty()) {
             return false;
         }
-        var t = ts.tokens.get(0).token;
+        var t = tokens.get(0).token;
         return t.type == TokenType.PUNCTUATOR && t.text.equals("(");
     }
 
     // Index of the ')' matching the '(' at index 0, or -1.
-    private static int matchingCloseParen(TokenSet ts) {
+    private static int matchingCloseParen(List<CppToken> tokens) {
         int depth = 0;
-        for (int i = 0; i < ts.tokens.size(); i++) {
-            var t = ts.tokens.get(i).token;
+        for (int i = 0; i < tokens.size(); i++) {
+            var t = tokens.get(i).token;
             if (t.type == TokenType.PUNCTUATOR && t.text.equals("(")) {
                 depth++;
             } else if (t.type == TokenType.PUNCTUATOR && t.text.equals(")")) {

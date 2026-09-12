@@ -855,4 +855,24 @@ class ScannerTest {
                 A A
                 """, "A", "A");
     }
+
+    @Test
+    void longStreamsAndDeepMacroChainsExpandWithoutRecursion() {
+        String many = "int a;\n".repeat(50_000);
+        assertEquals(150_000, texts(expand(many)).size(), "one token per word, no stack use per token");
+        String nested = """
+                #define P(M) ((M) < 0 ? -1 : 1) * (int) sizeof((M) + 0)
+                #define C(X, T) check(P(X), P((X) << (T) 1))
+                #define T1(X, T) do { C(X, T); C(X, unsigned T); } while (0)
+                #define T2(X) do { T1(X, char); T1(X, short); T1(X, int); T1(X, long); } while (0)
+                #define T3(X, T) do { T2((T) (X)); T2((unsigned T) (X)); } while (0)
+                #define T4(X) do { T3(X, char); T3(X, short); T3(X, int); T3(X, long); } while (0)
+                T4(1); T4(2); T4(3); T4(4);
+                """;
+        List<String> tokens = texts(expand(nested));
+        assertTrue(tokens.size() > 10_000, "the chain multiplies out: " + tokens.size());
+        assertEquals("do", tokens.get(0));
+        assertEquals(";", tokens.get(tokens.size() - 1));
+        assertTrue(tokens.stream().noneMatch(t -> t.startsWith("T") && t.length() == 2), "every macro name is expanded");
+    }
 }
