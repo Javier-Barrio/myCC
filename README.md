@@ -11,6 +11,9 @@ The compilation targets are x86-64 Linux and the cshell.
 Most of the design lives in `docs/`.  The compiler is WIP and is not production-ready at this point
 but supports enough to play with it and build the Lua and curl test suites.
 
+## AI Note
+The project is developed with the assistance of claude Fable 5.1.  I am driving the architecture and supervising and verifying the implementation. 
+
 ## The language and the targets
 
 The compiler implements C as of the C2y working draft N3886, which is
