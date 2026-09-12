@@ -224,6 +224,9 @@ public class CppTokenizer {
     private int col = 1;
     private boolean atLineStart = true;
     private DirectiveState directiveState = DirectiveState.NONE;
+
+    // Definitions saved by #pragma push_macro, per name; null for "was not defined".
+    private final Map<String, List<Token>> pushedMacros = new HashMap<>();
     private final Map<String, Token> macroTable;
 
     // The conditional directives (6.10.1): each `#if`, `#ifdef` or
@@ -445,6 +448,9 @@ public class CppTokenizer {
                 lineDirective(hash);
                 return null;
             }
+            if (directive.equals("pragma") && pragma(hash)) {
+                return null;
+            }
             if (directive.equals("error")) {
                 int start = pos;
                 while (pos < src.length() && peek() != '\n') {
@@ -644,6 +650,46 @@ public class CppTokenizer {
             advance();
         }
         line = number - 1;   // the new-line about to be consumed counts up to N
+    }
+
+    // `#pragma push_macro("name")` saves the macro's definition, or its
+    // absence, on a stack of its own; `pop_macro` restores the last one
+    // saved. True when the line was one of these and is consumed; any
+    // other pragma is left for the token stream as before.
+    private boolean pragma(Token hash) {
+        int start = pos;
+        while (isBlank(peek())) {
+            advance();
+        }
+        scanIdentifier(line, col);
+        List<Token> tokens = scanRestOfLine(pos, Map.of());
+        boolean shaped = tokens.size() == 4
+                && tokens.get(0).type == TokenType.IDENTIFIER
+                && tokens.get(1).text.equals("(")
+                && tokens.get(2).type == TokenType.STRING_LITERAL
+                && tokens.get(3).text.equals(")");
+        String action = shaped ? tokens.get(0).text : "";
+        if (!action.equals("push_macro") && !action.equals("pop_macro")) {
+            pos = start;
+            return false;
+        }
+        String quoted = tokens.get(2).text;
+        String name = quoted.substring(quoted.indexOf('"') + 1, quoted.length() - 1);
+        List<Token> stack = pushedMacros.computeIfAbsent(name, k -> new ArrayList<>());
+        if (action.equals("push_macro")) {
+            stack.add(macroTable.get(name));
+        } else if (!stack.isEmpty()) {
+            Token saved = stack.remove(stack.size() - 1);
+            if (saved == null) {
+                macroTable.remove(name);
+            } else {
+                macroTable.put(name, saved);
+            }
+        }
+        while (pos < src.length() && peek() != '\n') {
+            advance();
+        }
+        return true;
     }
 
     // The rest of the line, macro expanded, as the directive's arguments.
