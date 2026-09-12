@@ -97,7 +97,10 @@ public abstract class AstWalker implements Visitor<Void> {
 
     protected void walkItem(Initializer.Item item) {
         for (var d : item.designators()) {
-            if (d instanceof Initializer.ArrayDesignator a) walk(a.index());
+            if (d instanceof Initializer.ArrayDesignator a) {
+                walk(a.index());
+                a.last().ifPresent(this::walk);
+            }
         }
         walk(item.initializer());
     }

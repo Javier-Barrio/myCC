@@ -345,6 +345,7 @@ class ParserTest {
             assertEquals("(decl (m (array (array int 2) 2) {{1 2} {3 4}}))", unit("int m[2][2] = {{1, 2}, {3, 4}};"));
             assertEquals("(decl (p (struct P) {(.x 1) ([2] 3) (.a .b 4) ([0] .c 5)}))",
                     unit("struct P p = {.x = 1, [2] = 3, .a.b = 4, [0].c = 5};"));
+            assertEquals("(decl (a (array int 4) {([1 ... 2] 3) ([0 ... 1] .c 5)}))", unit("int a[4] = {[1 ... 2] = 3, [0 ... 1].c = 5};"));
             assertEquals("(decl (z (struct P) {}))", unit("struct P z = {};"));
             assertEquals("(decl (n int (?: a b c)))", unit("int n = a ? b : c;"));
         }
