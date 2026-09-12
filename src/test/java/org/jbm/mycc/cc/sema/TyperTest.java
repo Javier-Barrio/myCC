@@ -853,7 +853,7 @@ class TyperTest {
                 + " struct H h = { g }; int call(struct H *hh, struct S *s) { return hh->f(s); }");
         assertTrue(typed.contains("(global h:struct H (init (0 &g:int (*)(struct S *))))"), typed);
         assertTrue(unit("struct P { int x; }; void f(void) { struct P; struct P { int y; } q; q.y = 1; }").contains("q:struct P"), "but struct P; in a block declares a new one");
-        assertTrue(unit("int *p; unsigned *q = p; long *r = q; void f(void) { char c = 3; void *v = c; int n = v; }").contains("(local n:int (ptr-to-int:int"), "pointer and integer mixes convert, as gcc allows with a warning");
+        assertTrue(unit("void f(int *p) { unsigned *q = p; long *r = q; char c = 3; void *v = c; int n = v; }").contains("(local n:int (ptr-to-int:int"), "pointer and integer mixes convert, as gcc allows with a warning");
     }
 
     @Test
