@@ -1,15 +1,15 @@
 package org.jbm.mycc.repl;
 
 import org.jbm.mycc.cc.Compiler;
-import org.jbm.mycc.cc.codegen.Codegen;
+import org.jbm.mycc.cc.backend.codegen.Codegen;
 import org.jbm.mycc.cc.cpp.CppTokenizer.LexException;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
 import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
 import org.jbm.mycc.cc.cpp.HeaderProvider;
 import org.jbm.mycc.cc.cpp.TokenConversion.ConversionException;
-import org.jbm.mycc.cc.lower.tac.Function;
-import org.jbm.mycc.cc.lower.tac.Global;
-import org.jbm.mycc.cc.lower.tac.TacWriter;
+import org.jbm.mycc.cc.backend.lower.tac.Function;
+import org.jbm.mycc.cc.backend.lower.tac.Global;
+import org.jbm.mycc.cc.backend.lower.tac.TacWriter;
 import org.jbm.mycc.cc.parse.ParseException;
 import org.jbm.mycc.cc.parse.Parser;
 import org.jbm.mycc.cc.parse.ast.Decl;

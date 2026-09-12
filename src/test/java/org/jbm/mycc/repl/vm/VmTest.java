@@ -1,18 +1,18 @@
 package org.jbm.mycc.repl.vm;
 
 import org.jbm.mycc.cc.Compiler;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.cpp.BundledHeaders;
 import org.jbm.mycc.cc.cpp.CppTokenizer;
 import org.jbm.mycc.cc.cpp.Scanner;
 import org.jbm.mycc.cc.cpp.TokenConversion;
-import org.jbm.mycc.cc.lower.Lower;
+import org.jbm.mycc.cc.backend.lower.Lower;
 import org.jbm.mycc.cc.parse.Parser;
 import org.jbm.mycc.cc.sema.Desugar;
 import org.jbm.mycc.cc.sema.Resolver;
 import org.jbm.mycc.cc.sema.Typer;
-import org.jbm.mycc.cc.lower.tac.Module;
+import org.jbm.mycc.cc.backend.lower.tac.Module;
 import org.jbm.mycc.cc.sema.tast.TUnit;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.jbm.mycc.repl.vm.VM;

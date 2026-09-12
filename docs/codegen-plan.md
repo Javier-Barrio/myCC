@@ -88,7 +88,7 @@ annotated, and the shell's `/asm name` is annotated.
 
 ## Components
 
-Target-independent, in `org.jbm.mycc.cc.codegen`:
+Target-independent, in `org.jbm.mycc.cc.backend.codegen`:
 
 ```
 Codegen      build(Module, annotate) -> List<Item>, the assembly IR; emit(...) -> String, the IR printed.
@@ -106,7 +106,7 @@ Asm          builds the IR in order; comments only when annotating
 AttPrinter   the IR in AT&T syntax for the GNU assembler; an assembler would encode the same IR
 ```
 
-CPU-specific, in `org.jbm.mycc.cc.lower.arch.x86_64`, beside `X86_64SysV`:
+CPU-specific, in `org.jbm.mycc.cc.backend.lower.arch.x86_64`, beside `X86_64SysV`:
 
 ```
 X86Emitter   implements Backend and TacVisitor<Void>: one method per instruction, writing lines;

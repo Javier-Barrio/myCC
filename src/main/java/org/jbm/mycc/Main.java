@@ -1,11 +1,11 @@
 package org.jbm.mycc;
 
 import org.jbm.mycc.cc.Compiler;
-import org.jbm.mycc.cc.codegen.Codegen;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.codegen.Codegen;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
 import org.jbm.mycc.cc.cpp.HeaderProvider;
-import org.jbm.mycc.cc.lower.tac.TacWriter;
+import org.jbm.mycc.cc.backend.lower.tac.TacWriter;
 import org.jbm.mycc.cc.sema.tast.TypedPrinter;
 import org.jbm.mycc.cc.sema.types.Types;
 
