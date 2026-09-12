@@ -4,6 +4,7 @@ import lombok.NonNull;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
 
 import java.util.List;
+import java.util.Optional;
 
 /** initializer (C2y 6.7.11). */
 public sealed interface Initializer {
@@ -32,8 +33,8 @@ public sealed interface Initializer {
     sealed interface Designator {
     }
 
-    /** [ constant-expression ] */
-    record ArrayDesignator(@NonNull Token bracket, @NonNull Expr index) implements Designator {
+    /** [ constant-expression ], or GNU's range [ first ... last ] when {@code last} is present. */
+    record ArrayDesignator(@NonNull Token bracket, @NonNull Expr index, @NonNull Optional<Expr> last) implements Designator {
     }
 
     /** . identifier */

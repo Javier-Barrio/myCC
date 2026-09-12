@@ -264,14 +264,33 @@ final class Initializers {
             } else {
                 var a = (Initializer.ArrayDesignator) first;
                 if (element == null) throw new SemaException("array designator in initializer for a structure or union", a.bracket());
-                long index = constEval.requireInteger(exprs.rvalue(exprs.type(a.index())), a.bracket(), "array designator index");
-                if (index < 0) throw new SemaException("array designator index is negative", a.bracket());
-                if (index >= count) throw new SemaException("array designator index " + index + " exceeds the array bounds", a.bracket());
+                long index = designatedIndex(a.index(), a.bracket());
+                if (a.last().isPresent()) {
+                    // GNU's [first ... last]: the item initializes each
+                    // element of the range in turn, and the walk goes on
+                    // after the last.
+                    long last = designatedIndex(a.last().get(), a.bracket());
+                    if (last < index) throw new SemaException("empty index range in initializer", a.bracket());
+                    int next = pos + 1;
+                    for (long i = index; i <= last; i++) {
+                        cursor = i;
+                        next = subobject(cursor, item, pos, rest);
+                    }
+                    cursor++;
+                    return next;
+                }
                 cursor = index;
             }
             int next = subobject(cursor, item, pos, rest);
             cursor++;
             return next;
+        }
+
+        private long designatedIndex(Expr expr, Token bracket) {
+            long index = constEval.requireInteger(exprs.rvalue(exprs.type(expr)), bracket, "array designator index");
+            if (index < 0) throw new SemaException("array designator index is negative", bracket);
+            if (index >= count) throw new SemaException("array designator index " + index + " exceeds the array bounds", bracket);
+            return index;
         }
 
         private int slotIndexOf(String name) {

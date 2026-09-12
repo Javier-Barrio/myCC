@@ -769,8 +769,12 @@ public final class Parser {
                 if (cur.at("[")) {
                     Token bracket = cur.next();
                     Expr index = parseConditionalExpression();
+                    Optional<Expr> last = Optional.empty();
+                    if (cur.accept("...")) {
+                        last = Optional.of(parseConditionalExpression());
+                    }
                     cur.expect("]");
-                    designators.add(new Initializer.ArrayDesignator(bracket, index));
+                    designators.add(new Initializer.ArrayDesignator(bracket, index, last));
                 } else {
                     Token dot = cur.next();
                     designators.add(new Initializer.MemberDesignator(dot, cur.expectIdentifier()));

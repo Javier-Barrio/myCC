@@ -326,7 +326,13 @@ public final class AstPrinter implements Visitor<String> {
         if (item.designators().isEmpty()) return print(item.initializer());
         var sb = new StringBuilder("(");
         for (var d : item.designators()) {
-            if (d instanceof Initializer.ArrayDesignator a) sb.append('[').append(print(a.index())).append("] ");
+            if (d instanceof Initializer.ArrayDesignator a) {
+                sb.append('[').append(print(a.index()));
+                if (a.last().isPresent()) {
+                    sb.append(" ... ").append(print(a.last().get()));
+                }
+                sb.append("] ");
+            }
             else sb.append('.').append(((Initializer.MemberDesignator) d).name().text).append(' ');
         }
         return sb.append(print(item.initializer())).append(')').toString();

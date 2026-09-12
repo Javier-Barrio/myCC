@@ -142,7 +142,11 @@ public abstract class AstRewriter implements Visitor<Object> {
         var designators = rewriteAll(item.designators(), d -> {
             if (d instanceof Initializer.ArrayDesignator a) {
                 Expr index = rewrite(a.index());
-                if (index != a.index()) return new Initializer.ArrayDesignator(a.bracket(), index);
+                Optional<Expr> last = a.last().map(this::rewrite);
+                boolean lastChanged = a.last().isPresent() && last.get() != a.last().get();
+                if (index != a.index() || lastChanged) {
+                    return new Initializer.ArrayDesignator(a.bracket(), index, last);
+                }
             }
             return d;
         });

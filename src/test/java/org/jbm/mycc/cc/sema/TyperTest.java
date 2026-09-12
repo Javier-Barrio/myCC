@@ -1151,6 +1151,12 @@ class TyperTest {
         assertEquals("m:int [2][2] (init (0 1:int) (8 2:int))", init("int m[][2] = {1, [1] = 2};"), "a designator ends an elided row");
         assertEquals("m:int [3][2] (init (8 1:int) (12 2:int) (16 3:int))", init("int m[][2] = {[1] = 1, 2, 3};"));
         assertEquals("m:int [2][2] (init (4 7:int) (8 8:int))", init("int m[2][2] = {[0][1] = 7, 8};"), "nested designators");
+        assertEquals("a:int [6] (init (4 7:int) (8 7:int) (12 7:int) (16 8:int))", init("int a[6] = {[1 ... 3] = 7, 8};"), "a range, then the walk goes on after it");
+        assertEquals("a:int [4] (init (0 1:int) (4 1:int) (4 2:int) (8 2:int))", init("int a[4] = {[0 ... 1] = 1, [1 ... 2] = 2};"), "overlapping ranges, later wins");
+        assertEquals("a:int [5] (init (12 3:int) (16 3:int))", init("int a[] = {[3 ... 4] = 3};"), "completed from the range's end");
+        assertEquals("m:int [2][2] (init (4 5:int) (12 5:int))", init("int m[2][2] = {[0 ... 1][1] = 5};"), "a range with a nested designator");
+        assertTrue(fails("int a[4] = {[2 ... 1] = 1};").getMessage().contains("empty index range"));
+        assertTrue(fails("int a[4] = {[1 ... 4] = 1};").getMessage().contains("exceeds the array bounds"));
         assertTrue(fails("int a[2] = {1, 2, 3};").getMessage().contains("excess elements"));
         assertTrue(fails("int m[2][2] = {{1, 2, 3}, {4}};").getMessage().contains("excess elements"));
         assertTrue(fails("int a[2] = {[2] = 1};").getMessage().contains("exceeds the array bounds"));
