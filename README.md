@@ -6,6 +6,8 @@ and `cshell`, an interactive C shell in the spirit of `jshell`.  There is
 also an x86-64 assembler built in.  The linker is planned but not yet implemented;
 see [Gaps](#gaps) for that and the other things missing or approximated.
 
+The compiler is non-optimizing currently.
+
 The compilation targets are x86-64 Linux and the cshell.
 
 Most of the design lives in `docs/`.  The compiler is WIP and is not production-ready at this point
