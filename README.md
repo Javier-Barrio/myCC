@@ -34,6 +34,20 @@ An ILP32 data model (`Ilp32`, 32-bit `long` and pointers) exists for
 the type system and the VM only, to keep the layout code honest; there
 is no code generator for it.
 
+## Lua, as a check
+
+Lua 5.4.7 builds with the compiler unchanged and passes its own test
+suite, `all.lua`, in full. With the Lua sources unpacked in `lua/`:
+
+```
+CP=build/classes/java/main:build/resources/main
+for f in lua/src/l*.c; do java -cp $CP org.jbm.mycc.Main -std=c17 -c $f -o obj/$(basename $f .c).o; done
+gcc -o lua obj/*.o -lm
+cd lua-tests && ../lua -e "_U=true" all.lua
+```
+
+`luac.c` is left out since it defines its own `main`.
+
 ## Build and test
 
 Java 17 and the Gradle wrapper are all that is needed:

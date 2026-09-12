@@ -66,6 +66,8 @@ final class Literals {
 
     // ---- integer constants (6.4.5.2) ------------------------------------------------------
 
+    private static final java.util.regex.Pattern INTEGER_SUFFIX = java.util.regex.Pattern.compile("(?i)(?:u|ll|l|wb)*$");
+
     TExpr.IntConst integer(Token t) {
         String text = t.text.replace("'", "");
         String lower = text.toLowerCase();
@@ -84,8 +86,10 @@ final class Literals {
             base = 8;
             digits = text.substring(1);
         }
-        int end = digits.length();
-        while (end > 0 && "uUlLwWbB".indexOf(digits.charAt(end - 1)) >= 0) end--;
+        // The suffix is made of u, l, ll and wb, so a trailing b or B on
+        // its own is a hex digit: 0xBB is 187.
+        java.util.regex.Matcher m = INTEGER_SUFFIX.matcher(digits);
+        int end = m.find() ? m.start() : digits.length();
         String suffix = digits.substring(end).toLowerCase();
         digits = digits.substring(0, end);
         if (digits.isEmpty()) digits = "0";

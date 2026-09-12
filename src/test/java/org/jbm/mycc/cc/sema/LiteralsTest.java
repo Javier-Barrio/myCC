@@ -51,6 +51,11 @@ class LiteralsTest {
         assertEquals("0:int", integer("0"));
         assertEquals("255:int", integer("0xff"));
         assertEquals("255:int", integer("0XFF"));
+        assertEquals("187:int", integer("0xBB"), "a trailing B is a hex digit, not the wb suffix");
+        assertEquals("11:int", integer("0xB"));
+        assertEquals("27:int", integer("0x1b"));
+        assertEquals("187:unsigned int", integer("0xbbU"));
+        assertEquals("187:unsigned long", integer("0XBBul"));
         assertEquals("8:int", integer("010"));
         assertEquals("8:int", integer("0o10"));
         assertEquals("5:int", integer("0b101"));
