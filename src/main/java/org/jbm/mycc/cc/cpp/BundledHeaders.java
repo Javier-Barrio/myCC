@@ -17,7 +17,7 @@ public final class BundledHeaders implements HeaderProvider {
     public static final BundledHeaders INSTANCE = new BundledHeaders();
 
     public static final List<String> NAMES = List.of(
-            "stdio.h", "stdlib.h", "string.h", "math.h", "stddef.h", "stdbool.h", "stdint.h", "limits.h");
+            "stdio.h", "stdlib.h", "string.h", "math.h", "stddef.h", "stdbool.h", "stdint.h", "limits.h", "wchar.h");
 
     private BundledHeaders() {
     }

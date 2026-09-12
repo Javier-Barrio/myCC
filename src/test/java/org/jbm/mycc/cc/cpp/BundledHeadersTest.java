@@ -88,6 +88,15 @@ class BundledHeadersTest {
     }
 
     @Test
+    void wideCharacters() {
+        String source = "#include <wchar.h>\nwchar_t s[] = L\"h\u20ac\"; size_t n = sizeof s; wint_t e = WEOF;\n";
+        String x64 = typed(source, X64);
+        assertTrue(x64.contains("(global s:int [3] (init (0 104:int) (4 8364:int)))"), x64);
+        assertTrue(x64.contains("(global n:unsigned long 12:unsigned long)"), x64);
+        assertTrue(x64.contains("(global e:unsigned int "), x64);
+    }
+
+    @Test
     void limitsAndMacrosEvaluate() {
         String source = "#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n"
                 + "int m = INT_MAX; int n = INT_MIN; unsigned u = UINT_MAX; long long ll = LLONG_MIN;\n"
