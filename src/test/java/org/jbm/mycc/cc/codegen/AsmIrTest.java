@@ -6,7 +6,6 @@ import java.util.List;
 
 import static org.jbm.mycc.cc.codegen.Operand.got;
 import static org.jbm.mycc.cc.codegen.Operand.imm;
-import static org.jbm.mycc.cc.codegen.Operand.indirect;
 import static org.jbm.mycc.cc.codegen.Operand.mem;
 import static org.jbm.mycc.cc.codegen.Operand.plt;
 import static org.jbm.mycc.cc.codegen.Operand.reg;
@@ -31,7 +30,10 @@ class AsmIrTest {
         assertEquals("printf@PLT", AttPrinter.operand(plt("printf")));
         assertEquals(".LC0(%rip)", AttPrinter.operand(rip(".LC0")));
         assertEquals("stdout@GOTPCREL(%rip)", AttPrinter.operand(got("stdout")));
-        assertEquals("*%r10", AttPrinter.operand(indirect("r10")));
+        assertEquals("  call *%r10", AttPrinter.line(new Item.Insn("call", List.of(reg("r10")))), "a value as a target");
+        assertEquals("  jmp *8(%rbp)", AttPrinter.line(new Item.Insn("jmp", List.of(mem(8, "rbp")))));
+        assertEquals("  call f", AttPrinter.line(new Item.Insn("call", List.of(sym("f")))));
+        assertEquals("  movq %r10, %rax", AttPrinter.line(new Item.Insn("movq", List.of(reg("r10"), reg("rax")))), "only a transfer");
     }
 
     @Test

@@ -26,7 +26,7 @@ public final class AttPrinter {
         if (item instanceof Item.Insn i) {
             List<String> ops = new ArrayList<>();
             for (Operand o : i.operands()) {
-                ops.add(operand(o));
+                ops.add(target(i.mnemonic(), o));
             }
             return ops.isEmpty() ? "  " + i.mnemonic() : "  " + i.mnemonic() + " " + String.join(", ", ops);
         }
@@ -65,6 +65,14 @@ public final class AttPrinter {
         return "# " + n.text();
     }
 
+    // A call or jump whose target is a value, in a register or in memory,
+    // rather than a symbol: AT&T marks it with `*`.
+    private static String target(String mnemonic, Operand o) {
+        boolean transfer = mnemonic.equals("call") || mnemonic.equals("jmp");
+        boolean value = o instanceof Operand.Reg || o instanceof Operand.Mem;
+        return transfer && value ? "*" + operand(o) : operand(o);
+    }
+
     static String operand(Operand o) {
         if (o instanceof Operand.Reg r) {
             return "%" + r.name();
@@ -80,11 +88,8 @@ public final class AttPrinter {
         if (o instanceof Operand.Sym s) {
             return symbol(s);
         }
-        if (o instanceof Operand.RipRel r) {
-            return r.reloc() == Operand.Reloc.GOT ? r.name() + "@GOTPCREL(%rip)" : r.name() + "(%rip)";
-        }
-        Operand.Indirect ind = (Operand.Indirect) o;
-        return "*%" + ind.reg();
+        Operand.RipRel r = (Operand.RipRel) o;
+        return r.reloc() == Operand.Reloc.GOT ? r.name() + "@GOTPCREL(%rip)" : r.name() + "(%rip)";
     }
 
     private static String symbol(Operand.Sym s) {
