@@ -111,7 +111,11 @@ public final class Lower {
             else if (v instanceof TExpr.FloatConst c) out.add(new Global.FloatItem(item.offset(), (Type.Float) typeMap.of(c.type()), c.value()));
             else if (v instanceof TExpr.NullptrConst) out.add(new Global.IntItem(item.offset(), typeMap.integer(types.sizeT()), 0));
             else if (v instanceof TExpr.AddrConst a) {
-                if (a.base().isPresent()) out.add(new Global.AddrItem(item.offset(), names.of(a.base().get()), a.offset()));
+                if (a.base().isPresent()) {
+                    Symbol base = a.base().get();
+                    if (base instanceof Symbol.Function) referenced(base);   // a pointer to a function the unit may not define
+                    out.add(new Global.AddrItem(item.offset(), names.of(base), a.offset()));
+                }
                 else out.add(new Global.IntItem(item.offset(), typeMap.integer(types.sizeT()), a.offset()));
             } else throw new IllegalStateException("a static initializer item that is not a constant: " + v);
         }

@@ -813,16 +813,16 @@ class TyperTest {
 
     @Test
     void enumeratorsAreIntConstantsOfTheEnumsType() {
-        assertEquals(List.of("A: int", "B: int", "C: int", "e: int"), declaredTypes("enum E { A, B = A + 5, C }; enum E e;"));
+        assertEquals(List.of("A: int", "B: int", "C: int", "e: unsigned int"), declaredTypes("enum E { A, B = A + 5, C }; enum E e;"));
         assertEquals("5:int", expr("enum E { A, B = A + 5, C };", "B"));
         assertEquals("6:int", expr("enum E { A, B = A + 5, C };", "C"));
-        assertEquals("(add:int 6:int (rv:int e:int))", expr("enum E { A, B = A + 5, C } e;", "C + e"));
+        assertEquals("(add:unsigned int (int-to-int:unsigned int 6:int) (rv:unsigned int e:unsigned int))", expr("enum E { A, B = A + 5, C } e;", "C + e"));
         type("enum { X = 3, Y, Z = Y * 2 }; static_assert(Z == 8 && Y == 4);");
         type("enum E { A, B = A + 5, C }; static_assert(C == 6 && B == 5 && A == 0);");
         type("enum E { M = -1, N }; static_assert(N == 0);");
         assertEquals("4:unsigned long", expr("enum E { A };", "sizeof(enum E)"));
-        assertEquals(List.of("Q: int", "T: int", "t: int"), declaredTypes("typedef enum { Q } T; T t;"));
-        assertEquals("(block (switch (rv:int e:int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
+        assertEquals(List.of("Q: int", "T: unsigned int", "t: unsigned int"), declaredTypes("typedef enum { Q } T; T t;"));
+        assertEquals("(block (switch (rv:unsigned int e:unsigned int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
                 body("enum E { A, B } e;", "switch (e) { case A: case B: {} }"));
     }
 
@@ -830,13 +830,18 @@ class TyperTest {
     void enumUnderlyingTypes() {
         assertEquals(List.of("X: unsigned char", "v: unsigned char"), declaredTypes("enum F : unsigned char { X = 255 }; enum F v;"));
         assertEquals("1:unsigned long", expr("enum F : unsigned char { X };", "sizeof(enum F)"));
-        assertEquals(List.of("BIG: long"), declaredTypes("enum G { BIG = 4294967296 };"));
+        assertEquals(List.of("BIG: unsigned long"), declaredTypes("enum G { BIG = 4294967296 };"));
+        assertEquals(List.of("NEG: int", "n: int"), declaredTypes("enum I { NEG = -1 }; enum I n;"), "a negative enumerator makes the enum int, as gcc does");
+        assertEquals("(add:int 1:int (rv:int n:int))", expr("enum I { NEG = -1 }; enum I n;", "1 + n"));
+        assertEquals("(add:unsigned int (int-to-int:unsigned int 1:int) (rv:unsigned int e:unsigned int))", expr("enum E { A }; enum E e;", "1 + e"), "an enum without negative values is unsigned int");
+        assertEquals("0:int", expr("enum E { A };", "A"), "but its enumerators are int, since every value fits one");
+        assertEquals(List.of("HUGE: long"), declaredTypes("enum J { HUGE = -4294967296 };"));
         assertEquals(List.of("U: unsigned int"), declaredTypes("enum H { U = 4294967295u };"));
         assertEquals(List.of("M: long", "P: long"), declaredTypes("enum N { M = -1, P = 4294967295u };"));
         assertEquals(List.of("p: enum_ptr"), declaredTypes("enum Fwd : short; enum Fwd *p;").stream()
                 .map(l -> l.replace("short *", "enum_ptr")).toList());
         assertTrue(fails("enum F : unsigned char { Y = 256 };").getMessage().contains("not representable"));
-        assertEquals(List.of("p: int *"), declaredTypes("enum Z *p;"), "a forward enum is int until defined, as gcc allows");
+        assertEquals(List.of("p: unsigned int *"), declaredTypes("enum Z *p;"), "a forward enum is unsigned int until defined, as gcc allows");
         assertTrue(declaredTypes("enum Z; enum Z f(void); enum Z { ZA = 3 }; int g = ZA;").contains("g: int"), "a forward enum, then its definition");
         assertTrue(fails("enum E { A = 1.5 };").getMessage().contains("integer constant"));
         assertTrue(fails("int x; enum E { A = x };").getMessage().contains("not a constant"));

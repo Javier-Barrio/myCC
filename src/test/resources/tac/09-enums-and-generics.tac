@@ -20,7 +20,7 @@ define @f() -> void {
   i32 %t9
   i32 %t10
   i32 %t11
-  i64 %t12
+  u64 %t12
   f64 %t13
   u64 %t14
   u64 %t15
@@ -40,8 +40,8 @@ define @f() -> void {
   mov.s32 %t10, %p
   %t11 = add.s32 %t9, %t10
   mov.s32 %i, %t11
-  mov.s64 %t12, 1099511627776
-  %t13 = i2f.64 %t12
+  mov.u64 %t12, 1099511627776
+  %t13 = u2f.64 %t12
   mov.64 %d, %t13
   mov.u64 %t14, 8
   mov.u64 %t15, 8
