@@ -104,6 +104,8 @@ public sealed abstract class Symbol
         public final Storage storage;
         private final Linkage linkage;
         private boolean defined;
+        // The alignment alignas asked for; 0 when the type's own applies.
+        private int alignment;
 
         Variable(int id, Token declaredAt, Optional<Type> declaredType, int scopeDepth, Storage storage,
                  Linkage linkage, boolean defined) {
@@ -126,6 +128,15 @@ public sealed abstract class Symbol
         @Override
         void markDefined() {
             defined = true;
+        }
+
+        /** The alignment an {@code alignas} asked for, or 0 for the type's own. */
+        public int alignment() {
+            return alignment;
+        }
+
+        void setAlignment(int alignment) {
+            this.alignment = alignment;
         }
     }
 

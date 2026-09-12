@@ -96,7 +96,8 @@ public final class Lower {
         }
         Linkage linkage = s.linkage() == Symbol.Linkage.EXTERNAL ? Linkage.EXTERNAL : Linkage.INTERNAL;
         List<Global.Item> items = g.init().map(this::items).orElse(null);
-        module.globals.add(new Global(names.of(s), linkage, type, types.align(s.type()), s.type().quals().isConst(), items));
+        int align = Math.max(types.align(s.type()), alignmentOf(s));
+        module.globals.add(new Global(names.of(s), linkage, type, align, s.type().quals().isConst(), items));
     }
 
     // A static initializer's items are already constants; each becomes the TAC item of its kind.
@@ -136,7 +137,9 @@ public final class Lower {
         Linkage linkage = f.symbol().linkage() == Symbol.Linkage.INTERNAL ? Linkage.INTERNAL : Linkage.EXTERNAL;
         var fn = new Function(names.of(f.symbol()), linkage, sig, params);
         var b = new Builder(fn);
-        for (Symbol l : f.locals()) vars.put(l, b.local(localNames.of(l), typeMap.of(l.type()), l.type().quals().isVolatile()));
+        for (Symbol l : f.locals()) {
+            vars.put(l, b.local(localNames.of(l), typeMap.of(l.type()), l.type().quals().isVolatile(), alignmentOf(l)));
+        }
         b.open(b.block("entry"));
         var exprs = new ExprLower(this, b, vars);
         var stmts = new StmtLower(b, exprs, vars);
@@ -145,6 +148,14 @@ public final class Lower {
         endOfBody(b, f, ctype.returnType());
         b.finish();
         module.functions.add(fn);
+    }
+
+    // What alignas asked for an object, or 0.
+    private static int alignmentOf(Symbol s) {
+        if (s instanceof Symbol.Variable v) {
+            return v.alignment();
+        }
+        return 0;
     }
 
     // The end of the body: ret for void, and for a scalar result a zero,

@@ -1023,6 +1023,13 @@ class TyperTest {
         assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
         assertEquals("(rv:struct S s:struct S)", expr("struct S { int a; } s;", "(struct S)s"), "a cast to its own type, as gcc allows");
         assertEquals("(block (local y:int (stmtexpr:int (block) 3:int)))", body("", "int y = ({ 3; });"), "a statement expression's value is its last expression statement's");
+        assertEquals("(block (local a:int align 16) (local c:char align 8) (local z:int) (local b:char [3] align 16 (init (0 (int-to-int:char 1:int)))))",
+                body("", "alignas(16) int a; alignas(double) char c; alignas(0) int z; alignas(16) char b[3] = {1};"), "alignas is kept on the object");
+        assertEquals("g:int align 32 1:int", init("alignas(32) int g = 1;"));
+        assertEquals("s:long align 64", init("static alignas(64) long s;"));
+        assertTrue(fails("alignas(3) int a;").getMessage().contains("not a power of two"));
+        assertTrue(fails("alignas(2) int a;").getMessage().contains("weaker than the alignment of 'int'"));
+        assertTrue(fails("typedef alignas(8) int T;").getMessage().contains("not an object"));
         assertEquals("(block (local y:int (stmtexpr:int (block (local t:int 2:int)) (mul:int (rv:int t:int) 2:int))))", body("", "int y = ({ int t = 2; t * 2; });"));
         assertEquals("(block (expr (stmtexpr:void (block) (call:void g:void (void)))))", body("void g(void);", "({ g(); });"));
         assertEquals("(block (expr (stmtexpr:void (block (expr (call:void g:void (void))) (block)))))", body("void g(void);", "({ g(); ; });"), "no value when the last statement is not an expression");
