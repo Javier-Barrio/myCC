@@ -112,7 +112,7 @@ class LowerTest {
                   i64 %l
                   f32 %fl
                   f80 %ld
-                  i32 %e
+                  u32 %e
                 .entry:
                   ret 0
                 }
@@ -626,6 +626,14 @@ class LowerTest {
         assertEquals("  %t0 = addrof @f\n  mov.u64 %fp, %t0", instrs("int f(int); int (*fp)(int);", "fp = f;"));
         assertEquals("  mov.s32 %t0, 1\n  %t1 = call (i32) -> i32 @f(%t0)", instrs("int f(int);", "(&f)(1);"));
         assertEquals("  %t0 = addrof @f\n  mov.s32 %t1, 1\n  %t2 = icall (i32) -> i32 %t0(%t1)", instrs("int f(int);", "((int (*)(int)) (void *) f)(1);"));
+    }
+
+    @Test
+    void aFunctionWhoseAddressAGlobalInitializerTakesIsDeclared() {
+        assertEquals("""
+                global @p : ptr align 8 = { 0 : addr @abs }
+                declare @abs(i32) -> i32
+                """, unit("#include <stdlib.h>\nint (*p)(int) = &abs;"));
     }
 
     @Test

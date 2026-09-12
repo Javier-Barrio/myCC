@@ -1,5 +1,5 @@
 target x86_64-sysv
-define @apply(u32 %word, i32 %op, u32 %bit) -> u32 {
+define @apply(u32 %word, u32 %op, u32 %bit) -> u32 {
   u32 %mask
   u32 %t0
   i32 %t1

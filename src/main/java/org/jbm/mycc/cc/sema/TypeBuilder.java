@@ -271,7 +271,7 @@ final class TypeBuilder {
             // A reference or forward declaration: complete with its fixed
             // type, else as int, which is what gcc does and what real code
             // expects of `enum E;` before the definition.
-            CType.Int forward = fixed.orElse(new CType.Int(CType.Int.Rank.INT, CType.Int.Sign.SIGNED, org.jbm.mycc.cc.sema.types.Quals.NONE));
+            CType.Int forward = fixed.orElse(types.uint());
             tag.setType(forward);
             return forward;
         }
@@ -305,14 +305,26 @@ final class TypeBuilder {
             symbols.add(symbol);
             next = value.add(BigInteger.ONE);
         }
+        // The compatible type is gcc's choice: unsigned int when no value
+        // is negative, else int, widened when a value needs it.
         CType.Int underlying = fixed.orElseGet(() -> {
-            for (CType.Int candidate : List.of(types.int_(), types.uint(), types.long_(), types.ulong())) {
-                if (values.stream().allMatch(v -> fits(v, candidate))) return candidate;
+            boolean negative = values.stream().anyMatch(v -> v.signum() < 0);
+            List<CType.Int> candidates = negative ? List.of(types.int_(), types.long_()) : List.of(types.uint(), types.ulong());
+            for (CType.Int candidate : candidates) {
+                if (values.stream().allMatch(v -> fits(v, candidate))) {
+                    return candidate;
+                }
             }
             throw new SemaException("enumerator values do not fit any integer type", e.keyword());
         });
-        // Once complete, every enumerator has the enumerated type (6.7.3.3p16).
-        for (var symbol : symbols) symbol.setType(underlying);
+        // Once complete, an enumerator has the fixed type when there is
+        // one, else int when every value fits one, else the enumerated
+        // type (6.7.3.3p16).
+        boolean allInt = fixed.isEmpty() && values.stream().allMatch(v -> fits(v, types.int_()));
+        CType.Int member = allInt ? types.int_() : underlying;
+        for (var symbol : symbols) {
+            symbol.setType(member);
+        }
         tag.setType(underlying);
         return underlying;
     }
