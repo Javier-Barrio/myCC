@@ -2,55 +2,19 @@
 
 A C compiler in Java: preprocessor, parser, semantic analysis, and a
 lowering to a three-address code (TAC), plus a VM that executes the TAC
-and `cshell`, an interactive C shell in the spirit of `jshell`.
+and `cshell`, an interactive C shell in the spirit of `jshell`.  There is 
+also an x86-64 assembler built in.  The linker is planned but not yet implemented.
 
-The design lives in `docs/`: `tac-plan.md` (the TAC), `lower-plan.md`
-(the lowering), `cshell-plan.md` (compiler and VM decisions),
-`repl-plan.md` (the shell), `cpp-directives-plan.md` (the preprocessor).
+The compilation targets are x86-64 Linux and the cshell.
+
+Most of the design lives in `docs/`.  The compiler is WIP and is not production-ready at this point
+but supports enough to play with it and build the Lua and curl test suites.
 
 ## The language and the targets
 
 The compiler implements C as of the C2y working draft N3886, which is
-C23 plus a few small additions such as `_Countof`, compiled as C23 by
-default: `bool`, `nullptr`, `typeof`, `auto`, `static_assert`,
-`[[attributes]]`, `constexpr` objects, `_Countof`, and an empty
-parameter list `()` meaning `(void)`. `-std=c17` compiles older code instead:
-`()` declares a function without a prototype, so any arguments may be
-passed, and old-style definitions with an identifier list, `int f(a,
-b) int a; char b; { ... }`, are accepted. The older spellings `_Bool`,
-`_Alignas`, `_Alignof`, `_Static_assert` and `_Thread_local` work in
-both. GNU extensions that real code depends on are in as well:
-statement expressions `({ ... })`, `__attribute__((...))` (accepted and
-ignored), range designators `[a ... b]`, empty structs, zero-length
-arrays, `__builtin_expect`, `#pragma push_macro`. Not supported yet:
-variable length arrays, `_Complex`, `_Decimal` types, `long double`
-beyond `double` precision, `setjmp`, threads.
-
-The target is x86-64 Linux with the System V ABI: the VM and the
-shell lay out data as it does, the assembler writes ELF64 objects, and
-the printed assembly is for the GNU assembler; the C library is glibc's
-when a program is linked, and a small built-in subset of it in the VM.
-An ILP32 data model (`Ilp32`, 32-bit `long` and pointers) exists for
-the type system and the VM only, to keep the layout code honest; there
-is no code generator for it.
-
-## The commands
-
-`./gradlew installDist` builds the launchers; then `bin/mycc` is the
-compiler as a gcc-compatible command and `bin/cshell` the shell:
-
-```
-bin/mycc -c file.c -o file.o        # an ELF object, ready for gcc or ld
-bin/mycc -S -a file.c               # assembly with the TAC in comments
-bin/mycc -E -DX=1 -I inc file.c     # preprocessed
-bin/mycc -o prog a.c b.o -lm        # compiles the C and links through gcc
-bin/mycc -std=c17 -c old.c
-```
-
-`-O`, `-g`, `-W...`, `-f...`, `-m...` and the `-M` dependency flags
-are accepted and ignored, so a build system can be pointed at it with
-`CC=bin/mycc`. Until there is a linker of our own, the link step is
-gcc's; the objects are all ours.
+C23 plus a few small additions.  It also supports partially C17,
+including the `restrict` keyword.
 
 ## Lua and curl, as checks
 
@@ -100,8 +64,8 @@ tries every program and prints why the others fail.
 ## The shell
 
 ```
-./gradlew installDist
-build/install/cshell/bin/cshell
+./gradlew installDist       # builds the launchers under bin/
+bin/cshell
 ```
 
 The launcher runs on your terminal, which is what gives line editing,
@@ -135,7 +99,7 @@ in `~/.cshell_history`, and tab completion of names, members after
 
 Headers are not included unless you ask: `#include <stdio.h>` declares
 `printf`, and `-I dir` on the command line adds a directory for your
-own headers, `build/install/cshell/bin/cshell -I include`. The shell
+own headers, `bin/cshell -I include`. The shell
 and the VM see the bundled headers, a subset of the C library that the
 VM implements as builtins, bound by name while a header declares them;
 calling a function the VM does not have faults with "no definition".
@@ -144,22 +108,32 @@ A session can also be piped in: `echo '6 * 7' | ./gradlew -q cshell --console=pl
 
 ## Compiling a file
 
-`org.jbm.mycc.Main` prints the syntax tree, the typed tree and the TAC
-of a file, or with `-S` its x86-64 assembly, `-S -a` with each TAC
-instruction as a comment before the instructions it became:
+`bin/mycc` is the compiler as a command that takes gcc's flags, so a
+build system can be pointed at it with `CC=bin/mycc`:
 
 ```
-CP=build/classes/java/main:build/resources/main:$(find ~/.gradle -name 'annotations-26*.jar' | head -1)
-java -cp $CP org.jbm.mycc.Main file.c [-I dir]
-java -cp $CP org.jbm.mycc.Main -S -a file.c > file.s
-gcc -o prog file.s          # AT&T syntax for the GNU assembler; the C library is glibc's
-java -cp $CP org.jbm.mycc.Main -c file.c      # or our own assembler: writes file.o
-gcc -o prog file.o
+bin/mycc -o prog file.c              # compiles and links; the link step is gcc's for now
+bin/mycc -c file.c -o file.o         # an ELF object from our own assembler, for gcc or ld
+bin/mycc -S file.c                   # x86-64 assembly for the GNU assembler, AT&T syntax
+bin/mycc -S -a file.c                # the same with each TAC instruction as a comment before its code
+bin/mycc -E -DX=1 -I inc file.c      # preprocessed, to standard output
+bin/mycc -std=c17 -c old.c           # the older standard described above
+gcc -o prog file.s                   # or file.o: the C library is glibc's
 ```
 
-Without a file it compiles its built-in sample program. In the shell,
-`/asm name` shows a function's assembly the same way. `-std=c17`, on
-`Main` and on `cshell`, selects the older standard described above.
+`-O`, `-g`, `-W...`, `-f...`, `-m...` and the `-M` dependency flags
+are accepted and ignored; `-l`, `-L` and objects on a link line go to
+gcc with our objects. In the shell, `/asm name` shows a function's
+assembly the way `-S -a` does, and `bin/cshell -std=c17` selects the
+older standard there.
+
+The trees behind the code are printed by `Main`: the syntax tree, the
+typed tree and the TAC of a file, and without a file those of its
+built-in sample program:
+
+```
+java -cp "build/install/cshell/lib/*" org.jbm.mycc.Main file.c [-I dir] [-std=c17]
+```
 
 A native build (`-S` or `-c`) declares the C library from the system's
 own headers in `/usr/include`, the ones that match the glibc the
