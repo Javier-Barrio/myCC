@@ -471,10 +471,10 @@ class TyperTest {
         assertTrue(exprFails("int a, b;", "a + b = 1").getMessage().contains("not an lvalue"));
         assertTrue(exprFails("const int c;", "c = 1").getMessage().contains("const-qualified"));
         assertTrue(exprFails("int a[3];", "a = 0").getMessage().contains("array"));
-        assertTrue(exprFails("int *p; long *q;", "p = q").getMessage().contains("incompatible types"));
-        assertTrue(exprFails("int *p;", "p = 1").getMessage().contains("incompatible types"));
+        assertTrue(expr("int *p; long *q;", "p = q").startsWith("(assign:int * p:int * (ptr-to-ptr:int * "), "distinct pointer types convert, as gcc allows with a warning");
+        assertTrue(expr("int *p;", "p = 1").startsWith("(assign:int * p:int * (int-to-ptr:int * 1:int))"), "an integer converts to a pointer, as gcc allows with a warning");
         assertTrue(exprFails("int *p; double d;", "p = d").getMessage().contains("incompatible types"));
-        assertTrue(exprFails("int a; int *p;", "a = p").getMessage().contains("incompatible types"));
+        assertTrue(expr("int a; int *p;", "a = p").startsWith("(assign:int a:int (ptr-to-int:int "), "and a pointer to an integer");
         assertEquals("(assign:int * p:int * (ptr-to-ptr:int * (rv:const int * q:const int *)))", expr("int *p; const int *q;", "p = q"),
                 "discarding qualifiers is accepted, as gcc does with a warning");
         assertEquals("(assign:int (*)(void) fp:int (*)(void) (ptr-to-ptr:int (*)(void) (rv:void * v:void *)))", expr("int (*fp)(void); void *v;", "fp = v"),
@@ -594,7 +594,7 @@ class TyperTest {
         assertTrue(exprFails("int f(int);", "f()").getMessage().contains("too few arguments"));
         assertTrue(exprFails("int f(void);", "f(1)").getMessage().contains("too many arguments"));
         assertTrue(exprFails("int v(int, ...);", "v()").getMessage().contains("too few arguments"));
-        assertTrue(exprFails("int f(int *);", "f(1)").getMessage().contains("incompatible types when passing argument 1"));
+        assertTrue(exprFails("int f(int *);", "f(1.5)").getMessage().contains("incompatible types when passing argument 1"));
         assertTrue(expr("int f(int *); const int *q;", "f(q)").contains("ptr-to-ptr:int *"), "discarding qualifiers in a call is accepted");
         assertTrue(exprFails("int a;", "a()").getMessage().contains("not a function"));
         assertTrue(exprFails("int *p;", "p()").getMessage().contains("not a function"));
@@ -713,7 +713,7 @@ class TyperTest {
         assertEquals("(assign:int * p:int * (null:int * (sub:int 1:int 1:int)))", expr("int *p;", "p = 1 - 1"));
         assertEquals("(eq:int (rv:int * p:int *) (null:int * (int-to-int:long 0:int)))", expr("int *p;", "p == 0L")
                 .replace("(null:int * 0:long)", "(null:int * (int-to-int:long 0:int))"));
-        assertTrue(exprFails("int *p;", "p = 1 - 2").getMessage().contains("incompatible types"));
+        assertTrue(expr("int *p;", "p = 1 - 2").contains("int-to-ptr"), "not a null pointer constant, so a plain conversion");
     }
 
     // ---- statements and functions ------------------------------------------------------------
@@ -809,7 +809,7 @@ class TyperTest {
                 function("void g(void); void w(void) { return g(); }"));
         assertTrue(fails("int f(void) { return; }").getMessage().contains("should return a value"));
         assertTrue(fails("void f(void) { return 1; }").getMessage().contains("should not return a value"));
-        assertTrue(fails("int *f(void) { return 1; }").getMessage().contains("incompatible types when returning"));
+        assertTrue(fails("int *f(void) { return 1.5; }").getMessage().contains("incompatible types when returning"));
     }
 
     @Test
@@ -827,7 +827,7 @@ class TyperTest {
                 unit("int x; int x = 3; int y; extern int y; const char *p = \"hi\";"));
         assertEquals("(global d:double 1.0:double)", unit("double d = 1;"));
         assertTrue(fails("int f(void) = 1;").getMessage().contains("cannot have an initializer"));
-        assertTrue(fails("int *p = 1;").getMessage().contains("incompatible types when initializing"));
+        assertTrue(fails("int *p = 1.5;").getMessage().contains("incompatible types when initializing"));
     }
 
     // ---- enumerations ------------------------------------------------------------------------
@@ -845,6 +845,15 @@ class TyperTest {
         assertEquals(List.of("Q: int", "T: unsigned int", "t: unsigned int"), declaredTypes("typedef enum { Q } T; T t;"));
         assertEquals("(block (switch (rv:unsigned int e:unsigned int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
                 body("enum E { A, B } e;", "switch (e) { case A: case B: {} }"));
+    }
+
+    @Test
+    void aTagInsideADefinitionRefersToTheVisibleOne() {
+        String typed = unit("struct S; struct H { int (*f)(struct S *); }; struct S { int a; }; int g(struct S *s) { return s->a; }"
+                + " struct H h = { g }; int call(struct H *hh, struct S *s) { return hh->f(s); }");
+        assertTrue(typed.contains("(global h:struct H (init (0 &g:int (*)(struct S *))))"), typed);
+        assertTrue(unit("struct P { int x; }; void f(void) { struct P; struct P { int y; } q; q.y = 1; }").contains("q:struct P"), "but struct P; in a block declares a new one");
+        assertTrue(unit("int *p; unsigned *q = p; long *r = q; void f(void) { char c = 3; void *v = c; int n = v; }").contains("(local n:int (ptr-to-int:int"), "pointer and integer mixes convert, as gcc allows with a warning");
     }
 
     @Test

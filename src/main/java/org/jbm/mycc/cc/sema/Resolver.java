@@ -281,7 +281,11 @@ public final class Resolver extends AstWalker {
             return;
         }
         Token name = tag.get();
-        Optional<TagSymbol> visible = isDefinition || standaloneTagDeclaration
+        // `struct S;` declares S here; the tags inside a definition's
+        // members or a prototype's parameters are ordinary references.
+        boolean standalone = standaloneTagDeclaration;
+        standaloneTagDeclaration = false;
+        Optional<TagSymbol> visible = isDefinition || standalone
                 ? table.lookupTagHere(name.text)
                 : table.lookupTag(name.text);
         TagSymbol symbol = visible.orElseGet(() -> {

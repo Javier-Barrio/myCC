@@ -150,6 +150,24 @@ class ConditionalDirectivesTest {
     }
 
     @Test
+    void literalsInSkippedGroupsAndMacroArgumentsAreNotComments() {
+        assertExpandsTo("#if 0\nconst char *a = \"Accept: */*\";\n#endif\n#if 0\nint b = '/' + '*';\n#endif\nok", "ok");
+        assertExpandsTo("#if 0\n// a comment with /* in it\n#endif\nok", "ok");
+        assertExpandsTo("#define F(x) x\nF(\")\")", "\")\"");
+        assertExpandsTo("#define G(a, b) a b\nG(\", not IAC SE) \", ')')", "\", not IAC SE) \"", "')'");
+        assertExpandsTo("#define H(x) x\nH((1 /* ) */ + 2))", "(", "1", "+", "2", ")");
+    }
+
+    @Test
+    void tokensReportTheirPhysicalLine() {
+        CppTokenizer.TokenSet set = new Scanner().expand(CppTokenizer.tokenSet("#define A \\\n  1\n#define B \\\n\\\n 2\nint x = A + B;\nint y;"));
+        var physical = set.tokens.stream().filter(t -> t.token.type != TokenType.EOF && (t.token.text.equals("x") || t.token.text.equals("y"))).map(t -> t.token.physicalLine).toList();
+        assertEquals(List.of(6, 7), physical, "a continuation is deleted, but the physical line survives for diagnostics");
+        var logical = set.tokens.stream().filter(t -> t.token.type != TokenType.EOF && (t.token.text.equals("x") || t.token.text.equals("y"))).map(t -> t.token.line).toList();
+        assertEquals(List.of(3, 4), logical, "the logical line is what the stream is organized by");
+    }
+
+    @Test
     void pushAndPopMacro() {
         assertExpandsTo("#define A 1\n#pragma push_macro(\"A\")\n#undef A\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "1");
         assertExpandsTo("#pragma push_macro(\"A\")\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "A");
