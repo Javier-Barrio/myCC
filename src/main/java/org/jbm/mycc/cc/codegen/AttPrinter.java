@@ -28,7 +28,12 @@ public final class AttPrinter {
             for (Operand o : i.operands()) {
                 ops.add(target(i.mnemonic(), o));
             }
-            return ops.isEmpty() ? "  " + i.mnemonic() : "  " + i.mnemonic() + " " + String.join(", ", ops);
+            String mnemonic = switch (i.mnemonic()) {
+                case "icall" -> "call";
+                case "ijmp" -> "jmp";
+                default -> i.mnemonic();
+            };
+            return ops.isEmpty() ? "  " + mnemonic : "  " + mnemonic + " " + String.join(", ", ops);
         }
         if (item instanceof Item.Label l) {
             return l.name() + ":";
@@ -65,12 +70,10 @@ public final class AttPrinter {
         return "# " + n.text();
     }
 
-    // A call or jump whose target is a value, in a register or in memory,
-    // rather than a symbol: AT&T marks it with `*`.
+    // The IR's `icall` and `ijmp` are AT&T's `call *target` and `jmp *target`.
     private static String target(String mnemonic, Operand o) {
-        boolean transfer = mnemonic.equals("call") || mnemonic.equals("jmp");
-        boolean value = o instanceof Operand.Reg || o instanceof Operand.Mem;
-        return transfer && value ? "*" + operand(o) : operand(o);
+        boolean indirect = mnemonic.equals("icall") || mnemonic.equals("ijmp");
+        return indirect ? "*" + operand(o) : operand(o);
     }
 
     static String operand(Operand o) {

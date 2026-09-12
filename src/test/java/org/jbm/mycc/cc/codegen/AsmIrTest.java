@@ -30,10 +30,12 @@ class AsmIrTest {
         assertEquals("printf@PLT", AttPrinter.operand(plt("printf")));
         assertEquals(".LC0(%rip)", AttPrinter.operand(rip(".LC0")));
         assertEquals("stdout@GOTPCREL(%rip)", AttPrinter.operand(got("stdout")));
-        assertEquals("  call *%r10", AttPrinter.line(new Item.Insn("call", List.of(reg("r10")))), "a value as a target");
-        assertEquals("  jmp *8(%rbp)", AttPrinter.line(new Item.Insn("jmp", List.of(mem(8, "rbp")))));
+        assertEquals("  call *%r10", AttPrinter.line(new Item.Insn("icall", List.of(reg("r10")))), "the IR's icall");
+        assertEquals("  jmp *8(%rbp)", AttPrinter.line(new Item.Insn("ijmp", List.of(mem(8, "rbp")))));
         assertEquals("  call f", AttPrinter.line(new Item.Insn("call", List.of(sym("f")))));
-        assertEquals("  movq %r10, %rax", AttPrinter.line(new Item.Insn("movq", List.of(reg("r10"), reg("rax")))), "only a transfer");
+        assertEquals("  movq %r10, %rax", AttPrinter.line(new Item.Insn("movq", List.of(reg("r10"), reg("rax")))));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new Item.Insn("call", List.of(reg("r10"))), "a direct call takes a symbol");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new Item.Insn("icall", List.of(sym("f"))), "an indirect call takes a value");
     }
 
     @Test

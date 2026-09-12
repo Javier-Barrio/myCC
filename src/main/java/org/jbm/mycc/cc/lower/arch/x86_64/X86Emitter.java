@@ -660,7 +660,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         // %r10 is neither an argument register nor %rax, which a variadic call uses
         call(i.sig(), i.args(), i.into(), i.dst(), () -> {
             read(i.callee(), "r10");
-            asm.insn("call", reg("r10"));
+            asm.insn("icall", reg("r10"));
         });
         return null;
     }
