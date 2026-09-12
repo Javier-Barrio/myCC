@@ -498,8 +498,18 @@ final class ExprTyper {
                 return types.pointer(types.qualified(types.composite(types.unqualified(lTarget),
                         types.unqualified(rTarget)), quals));
             }
-            if (allowVoidAndNull && (lTarget.isVoid() || rTarget.isVoid())
-                    && !lTarget.isFunction() && !rTarget.isFunction()) {
+            if (allowVoidAndNull && (lTarget.isVoid() || rTarget.isVoid())) {
+                // void * absorbs any pointer, a function's too, which gcc
+                // allows as an extension; NULL is (void *)0, so f == NULL
+                // depends on this.
+                return types.pointer(types.qualified(types.void_(), quals));
+            }
+            if (allowVoidAndNull && (isNullish(l) || isNullish(r))) {
+                return isNullish(r) ? lt : rt;
+            }
+            if (allowVoidAndNull) {
+                // Distinct pointer types compared for equality: gcc warns and
+                // compares the addresses; so do we.
                 return types.pointer(types.qualified(types.void_(), quals));
             }
             return null;
@@ -507,6 +517,8 @@ final class ExprTyper {
         if (!allowVoidAndNull) return null;
         if (lt.isPointer() && isNullish(r)) return lt;
         if (rt.isPointer() && isNullish(l)) return rt;
+        if (lt.isPointer() && rt.isInteger()) return lt;
+        if (rt.isPointer() && lt.isInteger()) return rt;
         if (lt.isNullptr() && rt.isNullptr()) return lt;
         return null;
     }
@@ -774,16 +786,14 @@ final class ExprTyper {
         return new TExpr.VaStart(ap, types.void_(), e.token());
     }
 
-    // va_arg(ap, T) (7.16.1.1): the next unnamed argument as T, a scalar
-    // type; aggregates and long double are not supported yet.
+    // va_arg(ap, T) (7.16.1.1): the next unnamed argument as T: a scalar,
+    // or an aggregate, which our convention passes as a pointer to copy
+    // from. A long double is read as the double the VM computes it as.
     private TExpr vaArg(Expr.VaArg e) {
         Rvalue ap = vaListPointer(e.ap(), e.token());
         CType t = types.unqualified(builder.build(e.type()));
-        if (!t.isScalar()) {
-            throw unsupported("va_arg of a non-scalar type ('" + t.spelling() + "')", e.token());
-        }
-        if (t.isFloating() && types.size(t) > 8) {
-            throw unsupported("va_arg of long double", e.token());
+        if (!t.isScalar() && !t.isRecord() && !t.isArray()) {
+            throw new SemaException("va_arg of '" + t.spelling() + "'", e.token());
         }
         return new TExpr.VaArg(ap, t, e.token());
     }

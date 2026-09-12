@@ -228,7 +228,7 @@ public final class Assembler {
                 }
             }
             boolean code = s.name.equals(".text");
-            boolean writable = s.name.equals(".data") || s.isBss();
+            boolean writable = s.name.equals(".data") || s.name.equals(".data.rel.ro") || s.isBss();
             long size = s.isBss() ? laid.size : bytes.size();
             out.add(new ObjectFile.Section(s.name, s.isBss() ? new byte[0] : bytes.toByteArray(), size, s.align, code, writable, s.isBss()));
         }

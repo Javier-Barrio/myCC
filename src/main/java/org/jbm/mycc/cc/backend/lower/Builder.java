@@ -40,7 +40,7 @@ final class Builder {
 
     /** A fresh variable {@code %tN}, declared at {@link #finish} if used. */
     Var temp(@NonNull Type type) {
-        var v = new Var("t" + temps++, type);
+        var v = new Var("t" + temps++, type, false, 0, true);
         allocated.add(v);
         return v;
     }
