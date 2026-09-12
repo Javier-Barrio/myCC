@@ -71,7 +71,7 @@ of a file, or with `-S` its x86-64 assembly, `-S -a` with each TAC
 instruction as a comment before the instructions it became:
 
 ```
-CP=build/classes/java/main:$(find ~/.gradle -name 'annotations-26*.jar' | head -1)
+CP=build/classes/java/main:build/resources/main:$(find ~/.gradle -name 'annotations-26*.jar' | head -1)
 java -cp $CP org.jbm.mycc.Main file.c [-I dir]
 java -cp $CP org.jbm.mycc.Main -S -a file.c > file.s
 gcc -o prog file.s          # AT&T syntax for the GNU assembler; the C library is glibc's
