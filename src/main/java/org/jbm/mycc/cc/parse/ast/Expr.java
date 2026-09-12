@@ -166,6 +166,22 @@ public sealed interface Expr {
         }
     }
 
+    /** __builtin_va_start(ap, last): starts the argument list ap after the named parameter last. */
+    record VaStart(@NonNull Token token, @NonNull Expr ap, @NonNull Expr last) implements Expr {
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** __builtin_va_arg(ap, type-name): the next unnamed argument, as the type. */
+    record VaArg(@NonNull Token token, @NonNull Expr ap, @NonNull Type type) implements Expr {
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     /** ({ compound-statement }), GNU's statement expression: the value of the last expression statement. */
     record StmtExpr(@NonNull Token paren, @NonNull Stmt.Compound body) implements Expr {
         @Override

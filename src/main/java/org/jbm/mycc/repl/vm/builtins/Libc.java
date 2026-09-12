@@ -116,6 +116,35 @@ public final class Libc {
             }
             return new VM.IntValue(text.length());
         });
+        b.put("vprintf", (vm, a) -> {
+            String fmt = vm.memory().string(integer(a, 0));
+            String text = Printf.format(vm.memory(), fmt, Printf.fromVaList(vm.memory(), fmt, integer(a, 1), vm.pointerWidth()));
+            vm.out().print(text);
+            vm.out().flush();
+            return new VM.IntValue(text.length());
+        });
+        b.put("vfprintf", (vm, a) -> {
+            String fmt = vm.memory().string(integer(a, 1));
+            String text = Printf.format(vm.memory(), fmt, Printf.fromVaList(vm.memory(), fmt, integer(a, 2), vm.pointerWidth()));
+            writeTo(vm, integer(a, 0), text.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+            return new VM.IntValue(text.length());
+        });
+        b.put("vsprintf", (vm, a) -> {
+            String fmt = vm.memory().string(integer(a, 1));
+            String text = Printf.format(vm.memory(), fmt, Printf.fromVaList(vm.memory(), fmt, integer(a, 2), vm.pointerWidth()));
+            vm.memory().string(integer(a, 0), text);
+            return new VM.IntValue(text.length());
+        });
+        b.put("vsnprintf", (vm, a) -> {
+            String fmt = vm.memory().string(integer(a, 2));
+            String text = Printf.format(vm.memory(), fmt, Printf.fromVaList(vm.memory(), fmt, integer(a, 3), vm.pointerWidth()));
+            long n = integer(a, 1);
+            if (n > 0) {
+                String fitted = text.length() < n ? text : text.substring(0, (int) n - 1);
+                vm.memory().string(integer(a, 0), fitted);
+            }
+            return new VM.IntValue(text.length());
+        });
         b.put("puts", (vm, a) -> {
             vm.out().print(vm.memory().string(integer(a, 0)) + "\n");
             vm.out().flush();

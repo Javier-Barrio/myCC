@@ -3,6 +3,7 @@
 #define _STDIO_H
 
 #include <stddef.h>
+#include <stdarg.h>
 
 typedef struct _IO_FILE FILE;
 typedef long long fpos_t;
@@ -28,6 +29,10 @@ int printf(const char *format, ...);
 int fprintf(FILE *stream, const char *format, ...);
 int sprintf(char *s, const char *format, ...);
 int snprintf(char *s, size_t n, const char *format, ...);
+int vprintf(const char *format, va_list ap);
+int vfprintf(FILE *stream, const char *format, va_list ap);
+int vsprintf(char *s, const char *format, va_list ap);
+int vsnprintf(char *s, size_t n, const char *format, va_list ap);
 int scanf(const char *format, ...);
 int fscanf(FILE *stream, const char *format, ...);
 int sscanf(const char *s, const char *format, ...);

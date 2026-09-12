@@ -69,6 +69,40 @@ public final class Printf implements Builtin {
         return out.toString();
     }
 
+    /**
+     * The arguments a va_list holds for the format, read from where the
+     * list points and advancing it: 8 bytes each, an integer, a pointer
+     * or a double as the conversion says.
+     */
+    public static List<VM.Value> fromVaList(Memory memory, String fmt, long ap, int pointerWidth) {
+        long field = ap + 8;   // overflow_arg_area, after the two 32-bit offsets
+        long at = memory.loadInt(field, pointerWidth, false);
+        var args = new java.util.ArrayList<VM.Value>();
+        Matcher m = SPEC.matcher(fmt);
+        while (m.find()) {
+            char conv = m.group(5).charAt(0);
+            if (conv == '%') {
+                continue;
+            }
+            if ("*".equals(m.group(2))) {
+                args.add(new VM.IntValue(memory.loadInt(at, 64, true)));
+                at += 8;
+            }
+            if ("*".equals(m.group(3))) {
+                args.add(new VM.IntValue(memory.loadInt(at, 64, true)));
+                at += 8;
+            }
+            if ("fFeEgG".indexOf(conv) >= 0) {
+                args.add(new VM.FloatValue(memory.loadFloat(at, 64)));
+            } else {
+                args.add(new VM.IntValue(memory.loadInt(at, 64, true)));
+            }
+            at += 8;
+        }
+        memory.storeInt(field, pointerWidth, at);
+        return args;
+    }
+
     private static String one(Memory memory, char conv, String flags, String width, String precision, String length,
                               List<VM.Value> args, int[] next, String fmt) {
         switch (conv) {

@@ -338,6 +338,19 @@ public final class TacInvariants implements TacVisitor<Void> {
     }
 
     @Override
+    public Void visit(Instr.VaStart i) {
+        isPointer(i.ap());
+        return null;
+    }
+
+    @Override
+    public Void visit(Instr.VaArg i) {
+        isPointer(i.ap());
+        require(classOf(i.dst()) != RegClass.NONE, "vaarg into an aggregate");
+        return null;
+    }
+
+    @Override
     public Void visit(Instr.Call i) {
         Type.Func known = functionSigs.get(i.callee());
         require(known != null, "call of unknown @" + i.callee());

@@ -948,6 +948,21 @@ final class ExprLower implements TVisitor<Val> {
     }
 
     @Override
+    public Val visit(TExpr.VaStart e) {
+        Val ap = value(e.ap());
+        b.emit(new Instr.VaStart(ap.var(), e.token()));
+        return new Val(null, e.type());
+    }
+
+    @Override
+    public Val visit(TExpr.VaArg e) {
+        Val ap = value(e.ap());
+        Var d = temp(e.type());
+        b.emit(new Instr.VaArg(d, ap.var(), e.token()));
+        return new Val(d, e.type());
+    }
+
+    @Override
     public Val visit(TExpr.StmtExpr e) {
         if (stmts == null) {
             throw new IllegalStateException("a statement expression outside a function");

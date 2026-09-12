@@ -589,6 +589,22 @@ public final class TypedTreeInvariants implements TVisitor<Void>, TStmtVisitor<V
     }
 
     @Override
+    public Void visit(TExpr.VaStart e) {
+        node(e);
+        assertTrue(e.type().isVoid(), "va_start is a void expression");
+        assertTrue(e.ap().type().isPointer(), "va_start takes the pointer to the list");
+        return rvalue(e.ap());
+    }
+
+    @Override
+    public Void visit(TExpr.VaArg e) {
+        node(e);
+        assertTrue(e.type().isScalar(), "va_arg yields a scalar");
+        assertTrue(e.ap().type().isPointer(), "va_arg takes the pointer to the list");
+        return rvalue(e.ap());
+    }
+
+    @Override
     public Void visit(TExpr.StmtExpr e) {
         node(e);
         e.body().accept(this);

@@ -17,4 +17,6 @@ public interface TacVisitor<R> {
     R visit(Instr.Trap i);
     R visit(Instr.Call i);
     R visit(Instr.ICall i);
+    R visit(Instr.VaStart i);
+    R visit(Instr.VaArg i);
 }

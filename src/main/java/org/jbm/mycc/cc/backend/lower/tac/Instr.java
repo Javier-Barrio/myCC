@@ -255,6 +255,22 @@ public sealed interface Instr {
         }
     }
 
+    /** {@code vastart %ap}: the argument list at the address in {@code ap} set to the unnamed arguments of this call. */
+    record VaStart(@NonNull Var ap, @NonNull Token token) implements Instr {
+        @Override
+        public <R> R accept(TacVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code %dst = vaarg %ap}: the next unnamed argument of the list at {@code ap}, read as {@code dst}'s type. */
+    record VaArg(@NonNull Var dst, @NonNull Var ap, @NonNull Token token) implements Instr {
+        @Override
+        public <R> R accept(TacVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     /** {@code %dst = icall sig %callee(args) [into %into]}: through a pointer to function. */
     record ICall(@Nullable Var dst, @NonNull Type.Func sig, @NonNull Var callee, @NonNull List<Operand> args,
                  @Nullable Var into, @NonNull Token token) implements Instr {

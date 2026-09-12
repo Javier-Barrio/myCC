@@ -41,7 +41,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** A value. */
     sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
-            AddrOf, PtrAdd, PtrDiff, Call, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma, StmtExpr {
+            AddrOf, PtrAdd, PtrDiff, Call, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma, StmtExpr, VaStart, VaArg {
     }
 
     // ---- families -------------------------------------------------------------------------
@@ -622,6 +622,22 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     /** {@code c ? t : e} (6.5.16): the condition is a {@code bool}, the arms share the result type. */
     record Cond(@NonNull Rvalue condition, @NonNull Rvalue thenValue, @NonNull Rvalue elseValue, @NonNull CType type,
                 @NonNull Token token) implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code va_start(ap, last)}: ap points at the list; a void expression. */
+    record VaStart(@NonNull Rvalue ap, @NonNull CType type, @NonNull Token token) implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** {@code va_arg(ap, T)}: the next unnamed argument of the list ap points at, as the scalar T. */
+    record VaArg(@NonNull Rvalue ap, @NonNull CType type, @NonNull Token token) implements Rvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);

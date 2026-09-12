@@ -275,6 +275,20 @@ public abstract class AstRewriter implements Visitor<Object> {
     }
 
     @Override
+    public Object visit(Expr.VaStart e) {
+        Expr ap = rewrite(e.ap());
+        Expr last = rewrite(e.last());
+        return ap == e.ap() && last == e.last() ? e : new Expr.VaStart(e.token(), ap, last);
+    }
+
+    @Override
+    public Object visit(Expr.VaArg e) {
+        Expr ap = rewrite(e.ap());
+        Type type = rewrite(e.type());
+        return ap == e.ap() && type == e.type() ? e : new Expr.VaArg(e.token(), ap, type);
+    }
+
+    @Override
     public Object visit(Expr.StmtExpr e) {
         Stmt body = rewrite(e.body());
         return body == e.body() ? e : new Expr.StmtExpr(e.paren(), (Stmt.Compound) body);

@@ -384,6 +384,14 @@ class ParserTest {
         }
 
         @Test
+        void variableArgumentBuiltins() {
+            assertEquals("(va_arg ap (type int))", expr("__builtin_va_arg(ap, int)"));
+            assertEquals("(+ (va_arg ap (type (ptr char))) 1)", expr("__builtin_va_arg(ap, char *) + 1"));
+            assertEquals("(va_start ap n)", expr("__builtin_va_start(ap, n)"));
+            assertEquals("(call __builtin_va_end ap)", expr("__builtin_va_end(ap)"), "any other builtin is an ordinary call");
+        }
+
+        @Test
         void statementExpressions() {
             assertEquals("(stmtexpr (block (expr 1)))", expr("({ 1; })"));
             assertEquals("(stmtexpr (block (decl (x int 1)) (expr x)))", expr("({ int x = 1; x; })"));

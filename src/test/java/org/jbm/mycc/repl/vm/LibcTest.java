@@ -178,6 +178,26 @@ class LibcTest {
     }
 
     @Test
+    void thePrintfFamilyTakesAList() {
+        Run r = run("""
+                #include <stdarg.h>
+                #include <stdio.h>
+                int fmt(char *out, const char *f, ...) { va_list ap; va_start(ap, f); int n = vsnprintf(out, 16, f, ap); va_end(ap); return n; }
+                int log_(const char *f, ...) { va_list ap; va_start(ap, f); int n = vprintf(f, ap); va_end(ap); return n; }
+                int main(void) {
+                    char buf[16];
+                    int n = fmt(buf, "%d %s %.1f %c", 7, "x", 2.5, 'y');
+                    printf("%s|%d\\n", buf, n);
+                    n = fmt(buf, "%*d|%-*d|%s", 4, 1, 3, 2, "0123456789abcdef");
+                    printf("%s|%d\\n", buf, n);
+                    log_("%5.2f|%d|%s\\n", 3.14159, 7, "z");
+                    return 0;
+                }
+                """);
+        assertEquals("7 x 2.5 y|9\n   1|2  |012345|25\n 3.14|7|z\n", r.out());
+    }
+
+    @Test
     void faultsInTheLibrary() {
         assertThrows(IllegalStateException.class, () -> run("#include <stdio.h>\nint main(void) { return printf(\"%d\"); }"));
         assertThrows(IllegalStateException.class, () -> run("#include <stdio.h>\nint main(void) { return printf(\"%d\", 1.5); }"));

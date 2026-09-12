@@ -48,6 +48,13 @@ class TyperTest {
         return TypedPrinter.print(Typer.type(unit, Resolver.resolve(unit)));
     }
 
+    /** The printed body of the function defined last in {@code source}. */
+    private static String lastBody(String source) {
+        var unit = parse(source);
+        var typed = Typer.type(unit, Resolver.resolve(unit));
+        return TypedPrinter.print(typed.functions().get(typed.functions().size() - 1).body());
+    }
+
     /** The printed definition of the last function in {@code source}. */
     private static String function(String source) {
         var unit = parse(source);
@@ -1023,6 +1030,17 @@ class TyperTest {
         assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
         assertEquals("(rv:struct S s:struct S)", expr("struct S { int a; } s;", "(struct S)s"), "a cast to its own type, as gcc allows");
         assertEquals("(block (local y:int (stmtexpr:int (block) 3:int)))", body("", "int y = ({ 3; });"), "a statement expression's value is its last expression statement's");
+        assertEquals("(block (local ap:char *) (expr (va_start:void (rv:char * ap:char *))) (local x:int (va_arg:int (rv:char * ap:char *)))"
+                + " (local d:double (va_arg:double (rv:char * ap:char *))) (local p:const char * (va_arg:const char * (rv:char * ap:char *))))",
+                lastBody("typedef char *va_list; void f(int n, ...) { va_list ap; __builtin_va_start(ap, n); int x = __builtin_va_arg(ap, int);"
+                        + " double d = __builtin_va_arg(ap, double); const char *p = __builtin_va_arg(ap, const char *); }"));
+        assertEquals("(block (local ap:struct T [1]) (expr (va_start:void (decay:struct T * ap:struct T [1]))) (local x:int (va_arg:int (decay:struct T * ap:struct T [1]))))",
+                lastBody("typedef struct T { int a; } va_list[1]; void f(int n, ...) { va_list ap; __builtin_va_start(ap, n); int x = __builtin_va_arg(ap, int); }"),
+                "the list as an array of one, as SysV spells it");
+        assertTrue(fails("void f(int n) { char *ap; __builtin_va_start(ap, n); }").getMessage().contains("without '...'"));
+        assertTrue(fails("void f(int n, ...) { __builtin_va_start(n, n); }").getMessage().contains("must be a va_list"));
+        assertTrue(fails("struct S { int a; }; void f(int n, ...) { char *ap; struct S s = __builtin_va_arg(ap, struct S); }").getMessage().contains("non-scalar"));
+        assertTrue(fails("void f(int n, ...) { char *ap; long double d = __builtin_va_arg(ap, long double); }").getMessage().contains("long double"));
         assertEquals("(block (local a:int align 16) (local c:char align 8) (local z:int) (local b:char [3] align 16 (init (0 (int-to-int:char 1:int)))))",
                 body("", "alignas(16) int a; alignas(double) char c; alignas(0) int z; alignas(16) char b[3] = {1};"), "alignas is kept on the object");
         assertEquals("g:int align 32 1:int", init("alignas(32) int g = 1;"));

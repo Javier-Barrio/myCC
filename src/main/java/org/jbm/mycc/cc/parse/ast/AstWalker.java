@@ -227,6 +227,20 @@ public abstract class AstWalker implements Visitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visit(Expr.VaStart e) {
+        walk(e.ap());
+        walk(e.last());
+        return null;
+    }
+
+    @Override
+    public Void visit(Expr.VaArg e) {
+        walk(e.ap());
+        walk(e.type());
+        return null;
+    }
+
     // ---- statements ------------------------------------------------------------
 
     @Override

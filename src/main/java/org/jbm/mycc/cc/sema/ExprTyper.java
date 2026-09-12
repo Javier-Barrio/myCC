@@ -70,6 +70,13 @@ final class ExprTyper {
         this.blocks = blocks;
     }
 
+    // Whether the function being typed has `...`, for va_start.
+    private boolean variadic;
+
+    void setVariadic(boolean variadic) {
+        this.variadic = variadic;
+    }
+
     void setLocals(@Nullable List<Symbol> locals) {
         this.locals = locals;
     }
@@ -112,6 +119,8 @@ final class ExprTyper {
         if (e instanceof Expr.Conditional c) return conditional(c);
         if (e instanceof Expr.Comma c) return comma(c);
         if (e instanceof Expr.StmtExpr s) return stmtExpr(s);
+        if (e instanceof Expr.VaStart v) return vaStart(v);
+        if (e instanceof Expr.VaArg v) return vaArg(v);
         throw unsupported(e.getClass().getSimpleName(), tokenOf(e));
     }
 
@@ -749,6 +758,40 @@ final class ExprTyper {
         return new TExpr.StmtExpr(new TStmt.Block(List.copyOf(items), block.token()), value, type, e.paren());
     }
 
+    // va_start(ap, last) (7.16.1.4): in a function with `...`; ap decays
+    // to the pointer to the list. The named parameter is typed and not
+    // needed otherwise.
+    private TExpr vaStart(Expr.VaStart e) {
+        if (!variadic) {
+            throw new SemaException("va_start in a function without '...'", e.token());
+        }
+        Rvalue ap = vaListPointer(e.ap(), e.token());
+        type(e.last());
+        return new TExpr.VaStart(ap, types.void_(), e.token());
+    }
+
+    // va_arg(ap, T) (7.16.1.1): the next unnamed argument as T, a scalar
+    // type; aggregates and long double are not supported yet.
+    private TExpr vaArg(Expr.VaArg e) {
+        Rvalue ap = vaListPointer(e.ap(), e.token());
+        CType t = types.unqualified(builder.build(e.type()));
+        if (!t.isScalar()) {
+            throw unsupported("va_arg of a non-scalar type ('" + t.spelling() + "')", e.token());
+        }
+        if (t.isFloating() && types.size(t) > 8) {
+            throw unsupported("va_arg of long double", e.token());
+        }
+        return new TExpr.VaArg(ap, t, e.token());
+    }
+
+    private Rvalue vaListPointer(Expr ap, Token at) {
+        Rvalue pointer = rvalue(type(ap));
+        if (!pointer.type().isPointer()) {
+            throw new SemaException("the argument list must be a va_list ('" + pointer.type().spelling() + "')", at);
+        }
+        return pointer;
+    }
+
     private TExpr comma(Expr.Comma e) {
         Rvalue left = toVoid(rvalue(type(e.left())));
         Rvalue right = rvalue(type(e.right()));
@@ -865,6 +908,9 @@ final class ExprTyper {
         if (e instanceof Expr.Conditional c) return c.question();
         if (e instanceof Expr.Assign a) return a.op();
         if (e instanceof Expr.Comma c) return c.comma();
+        if (e instanceof Expr.StmtExpr s) return s.paren();
+        if (e instanceof Expr.VaStart v) return v.token();
+        if (e instanceof Expr.VaArg v) return v.token();
         throw new IllegalStateException(e.toString());
     }
 
