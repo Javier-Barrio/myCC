@@ -93,7 +93,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         this.module = module;
         this.function = function;
         this.frame = new Frame(module, function);
-        this.returnsAggregate = isAggregate(function.sig.ret());
+        this.returnsAggregate = isAggregate(function.sig.ret()) && X86Abi.classify(module, function.sig.ret()).memory();
         if (returnsAggregate) {
             intoSlot = frame.reserve(8, 8);
         }
@@ -164,11 +164,11 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
 
     // Each parameter from where the caller put it into its slot: the
     // integer and floating registers in order, then the stack above the
-    // return address, 8 bytes each. An aggregate arrives as a pointer to
-    // its bytes and is copied once every scalar is in its slot, since
-    // the copy uses %rsi, %rdi and %rcx. A function returning an
-    // aggregate gets the address to write it at as a hidden first
-    // integer argument.
+    // return address. A small aggregate arrives as one or two eightbytes
+    // in registers, a large one lies on the stack and is copied once
+    // every scalar is in its slot, since the copy uses %rsi, %rdi and
+    // %rcx. A function returning a large aggregate gets the address to
+    // write it at as a hidden first integer argument.
     private void spillParameters() {
         int ints = 0;
         int floats = 0;
@@ -187,9 +187,31 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             asm.insn("movq", reg(X86Abi.INT_ARGS.get(ints++)), mem(intoSlot, "rbp"));
         }
         List<Var> aggregates = new ArrayList<>();
-        List<Operand> pointers = new ArrayList<>();
+        List<Long> stackOffsets = new ArrayList<>();
         for (Var p : function.params) {
             RegClass c = module.target.classOf(p.type);
+            if (c == RegClass.NONE) {
+                X86Abi.Passing passing = X86Abi.classify(module, p.type);
+                boolean inRegisters = !passing.memory() && ints + passing.ints() <= X86Abi.INT_ARGS.size()
+                        && floats + passing.floats() <= X86Abi.FLOAT_ARGS.size();
+                if (inRegisters) {
+                    asm.comment(p + " from its argument registers");
+                    long size = module.sizeOf(p.type);
+                    for (int k = 0; k < passing.eightbytes().size(); k++) {
+                        int part = (int) Math.min(8, size - 8L * k);
+                        if (passing.eightbytes().get(k) == RegClass.FLOAT) {
+                            asm.insn(part == 4 ? "movss" : "movsd", reg(X86Abi.FLOAT_ARGS.get(floats++)), mem(frame.offset(p) + 8L * k, "rbp"));
+                        } else {
+                            storePartAt(X86Abi.INT_ARGS.get(ints++), part, frame.offset(p) + 8L * k, "rbp");
+                        }
+                    }
+                } else {
+                    aggregates.add(p);
+                    stackOffsets.add(16L + 8L * stack);
+                    stack += (int) ((module.sizeOf(p.type) + 7) / 8);
+                }
+                continue;
+            }
             if (c == RegClass.FLOAT) {
                 if (floats < X86Abi.FLOAT_ARGS.size()) {
                     asm.comment(p + " from its argument register");
@@ -204,10 +226,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             boolean inRegister = ints < X86Abi.INT_ARGS.size();
             String register = inRegister ? X86Abi.INT_ARGS.get(ints++) : null;
             Operand from = inRegister ? reg(register) : mem(16 + 8 * stack++, "rbp");
-            if (c == RegClass.NONE) {
-                aggregates.add(p);
-                pointers.add(from);
-            } else if (inRegister) {
+            if (inRegister) {
                 asm.comment(p + " from its argument register");
                 write(register, p);
             } else {
@@ -221,11 +240,59 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         namedStack = 8 * stack;
         for (int k = 0; k < aggregates.size(); k++) {
             Var p = aggregates.get(k);
-            asm.comment(p + " copied from the address in its argument");
-            asm.insn("movq", pointers.get(k), RSI);
+            asm.comment(p + " copied from the stack");
+            asm.insn("leaq", mem(stackOffsets.get(k), "rbp"), RSI);
             asm.insn("leaq", slot(p), RDI);
             asm.insn("movq", imm(module.sizeOf(p.type)), RCX);
             asm.insn("rep movsb");
+        }
+    }
+
+    // The low `bytes` of a register to memory at offset(base): 8, 4, 2 or
+    // 1 at once, an odd count as the pieces that make it, shifting the
+    // register down between them.
+    private void storePartAt(String register, int bytes, long offset, String base) {
+        long at = offset;
+        int left = bytes;
+        while (left > 0) {
+            int piece = left >= 8 ? 8 : left >= 4 ? 4 : left >= 2 ? 2 : 1;
+            asm.insn("mov" + suffix(piece * 8), reg(part(register, piece * 8)), mem(at, base));
+            if (left > piece) {
+                asm.insn("shrq", imm(piece * 8), reg(register));
+            }
+            at += piece;
+            left -= piece;
+        }
+    }
+
+    // `bytes` of memory at offset(base) into a register, zero-extended:
+    // an odd count is assembled from its pieces, the high piece first,
+    // through %r10 as the scratch.
+    private void loadPart(long offset, String base, int bytes, String register) {
+        switch (bytes) {
+            case 8 -> asm.insn("movq", mem(offset, base), reg(register));
+            case 4 -> asm.insn("movl", mem(offset, base), reg(part(register, 32)));
+            case 2 -> asm.insn("movzwq", mem(offset, base), reg(register));
+            case 1 -> asm.insn("movzbq", mem(offset, base), reg(register));
+            default -> {
+                int[] pieces = bytes >= 4 ? new int[]{4, bytes - 4} : new int[]{2, 1};
+                if (pieces[1] == 3) {
+                    pieces = new int[]{4, 2, 1};
+                }
+                asm.insn("xorl", reg(part(register, 32)), reg(part(register, 32)));
+                int start = 0;
+                for (int piece : pieces) {
+                    start += piece;
+                }
+                for (int i = pieces.length - 1; i >= 0; i--) {
+                    start -= pieces[i];
+                    loadPart(offset + start, base, pieces[i], "r10");
+                    if (start > 0) {
+                        asm.insn("shlq", imm(8 * start), reg("r10"));
+                    }
+                    asm.insn("orq", reg("r10"), reg(register));
+                }
+            }
         }
     }
 
@@ -655,12 +722,16 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 if (width(function.sig.ret()) == 32) {
                     asm.insn("cvtsd2ss", XMM0, XMM0);
                 }
-            } else if (isAggregate(function.sig.ret())) {
+            } else if (isAggregate(function.sig.ret()) && returnsAggregate) {
                 read(i.value(), "rsi");
                 asm.insn("movq", mem(intoSlot, "rbp"), RDI);
                 asm.insn("movq", imm(module.sizeOf(function.sig.ret())), RCX);
                 asm.insn("rep movsb");
                 asm.insn("movq", mem(intoSlot, "rbp"), RAX);
+            } else if (isAggregate(function.sig.ret())) {
+                // A small aggregate goes back in %rax, %rdx, %xmm0 and %xmm1 by its eightbytes.
+                read(i.value(), "r11");
+                eightbytesToRegisters(function.sig.ret(), "r11");
             } else {
                 read(i.value(), "rax");
             }
@@ -747,23 +818,71 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     }
 
     // One argument and how it travels: by its class, single when the
-    // callee's own parameter is an f32.
-    private record Arg(org.jbm.mycc.cc.backend.lower.tac.Operand operand, RegClass klass, boolean single) {
+    // callee's own parameter is an f32; an aggregate by its type and
+    // classification, its operand the pointer to it.
+    private record Arg(org.jbm.mycc.cc.backend.lower.tac.Operand operand, RegClass klass, boolean single,
+                       Type aggregate, X86Abi.Passing passing) {
+        Arg(org.jbm.mycc.cc.backend.lower.tac.Operand operand, RegClass klass, boolean single) {
+            this(operand, klass, single, null, null);
+        }
+    }
+
+    // The eightbytes of the aggregate at the address in `base` into the
+    // return registers: %rax then %rdx for INT, %xmm0 then %xmm1 for FLOAT.
+    private void eightbytesToRegisters(Type t, String base) {
+        X86Abi.Passing passing = X86Abi.classify(module, t);
+        long size = module.sizeOf(t);
+        int ints = 0;
+        int floats = 0;
+        for (int k = 0; k < passing.eightbytes().size(); k++) {
+            int part = (int) Math.min(8, size - 8L * k);
+            if (passing.eightbytes().get(k) == RegClass.FLOAT) {
+                asm.insn(part == 4 ? "movss" : "movsd", mem(8L * k, base), reg(floats++ == 0 ? "xmm0" : "xmm1"));
+            } else {
+                loadPart(8L * k, base, part, ints++ == 0 ? "rax" : "rdx");
+            }
+        }
+    }
+
+    // The return registers into the aggregate at the address in %r11.
+    private void registersToEightbytes(Type t) {
+        X86Abi.Passing passing = X86Abi.classify(module, t);
+        long size = module.sizeOf(t);
+        int ints = 0;
+        int floats = 0;
+        for (int k = 0; k < passing.eightbytes().size(); k++) {
+            int part = (int) Math.min(8, size - 8L * k);
+            if (passing.eightbytes().get(k) == RegClass.FLOAT) {
+                asm.insn(part == 4 ? "movss" : "movsd", reg(floats++ == 0 ? "xmm0" : "xmm1"), mem(8L * k, "r11"));
+            } else {
+                storePartAt(ints++ == 0 ? "rax" : "rdx", part, 8L * k, "r11");
+            }
+        }
     }
 
     // SysV: integers and pointers in six registers, floating values in
-    // eight, the rest on the stack right to left with the stack kept
+    // eight, the rest on the stack in order with the stack kept
     // 16-aligned at the call; %al counts the vector registers for a
-    // variadic callee. An aggregate result's address is the hidden first
-    // argument; an aggregate argument is already the pointer the TAC
-    // passes. The result goes from %rax or %xmm0 to dst.
+    // variadic callee. A small aggregate, whose operand is the pointer
+    // the TAC passes, goes as its eightbytes in registers when they all
+    // fit, else as a copy on the stack, as does a large one; a small
+    // aggregate result comes back in registers and is stored at `into`,
+    // a large one's address is the hidden first argument. An aggregate
+    // past a variadic callee's parameters stays the pointer, our own
+    // convention. The scalar result goes from %rax or %xmm0 to dst.
     private void call(Type.Func sig, List<org.jbm.mycc.cc.backend.lower.tac.Operand> operands, Var into, Var dst, Runnable emitCall) {
         List<Arg> args = new ArrayList<>();
-        if (into != null) {
+        boolean resultInMemory = into != null && X86Abi.classify(module, sig.ret()).memory();
+        if (resultInMemory) {
             args.add(new Arg(into, RegClass.INT, false));
         }
         for (int k = 0; k < operands.size(); k++) {
             org.jbm.mycc.cc.backend.lower.tac.Operand o = operands.get(k);
+            Type param = k < sig.params().size() ? sig.params().get(k) : null;
+            if (param != null && param.isAggregate()) {
+                args.add(new Arg(o, RegClass.NONE, false, param, X86Abi.classify(module, param)));
+                continue;
+            }
             RegClass c;
             if (o instanceof Var v) {
                 c = module.target.classOf(v.type);
@@ -772,16 +891,39 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
             } else {
                 c = RegClass.INT;
             }
-            boolean single = k < sig.params().size() && sig.params().get(k) instanceof Type.Float f && f.width() == 32;
+            boolean single = param instanceof Type.Float f && f.width() == 32;
             args.add(new Arg(o, c == RegClass.NONE ? RegClass.INT : c, single));
         }
+        // Registers by class, in order; what does not fit goes to the stack.
         List<Arg> onStack = new ArrayList<>();
         List<String> intRegs = new ArrayList<>();
         List<Arg> intArgs = new ArrayList<>();
         List<String> floatRegs = new ArrayList<>();
         List<Arg> floatArgs = new ArrayList<>();
+        var eightbyteRegs = new LinkedHashMap<Arg, List<String>>();
         for (Arg a : args) {
-            if (a.klass() == RegClass.FLOAT && floatRegs.size() < X86Abi.FLOAT_ARGS.size()) {
+            if (a.aggregate() != null) {
+                X86Abi.Passing p = a.passing();
+                boolean fits = !p.memory() && intRegs.size() + p.ints() <= X86Abi.INT_ARGS.size()
+                        && floatRegs.size() + p.floats() <= X86Abi.FLOAT_ARGS.size();
+                if (!fits) {
+                    onStack.add(a);
+                    continue;
+                }
+                var regs = new ArrayList<String>();
+                for (RegClass c : p.eightbytes()) {
+                    if (c == RegClass.FLOAT) {
+                        regs.add(X86Abi.FLOAT_ARGS.get(floatRegs.size()));
+                        floatRegs.add(regs.get(regs.size() - 1));
+                        floatArgs.add(null);
+                    } else {
+                        regs.add(X86Abi.INT_ARGS.get(intRegs.size()));
+                        intRegs.add(regs.get(regs.size() - 1));
+                        intArgs.add(null);
+                    }
+                }
+                eightbyteRegs.put(a, regs);
+            } else if (a.klass() == RegClass.FLOAT && floatRegs.size() < X86Abi.FLOAT_ARGS.size()) {
                 floatRegs.add(X86Abi.FLOAT_ARGS.get(floatRegs.size()));
                 floatArgs.add(a);
             } else if (a.klass() == RegClass.INT && intRegs.size() < X86Abi.INT_ARGS.size()) {
@@ -791,42 +933,76 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 onStack.add(a);
             }
         }
-        int pad = onStack.size() % 2 == 1 ? 8 : 0;
-        if (pad > 0) {
-            asm.insn("subq", imm(8), RSP);
+        // The stack arguments at increasing offsets from %rsp, the first at 0.
+        long stackBytes = 0;
+        var stackOffsets = new ArrayList<Long>();
+        for (Arg a : onStack) {
+            stackOffsets.add(stackBytes);
+            stackBytes += a.aggregate() == null ? 8 : (module.sizeOf(a.aggregate()) + 7) / 8 * 8;
         }
-        for (int k = onStack.size() - 1; k >= 0; k--) {
+        long reserved = (stackBytes + 15) / 16 * 16;
+        if (reserved > 0) {
+            asm.insn("subq", imm(reserved), RSP);
+        }
+        for (int k = 0; k < onStack.size(); k++) {
             Arg a = onStack.get(k);
-            if (a.klass() == RegClass.FLOAT) {
+            long at = stackOffsets.get(k);
+            if (a.aggregate() != null) {
+                read((Var) a.operand(), "rsi");
+                asm.insn("leaq", mem(at, "rsp"), RDI);
+                asm.insn("movq", imm(module.sizeOf(a.aggregate())), RCX);
+                asm.insn("rep movsb");
+            } else if (a.klass() == RegClass.FLOAT) {
                 readFloat(a.operand(), "xmm0");
-                asm.insn("subq", imm(8), RSP);
                 if (a.single()) {
                     asm.insn("cvtsd2ss", XMM0, XMM0);
-                    asm.insn("movss", XMM0, mem(0, "rsp"));
+                    asm.insn("movss", XMM0, mem(at, "rsp"));
                 } else {
-                    asm.insn("movsd", XMM0, mem(0, "rsp"));
+                    asm.insn("movsd", XMM0, mem(at, "rsp"));
                 }
             } else {
                 read(a.operand(), "rax");
-                asm.insn("pushq", RAX);
+                asm.insn("movq", RAX, mem(at, "rsp"));
             }
         }
         for (int k = 0; k < intArgs.size(); k++) {
-            read(intArgs.get(k).operand(), intRegs.get(k));
+            if (intArgs.get(k) != null) {
+                read(intArgs.get(k).operand(), intRegs.get(k));
+            }
         }
         for (int k = 0; k < floatArgs.size(); k++) {
-            readFloat(floatArgs.get(k).operand(), floatRegs.get(k));
-            if (floatArgs.get(k).single()) {
-                asm.insn("cvtsd2ss", reg(floatRegs.get(k)), reg(floatRegs.get(k)));
+            if (floatArgs.get(k) != null) {
+                readFloat(floatArgs.get(k).operand(), floatRegs.get(k));
+                if (floatArgs.get(k).single()) {
+                    asm.insn("cvtsd2ss", reg(floatRegs.get(k)), reg(floatRegs.get(k)));
+                }
+            }
+        }
+        // The aggregates' eightbytes last, through %r11, which no argument uses.
+        for (var entry : eightbyteRegs.entrySet()) {
+            Arg a = entry.getKey();
+            read((Var) a.operand(), "r11");
+            long size = module.sizeOf(a.aggregate());
+            for (int k = 0; k < entry.getValue().size(); k++) {
+                int part = (int) Math.min(8, size - 8L * k);
+                String register = entry.getValue().get(k);
+                if (register.startsWith("xmm")) {
+                    asm.insn(part == 4 ? "movss" : "movsd", mem(8L * k, "r11"), reg(register));
+                } else {
+                    loadPart(8L * k, "r11", part, register);
+                }
             }
         }
         if (sig.variadic()) {
             asm.insn("movl", imm(floatRegs.size()), EAX);
         }
         emitCall.run();
-        int popped = 8 * onStack.size() + pad;
-        if (popped > 0) {
-            asm.insn("addq", imm(popped), RSP);
+        if (reserved > 0) {
+            asm.insn("addq", imm(reserved), RSP);
+        }
+        if (into != null && !resultInMemory) {
+            read(into, "r11");
+            registersToEightbytes(sig.ret());
         }
         if (dst != null) {
             if (module.target.classOf(dst.type) == RegClass.FLOAT) {
