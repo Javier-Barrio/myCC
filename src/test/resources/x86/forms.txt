@@ -1,0 +1,136 @@
+# bytes from GNU as, then the instruction in AT&T syntax
+55  pushq %rbp
+50  pushq %rax
+4150  pushq %r8
+4889e5  movq %rsp, %rbp
+4989c2  movq %rax, %r10
+4c89d0  movq %r10, %rax
+488b45fc  movq -4(%rbp), %rax
+488b01  movq (%rcx), %rax
+488b4510  movq 16(%rbp), %rax
+488b85c8000000  movq 200(%rbp), %rax
+488b4424f8  movq -8(%rsp), %rax
+498b0424  movq (%r12), %rax
+498b4500  movq (%r13), %rax
+488901  movq %rax, (%rcx)
+488945f0  movq %rax, -16(%rbp)
+48897dc8  movq %rdi, -56(%rbp)
+48c7c02a000000  movq $42, %rax
+48c7c1ffffffff  movq $-1, %rcx
+49c7c12c010000  movq $300, %r9
+48c7c108000000  movq $8, %rcx
+8b45fc  movl -4(%rbp), %eax
+8b4df8  movl -8(%rbp), %ecx
+8945fc  movl %eax, -4(%rbp)
+897dfc  movl %edi, -4(%rbp)
+89c0  movl %eax, %eax
+89c9  movl %ecx, %ecx
+4589c0  movl %r8d, %r8d
+b801000000  movl $1, %eax
+b800000000  movl $0, %eax
+8b01  movl (%rcx), %eax
+8901  movl %eax, (%rcx)
+668945fc  movw %ax, -4(%rbp)
+668975fc  movw %si, -4(%rbp)
+668901  movw %ax, (%rcx)
+8845ff  movb %al, -1(%rbp)
+40887dff  movb %dil, -1(%rbp)
+408875ff  movb %sil, -1(%rbp)
+8801  movb %al, (%rcx)
+48b80000000000010000  movabsq $1099511627776, %rax
+48b90000000000010000  movabsq $1099511627776, %rcx
+486345fc  movslq -4(%rbp), %rax
+4863c0  movslq %eax, %rax
+486301  movslq (%rcx), %rax
+48637dfc  movslq -4(%rbp), %rdi
+4c634dfc  movslq -4(%rbp), %r9
+480fbe45ff  movsbq -1(%rbp), %rax
+480fbec0  movsbq %al, %rax
+480fbe01  movsbq (%rcx), %rax
+480fbf45fc  movswq -4(%rbp), %rax
+480fbfc0  movswq %ax, %rax
+480fb645ff  movzbq -1(%rbp), %rax
+480fb6c0  movzbq %al, %rax
+480fb6c9  movzbq %cl, %rcx
+480fb745fc  movzwq -4(%rbp), %rax
+480fb7c0  movzwq %ax, %rax
+488d45fc  leaq -4(%rbp), %rax
+488d7df8  leaq -8(%rbp), %rdi
+488d052d010000  leaq g(%rip), %rax
+488b0500000000  movq stdout@GOTPCREL(%rip), %rax
+4801c8  addq %rcx, %rax
+4829c8  subq %rcx, %rax
+480fafc1  imulq %rcx, %rax
+4821c8  andq %rcx, %rax
+4809c8  orq %rcx, %rax
+4831c8  xorq %rcx, %rax
+4839c8  cmpq %rcx, %rax
+4885c0  testq %rax, %rax
+4883c410  addq $16, %rsp
+4881c4c8000000  addq $200, %rsp
+4883ec10  subq $16, %rsp
+4883ec08  subq $8, %rsp
+4881ecc8000000  subq $200, %rsp
+4883f803  cmpq $3, %rax
+4883f8ff  cmpq $-1, %rax
+483de8030000  cmpq $1000, %rax
+83e001  andl $1, %eax
+31d2  xorl %edx, %edx
+31c0  xorl %eax, %eax
+20c8  andb %cl, %al
+08c8  orb %cl, %al
+48d3e0  shlq %cl, %rax
+48d3e8  shrq %cl, %rax
+48d3f8  sarq %cl, %rax
+48d1e9  shrq $1, %rcx
+480fbaf83f  btcq $63, %rax
+4899  cqto
+48f7f9  idivq %rcx
+48f7f1  divq %rcx
+0f94c0  sete %al
+0f95c0  setne %al
+0f9cc0  setl %al
+0f9ec0  setle %al
+0f92c0  setb %al
+0f96c0  setbe %al
+0f97c0  seta %al
+0f93c0  setae %al
+0f9ac1  setp %cl
+0f9bc1  setnp %cl
+c9  leave
+c3  ret
+0f0b  ud2
+f3a4  rep movsb
+f3aa  rep stosb
+e89e000000  call f
+e800000000  call printf@PLT
+41ffd2  call *%r10
+ffe0  jmp *%rax
+f20f1045f0  movsd -16(%rbp), %xmm0
+f20f104df0  movsd -16(%rbp), %xmm1
+f20f1145f0  movsd %xmm0, -16(%rbp)
+f20f1001  movsd (%rcx), %xmm0
+f20f1101  movsd %xmm0, (%rcx)
+f20f110424  movsd %xmm0, (%rsp)
+f20f100560000000  movsd .LC0(%rip), %xmm0
+f20f100d58000000  movsd .LC0(%rip), %xmm1
+f20f1145e0  movsd %xmm0, -32(%rbp)
+f30f1045dc  movss -36(%rbp), %xmm0
+f30f114ddc  movss %xmm1, -36(%rbp)
+f30f1001  movss (%rcx), %xmm0
+f30f1101  movss %xmm0, (%rcx)
+f30f110424  movss %xmm0, (%rsp)
+f20f104510  movsd 16(%rbp), %xmm0
+f30f5ac0  cvtss2sd %xmm0, %xmm0
+f20f5ac0  cvtsd2ss %xmm0, %xmm0
+f20f5adb  cvtsd2ss %xmm3, %xmm3
+f2480f2ac0  cvtsi2sdq %rax, %xmm0
+f2480f2ac1  cvtsi2sdq %rcx, %xmm0
+f2480f2cc0  cvttsd2siq %xmm0, %rax
+f20f58c1  addsd %xmm1, %xmm0
+f20f5cc1  subsd %xmm1, %xmm0
+f20f59c1  mulsd %xmm1, %xmm0
+f20f5ec1  divsd %xmm1, %xmm0
+f20f58c0  addsd %xmm0, %xmm0
+660f2ec1  ucomisd %xmm1, %xmm0
+660f2ec8  ucomisd %xmm0, %xmm1
