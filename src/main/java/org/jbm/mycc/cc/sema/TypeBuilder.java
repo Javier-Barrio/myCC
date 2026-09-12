@@ -134,15 +134,15 @@ final class TypeBuilder {
     }
 
     // An array size is an integer constant expression greater than zero
-    // (6.7.7.3p1, p4); any other integer expression would make a variable
-    // length array.
+    // (6.7.7.3p1, p4), or zero as GNU allows; any other integer expression
+    // would make a variable length array.
     private long arraySize(Expr size, Token at) {
         if (evaluator == null) throw new IllegalStateException("no constant evaluator");
         Optional<TExpr.IntConst> c = evaluator.tryEvaluate(size);
         if (c.isEmpty()) throw unsupported("variable length arrays", at);
         long n = c.get().value();
         boolean negative = types.isSigned(c.get().type()) && n < 0;
-        if (negative || n == 0) throw new SemaException("array size must be positive", at);
+        if (negative) throw new SemaException("array size must be positive", at);
         if (n < 0) throw new SemaException("array size is too large", at);
         return n;
     }
@@ -229,7 +229,7 @@ final class TypeBuilder {
                 throw new SemaException("declaration does not declare a member", at);
             }
         }
-        if (fields.isEmpty()) throw new SemaException(s.keyword().text + " has no members", s.keyword());
+        // No members is GNU's extension: a record of size 0 and alignment 1.
         tag.setLayout(Layout.of(types, tag.isUnion(), fields));
         return record;
     }
