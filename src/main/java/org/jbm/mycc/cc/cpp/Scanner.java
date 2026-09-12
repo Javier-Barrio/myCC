@@ -60,7 +60,8 @@ public class Scanner {
             int close = matchingCloseParen(rest);
             if (close >= 0) {
                 var closeParen = rest.tokens.get(close);
-                var args = splitArguments(rest.tokens.subList(1, close), definition.params.size());
+                boolean variadic = !definition.params.isEmpty() && definition.params.get(definition.params.size() - 1).text.equals("...");
+                var args = splitArguments(rest.tokens.subList(1, close), definition.params.size(), variadic);
                 var remainder = new TokenSet(rest.tokens.subList(close + 1, rest.tokens.size()));
 
                 var fp = new ArrayList<TokenSet>();
@@ -262,13 +263,15 @@ public class Scanner {
         return t.hideSet.stream().anyMatch(h -> h.text.equals(name));
     }
 
+    // `__VA_ARGS__` names the `...` parameter.
     private static int paramIndex(ArrayList<TokenSet> params, CppToken t) {
         if (t.token.type != TokenType.IDENTIFIER) {
             return -1;
         }
+        String wanted = t.token.text.equals("__VA_ARGS__") ? "..." : t.token.text;
         for (int i = 0; i < params.size(); i++) {
             var p = params.get(i).tokens;
-            if (!p.isEmpty() && p.get(0).token.text.equals(t.token.text)) {
+            if (!p.isEmpty() && p.get(0).token.text.equals(wanted)) {
                 return i;
             }
         }
@@ -303,7 +306,9 @@ public class Scanner {
     // Splits the tokens between an invocation's parens into one TokenSet
     // per top-level comma. `THUNK()` with no formals yields no arguments,
     // while `ONE_ARG()` with one formal yields a single empty argument.
-    private static ArrayList<TokenSet> splitArguments(List<CppToken> inner, int paramCount) {
+    // For a variadic macro the commas from the last formal on belong to
+    // `__VA_ARGS__`, so the split stops there.
+    private static ArrayList<TokenSet> splitArguments(List<CppToken> inner, int paramCount, boolean variadic) {
         var args = new ArrayList<TokenSet>();
         if (inner.isEmpty() && paramCount == 0) {
             return args;
@@ -316,7 +321,8 @@ public class Scanner {
                     case "(" -> depth++;
                     case ")" -> depth--;
                     case "," -> {
-                        if (depth == 0) {
+                        boolean lastIsVariadic = variadic && args.size() == paramCount - 1;
+                        if (depth == 0 && !lastIsVariadic) {
                             args.add(new TokenSet(current));
                             current = new ArrayList<>();
                             continue;

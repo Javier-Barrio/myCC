@@ -50,6 +50,22 @@ public class VM implements TacVisitor<Void> {
         out = stream;
     }
 
+    /** Provides {@code name} as an object with these bytes, for a declaration such as {@code extern FILE *stdout}. */
+    public void bindObject(String name, byte[] bytes) {
+        Long existing = addresses.get(name);
+        long address = existing != null ? existing : memory.allocate(bytes.length, 8);
+        memory.write(address, bytes);
+        addresses.put(name, address);
+    }
+
+    // State a builtin keeps for the life of the VM, such as open files.
+    private final Map<String, Object> attachments = new LinkedHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public <T> T attachment(String key, java.util.function.Supplier<T> initial) {
+        return (T) attachments.computeIfAbsent(key, k -> initial.get());
+    }
+
     /** Provides {@code name} as a builtin; a later module defining it takes precedence. */
     public void bind(String name, Builtin builtin) {
         builtins.put(name, builtin);

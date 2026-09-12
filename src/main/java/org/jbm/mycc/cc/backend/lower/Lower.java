@@ -141,13 +141,15 @@ public final class Lower {
         module.functions.add(fn);
     }
 
-    // The end of the body (lower-plan.md): ret for void, ret 0 for main,
-    // a trap for any other non-void function that falls off the end.
+    // The end of the body: ret for void, and for a scalar result a zero,
+    // since falling off the end is undefined only when the caller uses
+    // the value; an aggregate result has nowhere to come from, so a trap.
     private void endOfBody(Builder b, TFunction f, CType returnType) {
         if (!b.isOpen()) return;
         Token at = f.body().token();
         if (returnType.isVoid()) b.emit(new Instr.Ret(null, at));
-        else if (f.symbol().name.equals("main")) b.emit(new Instr.Ret(new Operand.IntImm(0), at));
+        else if (returnType.isArithmetic() && !returnType.isInteger()) b.emit(new Instr.Ret(new Operand.FloatImm(0.0), at));
+        else if (returnType.isScalar()) b.emit(new Instr.Ret(new Operand.IntImm(0), at));
         else b.emit(new Instr.Trap("end of non-void function", at));
     }
 }

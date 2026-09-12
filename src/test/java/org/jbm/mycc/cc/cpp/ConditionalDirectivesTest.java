@@ -112,6 +112,24 @@ class ConditionalDirectivesTest {
     }
 
     @Test
+    void lineAndFileMacros() {
+        assertExpandsTo("__LINE__\n\n__LINE__", "1", "3");
+        assertExpandsTo("#line 100\n__LINE__\n__LINE__", "100", "101");
+        assertExpandsTo("#define N 7\n#line N\n__LINE__", "7");
+        assertExpandsTo("#line 5 \"other.c\"\n__FILE__ __LINE__", "\"other.c\"", "5");
+        assertExpandsTo("__FILE__", "\"<source>\"");
+        assertExpandsTo("#line 20\n#if __LINE__ == 20\nyes\n#endif", "yes");
+        assertTrue(fails("#line x\n").contains("#line needs a line number"));
+    }
+
+    @Test
+    void errorDirective() {
+        assertTrue(fails("#error this build is wrong\n").contains("#error this build is wrong"));
+        assertExpandsTo("#if 0\n#error not here\n#endif\nok", "ok");
+        assertTrue(fails("#if 1\n#error yes\n#endif").contains("#error yes"));
+    }
+
+    @Test
     void errors() {
         assertTrue(fails("#if 1\n#else\n#else\n#endif").contains("#else after #else"));
         assertTrue(fails("#if 1\n#else\n#elif 1\n#endif").contains("#elif after #else"));

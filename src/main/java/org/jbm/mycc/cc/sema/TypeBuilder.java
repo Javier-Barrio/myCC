@@ -268,12 +268,12 @@ final class TypeBuilder {
         }
         Optional<CType.Int> fixed = e.underlying().map(u -> fixedUnderlying(u, e.keyword()));
         if (e.enumerators().isEmpty()) {
-            // A reference or forward declaration: complete only with a fixed type.
-            if (fixed.isPresent()) {
-                tag.setType(fixed.get());
-                return fixed.get();
-            }
-            throw new SemaException("enum '" + tag.name.orElse("<anonymous>") + "' is incomplete", e.keyword());
+            // A reference or forward declaration: complete with its fixed
+            // type, else as int, which is what gcc does and what real code
+            // expects of `enum E;` before the definition.
+            CType.Int forward = fixed.orElse(new CType.Int(CType.Int.Rank.INT, CType.Int.Sign.SIGNED, org.jbm.mycc.cc.sema.types.Quals.NONE));
+            tag.setType(forward);
+            return forward;
         }
         var values = new ArrayList<BigInteger>();
         var symbols = new ArrayList<Symbol.Enumerator>();

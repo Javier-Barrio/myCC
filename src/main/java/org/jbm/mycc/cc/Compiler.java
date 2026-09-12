@@ -14,6 +14,8 @@ import org.jbm.mycc.cc.sema.Resolver;
 import org.jbm.mycc.cc.sema.Typer;
 import org.jbm.mycc.cc.backend.lower.tac.Module;
 import org.jbm.mycc.cc.sema.tast.TUnit;
+import org.jbm.mycc.cc.sema.types.CType;
+import org.jbm.mycc.cc.sema.types.Target;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,8 +55,36 @@ public final class Compiler {
         return run(source, headers, file, types, true);
     }
 
+    /** The macros the target and the compiler predefine: the data model, the architecture, the standard. */
+    public static String predefined(@NonNull Types types) {
+        Target t = types.target();
+        StringBuilder sb = new StringBuilder();
+        sb.append("#define __STDC__ 1\n");
+        sb.append("#define __STDC_VERSION__ 202311L\n");
+        sb.append("#define __STDC_HOSTED__ 1\n");
+        sb.append("#define __CHAR_BIT__ 8\n");
+        sb.append("#define __SIZEOF_SHORT__ ").append(t.width(CType.Int.Rank.SHORT) / 8).append('\n');
+        sb.append("#define __SIZEOF_INT__ ").append(t.width(CType.Int.Rank.INT) / 8).append('\n');
+        sb.append("#define __SIZEOF_LONG__ ").append(t.width(CType.Int.Rank.LONG) / 8).append('\n');
+        sb.append("#define __SIZEOF_LONG_LONG__ ").append(t.width(CType.Int.Rank.LLONG) / 8).append('\n');
+        sb.append("#define __SIZEOF_POINTER__ ").append(t.pointerWidth() / 8).append('\n');
+        if (t.width(CType.Int.Rank.LONG) == 64 && t.pointerWidth() == 64) {
+            sb.append("#define __LP64__ 1\n#define _LP64 1\n");
+        } else if (t.pointerWidth() == 32) {
+            sb.append("#define __ILP32__ 1\n#define _ILP32 1\n");
+        }
+        if (t.pointerWidth() == 64) {
+            sb.append("#define __x86_64__ 1\n#define __x86_64 1\n#define __amd64__ 1\n");
+        } else {
+            sb.append("#define __i386__ 1\n");
+        }
+        sb.append("#define __linux__ 1\n#define __linux 1\n#define __unix__ 1\n#define __unix 1\n#define __gnu_linux__ 1\n");
+        sb.append("#define __ORDER_LITTLE_ENDIAN__ 1234\n#define __ORDER_BIG_ENDIAN__ 4321\n#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__\n");
+        return sb.toString();
+    }
+
     private static Compiled run(String source, @Nullable HeaderProvider headers, String file, Types types, boolean script) {
-        TokenSet tokens = TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file)));
+        TokenSet tokens = TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file, predefined(types))));
         List<Decl> ast = script ? Parser.parseScript(tokens) : Parser.parse(tokens);
         List<Decl> desugared = Desugar.desugar(ast);
         TUnit typed = Typer.type(desugared, Resolver.resolve(desugared), types);

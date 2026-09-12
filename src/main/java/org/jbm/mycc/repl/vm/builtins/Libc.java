@@ -18,12 +18,84 @@ import java.util.Map;
  */
 public final class Libc {
 
+    /** The standard streams' handles, what the {@code stdin}, {@code stdout} and {@code stderr} objects hold. */
+    public static final long STDIN = 1;
+    public static final long STDOUT = 2;
+    public static final long STDERR = 3;
+
     private Libc() {
     }
 
-    /** Binds every builtin on the VM. */
+    /** Binds every builtin and the standard stream objects on the VM. */
     public static void bind(VM vm) {
         all().forEach(vm::bind);
+        objects().forEach(vm::bindObject);
+    }
+
+    /** The objects the library provides: {@code stdin}, {@code stdout}, {@code stderr} hold their stream handles. */
+    public static Map<String, byte[]> objects() {
+        Map<String, byte[]> o = new LinkedHashMap<>();
+        o.put("stdin", handle(STDIN));
+        o.put("stdout", handle(STDOUT));
+        o.put("stderr", handle(STDERR));
+        return o;
+    }
+
+    private static byte[] handle(long h) {
+        byte[] b = new byte[8];
+        for (int k = 0; k < 8; k++) {
+            b[k] = (byte) (h >> (8 * k));
+        }
+        return b;
+    }
+
+    // Open files by handle, from 4 up; 1 to 3 are the standard streams.
+    private static final class Files {
+        final Map<Long, java.io.RandomAccessFile> open = new LinkedHashMap<>();
+        long next = 4;
+    }
+
+    private static Files files(VM vm) {
+        return vm.attachment("files", Files::new);
+    }
+
+    private static java.io.RandomAccessFile file(VM vm, long handle) {
+        java.io.RandomAccessFile f = files(vm).open.get(handle);
+        if (f == null) {
+            throw new IllegalStateException("not an open file: handle " + handle);
+        }
+        return f;
+    }
+
+    // Bytes to a handle: the standard streams to the VM's output, a file to its position.
+    private static long writeTo(VM vm, long handle, byte[] data) {
+        if (handle == STDOUT || handle == STDERR) {
+            vm.out().print(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
+            vm.out().flush();
+            return data.length;
+        }
+        try {
+            file(vm, handle).write(data);
+            return data.length;
+        } catch (java.io.IOException e) {
+            return 0;
+        }
+    }
+
+    // Bytes from a file handle into `data`; the count read, -1 at the end.
+    private static int readFrom(VM vm, long handle, byte[] data) {
+        if (handle == STDIN) {
+            try {
+                return System.in.read(data);
+            } catch (java.io.IOException e) {
+                return -1;
+            }
+        }
+        try {
+            return file(vm, handle).read(data);
+        } catch (java.io.IOException e) {
+            return -1;
+        }
     }
 
     public static Map<String, Builtin> all() {
@@ -59,6 +131,102 @@ public final class Libc {
             vm.out().flush();
             return new VM.IntValue(0);
         });
+        b.put("fopen", (vm, a) -> {
+            String name = vm.memory().string(integer(a, 0));
+            String mode = vm.memory().string(integer(a, 1));
+            try {
+                java.io.File f = new java.io.File(name);
+                if (mode.startsWith("r") && !f.exists()) {
+                    return new VM.IntValue(0);
+                }
+                java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "rw");
+                if (mode.startsWith("w")) {
+                    raf.setLength(0);
+                } else if (mode.startsWith("a")) {
+                    raf.seek(raf.length());
+                }
+                Files files = files(vm);
+                long handle = files.next++;
+                files.open.put(handle, raf);
+                return new VM.IntValue(handle);
+            } catch (java.io.IOException e) {
+                return new VM.IntValue(0);
+            }
+        });
+        b.put("fclose", (vm, a) -> {
+            try {
+                java.io.RandomAccessFile f = files(vm).open.remove(integer(a, 0));
+                if (f != null) {
+                    f.close();
+                }
+                return new VM.IntValue(f == null ? -1 : 0);
+            } catch (java.io.IOException e) {
+                return new VM.IntValue(-1);
+            }
+        });
+        b.put("fwrite", (vm, a) -> {
+            long count = integer(a, 1) * integer(a, 2);
+            byte[] data = vm.memory().read(integer(a, 0), (int) count);
+            return new VM.IntValue(writeTo(vm, integer(a, 3), data) / Math.max(integer(a, 1), 1));
+        });
+        b.put("fread", (vm, a) -> {
+            long count = integer(a, 1) * integer(a, 2);
+            byte[] data = new byte[(int) count];
+            int n = readFrom(vm, integer(a, 3), data);
+            vm.memory().write(integer(a, 0), java.util.Arrays.copyOf(data, Math.max(n, 0)));
+            return new VM.IntValue(Math.max(n, 0) / Math.max(integer(a, 1), 1));
+        });
+        b.put("fgetc", (vm, a) -> {
+            byte[] one = new byte[1];
+            int n = readFrom(vm, integer(a, 0), one);
+            return new VM.IntValue(n <= 0 ? -1 : one[0] & 0xff);
+        });
+        b.put("getc", b.get("fgetc"));
+        b.put("fgets", (vm, a) -> {
+            long buf = integer(a, 0);
+            int n = (int) integer(a, 1);
+            StringBuilder sb = new StringBuilder();
+            byte[] one = new byte[1];
+            while (sb.length() < n - 1) {
+                if (readFrom(vm, integer(a, 2), one) <= 0) {
+                    break;
+                }
+                sb.append((char) (one[0] & 0xff));
+                if (one[0] == '\n') {
+                    break;
+                }
+            }
+            if (sb.length() == 0) {
+                return new VM.IntValue(0);
+            }
+            vm.memory().string(buf, sb.toString());
+            return new VM.IntValue(buf);
+        });
+        b.put("feof", (vm, a) -> {
+            try {
+                java.io.RandomAccessFile f = file(vm, integer(a, 0));
+                return new VM.IntValue(f.getFilePointer() >= f.length() ? 1 : 0);
+            } catch (java.io.IOException e) {
+                return new VM.IntValue(1);
+            }
+        });
+        b.put("fprintf", (vm, a) -> {
+            String text = Printf.format(vm.memory(), vm.memory().string(integer(a, 1)), a.subList(2, a.size()));
+            writeTo(vm, integer(a, 0), text.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+            return new VM.IntValue(text.length());
+        });
+        b.put("fputs", (vm, a) -> {
+            String s = vm.memory().string(integer(a, 0));
+            writeTo(vm, integer(a, 1), s.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+            return new VM.IntValue(1);
+        });
+        b.put("fputc", (vm, a) -> {
+            int c = (int) (integer(a, 0) & 0xff);
+            writeTo(vm, integer(a, 1), new byte[] {(byte) c});
+            return new VM.IntValue(c);
+        });
+        b.put("putc", b.get("fputc"));
+        b.put("remove", (vm, a) -> new VM.IntValue(new java.io.File(vm.memory().string(integer(a, 0))).delete() ? 0 : -1));
         // string.h
         b.put("strlen", (vm, a) -> new VM.IntValue(vm.memory().string(integer(a, 0)).length()));
         b.put("strcmp", (vm, a) -> new VM.IntValue(compare(vm.memory().string(integer(a, 0)), vm.memory().string(integer(a, 1)))));
@@ -86,6 +254,13 @@ public final class Libc {
             long dst = integer(a, 0);
             vm.memory().string(dst, vm.memory().string(dst) + vm.memory().string(integer(a, 1)));
             return new VM.IntValue(dst);
+        });
+        b.put("strrchr", (vm, a) -> {
+            long s = integer(a, 0);
+            int c = (int) (integer(a, 1) & 0xff);
+            String text = vm.memory().string(s);
+            int at = c == 0 ? text.length() : text.lastIndexOf((char) c);
+            return new VM.IntValue(at < 0 ? 0 : s + at);
         });
         b.put("strchr", (vm, a) -> {
             long s = integer(a, 0);

@@ -27,6 +27,11 @@ public final class PpExpr {
     private int pos;
     private final Token at;
 
+    // Above zero inside an operand that `&&`, `||` or `?:` does not
+    // evaluate: it is still parsed, but a division by zero there is not
+    // an error.
+    private int unevaluated;
+
     private PpExpr(List<Token> tokens, Token at) {
         this.tokens = tokens;
         this.at = at;
@@ -83,12 +88,29 @@ public final class PpExpr {
         if (!accept("?")) {
             return c;
         }
-        Value a = conditional();
+        Value a = operand(conditional_(), c.isTrue());
         expect(":");
-        Value b = conditional();
+        Value b = operand(conditional_(), !c.isTrue());
         boolean unsigned = a.unsigned || b.unsigned;
         Value chosen = c.isTrue() ? a : b;
         return new Value(chosen.bits, unsigned);
+    }
+
+    // Parses an operand, evaluated or not.
+    private java.util.function.Supplier<Value> conditional_() {
+        return this::conditional;
+    }
+
+    private Value operand(java.util.function.Supplier<Value> parse, boolean evaluated) {
+        if (evaluated) {
+            return parse.get();
+        }
+        unevaluated++;
+        try {
+            return parse.get();
+        } finally {
+            unevaluated--;
+        }
     }
 
     private static final String[][] LEVELS = {
@@ -106,7 +128,9 @@ public final class PpExpr {
                 return left;
             }
             pos++;
-            Value right = binary(level + 1);
+            boolean skipped = (op.text.equals("&&") && !left.isTrue()) || (op.text.equals("||") && left.isTrue());
+            int next = level + 1;
+            Value right = operand(() -> binary(next), !skipped);
             left = apply(op, left, right);
         }
     }
@@ -229,6 +253,9 @@ public final class PpExpr {
                 return bool(r);
             }
             case "<<", ">>" -> {
+                if ((y < 0 || y >= 64) && unevaluated > 0) {
+                    return new Value(0, a.unsigned);
+                }
                 if (y < 0 || y >= 64) {
                     throw error("shift count out of range in preprocessor expression", op);
                 }
@@ -247,6 +274,9 @@ public final class PpExpr {
                 return new Value(x * y, unsigned);
             }
             case "/", "%" -> {
+                if (y == 0 && unevaluated > 0) {
+                    return new Value(0, unsigned);
+                }
                 if (y == 0) {
                     throw error("division by zero in preprocessor expression", op);
                 }

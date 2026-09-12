@@ -31,6 +31,20 @@ class CompilerTest {
     }
 
     @Test
+    void theTargetIsPredefined() {
+        String p = Compiler.predefined(X64);
+        assertTrue(p.contains("#define __LP64__ 1\n"), p);
+        assertTrue(p.contains("#define __x86_64__ 1\n"), p);
+        assertTrue(p.contains("#define __SIZEOF_LONG__ 8\n"), p);
+        assertTrue(p.contains("#define __STDC_VERSION__ 202311L\n"), p);
+        Compiler.Compiled c = Compiler.compile("#if defined(__LP64__) && __SIZEOF_POINTER__ == 8\nint ok = 1;\n#else\nint ok = 0;\n#endif",
+                BundledHeaders.INSTANCE, "t.c", X64);
+        assertTrue(TacWriter.print(c.tac()).contains("@ok : i32 align 4 = { 0 : i32 1 }"));
+        String ilp = Compiler.predefined(new Types(org.jbm.mycc.cc.backend.arch.Ilp32.INSTANCE));
+        assertTrue(ilp.contains("#define __ILP32__ 1\n") && !ilp.contains("__LP64__"), ilp);
+    }
+
+    @Test
     void compileIsTheWholePipeline() {
         org.jbm.mycc.cc.Compiler.Compiled c = org.jbm.mycc.cc.Compiler.compile("int sq(int x) { return x * x; }", BundledHeaders.INSTANCE, "t.c", X64);
         assertEquals(1, c.ast().size());

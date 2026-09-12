@@ -100,6 +100,17 @@ class PpExprTest {
     }
 
     @Test
+    void anUnevaluatedOperandMayDivideByZero() {
+        assertEquals(0, value("0 && (1 / 0)"));
+        assertEquals(1, value("1 || (1 / 0)"));
+        assertEquals(3, value("1 ? 3 : (1 / 0)"));
+        assertEquals(4, value("0 ? (1 / 0) : 4"));
+        assertEquals(0, value("0 && (1 << 99)"));
+        assertTrue(fails("1 && (1 / 0)").contains("division by zero"), "an evaluated one is still an error");
+        assertTrue(fails("0 || (1 % 0)").contains("division by zero"));
+    }
+
+    @Test
     void errors() {
         assertTrue(fails("1.5").contains("not an integer constant"));
         assertTrue(fails("\"s\"").contains("string literal"));

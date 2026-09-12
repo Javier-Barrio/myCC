@@ -401,15 +401,13 @@ final class ExprTyper {
         if (to instanceof CType.Pointer tp) {
             if (isNullish(x)) return convert(x, to);
             if (from instanceof CType.Pointer fp) {
+                // Discarded qualifiers and a function pointer through void *
+                // are constraint violations that gcc only warns about, and
+                // real code relies on both; accepted here without a word.
                 CType tt = tp.target(), ft = fp.target();
-                boolean qualsOk = tt.quals().plus(ft.quals()).equals(tt.quals());
                 boolean compatible = types.compatible(types.unqualified(tt), types.unqualified(ft));
-                boolean viaVoid = (tt.isVoid() || ft.isVoid()) && !tt.isFunction() && !ft.isFunction();
-                if (qualsOk && (compatible || viaVoid)) return convert(x, to);
-                if (compatible || viaVoid) {
-                    throw new SemaException(context + " '" + to.spelling() + "' from '" + from.spelling()
-                            + "' discards qualifiers", at);
-                }
+                boolean viaVoid = tt.isVoid() || ft.isVoid();
+                if (compatible || viaVoid) return convert(x, to);
             }
         }
         if (to.isNullptr() && isNullish(x)) return x.type().isNullptr() ? x : new TExpr.NullToPtr(x, to, at);
