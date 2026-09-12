@@ -557,7 +557,7 @@ public final class Repl {
     private Set<String> declaredNames(String text) {
         Trial atEnd = trial(kept, kept.size(), text, Set.of());
         try {
-            Compiler.Parsed parsed = Compiler.parseScript(atEnd.text(), headers, FILE);
+            Compiler.Parsed parsed = Compiler.parseScript(atEnd.text(), headers, FILE, types.std());
             return names(parsed.ast(), atEnd, text);
         } catch (RuntimeException e) {
             return names(List.of(), atEnd, text);

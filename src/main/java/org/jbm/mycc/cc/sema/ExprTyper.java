@@ -328,7 +328,11 @@ final class ExprTyper {
                     + callee.type().spelling() + "')", at);
         }
         int given = e.arguments().size(), expected = f.parameters().size();
-        if (given < expected || given > expected && !f.isVariadic()) {
+        // Without a prototype (C17) any arguments go, each default promoted.
+        if (!f.hasPrototype()) {
+            expected = 0;
+        }
+        if (given < expected || given > expected && !f.isVariadic() && f.hasPrototype()) {
             throw new SemaException("too " + (given < expected ? "few" : "many") + " arguments to function: expected "
                     + expected + (f.isVariadic() ? " or more" : "") + ", got " + given, at);
         }

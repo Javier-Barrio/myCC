@@ -1,5 +1,6 @@
 package org.jbm.mycc.cc.backend.lower;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.cc.backend.arch.Ilp32;
 import org.jbm.mycc.cc.backend.lower.Lower;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
@@ -36,7 +37,7 @@ class LowerTest {
 
     static Module lower(String source, Types types) {
         CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
-        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
+        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens)), types.std()));
         TUnit typed = Typer.type(unit, Resolver.resolve(unit), types);
         Module m = Lower.lower(typed, types);
         TacInvariants.check(m);
@@ -626,6 +627,15 @@ class LowerTest {
         assertEquals("  %t0 = addrof @f\n  mov.u64 %fp, %t0", instrs("int f(int); int (*fp)(int);", "fp = f;"));
         assertEquals("  mov.s32 %t0, 1\n  %t1 = call (i32) -> i32 @f(%t0)", instrs("int f(int);", "(&f)(1);"));
         assertEquals("  %t0 = addrof @f\n  mov.s32 %t1, 1\n  %t2 = icall (i32) -> i32 %t0(%t1)", instrs("int f(int);", "((int (*)(int)) (void *) f)(1);"));
+    }
+
+    @Test
+    void c17FunctionsWithoutAPrototypeAreVariadic() {
+        String tac = unitOn(new Types(X86_64SysV.INSTANCE, Std.C17), "int f() { return 1; } int add(a, b) int a; char b; { return a + b; } int g(void) { return f(2, 3.5) + add(1, 2); }");
+        assertTrue(tac.contains("define @f(...) -> i32 {"), tac);
+        assertTrue(tac.contains("define @add(i32 %a, i8 %b, ...) -> i32 {"), tac);
+        assertTrue(tac.contains("= call (...) -> i32 @f(%t0, %t1)"), tac);
+        assertTrue(tac.contains("= call (i32, i8, ...) -> i32 @add(%t3, %t4)"), tac);
     }
 
     @Test

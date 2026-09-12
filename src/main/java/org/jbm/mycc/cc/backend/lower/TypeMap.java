@@ -59,7 +59,8 @@ final class TypeMap {
     Type.Func func(@NonNull CType.Function f) {
         var params = new ArrayList<Type>(f.parameters().size());
         for (var p : f.parameters()) params.add(of(p));
-        return new Type.Func(params, f.isVariadic(), of(f.returnType()));
+        // Without a prototype the arguments are whatever the caller passes, promoted: a variadic signature.
+        return new Type.Func(params, f.isVariadic() || !f.hasPrototype(), of(f.returnType()));
     }
 
     /** The module's name for a tag, defining the structure on first sight of a complete one. */

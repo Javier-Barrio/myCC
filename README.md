@@ -8,6 +8,32 @@ The design lives in `docs/`: `tac-plan.md` (the TAC), `lower-plan.md`
 (the lowering), `cshell-plan.md` (compiler and VM decisions),
 `repl-plan.md` (the shell), `cpp-directives-plan.md` (the preprocessor).
 
+## The language and the targets
+
+The compiler implements C as of the C2y working draft N3886, which is
+C23 plus a few small additions such as `_Countof`, compiled as C23 by
+default: `bool`, `nullptr`, `typeof`, `auto`, `static_assert`,
+`[[attributes]]`, `constexpr`-era literals, and an empty parameter
+list `()` meaning `(void)`. `-std=c17` compiles older code instead:
+`()` declares a function without a prototype, so any arguments may be
+passed, and old-style definitions with an identifier list, `int f(a,
+b) int a; char b; { ... }`, are accepted. The older spellings `_Bool`,
+`_Alignas`, `_Alignof`, `_Static_assert` and `_Thread_local` work in
+both. GNU extensions that real code depends on are in as well:
+statement expressions `({ ... })`, `__attribute__((...))` (accepted and
+ignored), range designators `[a ... b]`, empty structs, zero-length
+arrays, `__builtin_expect`, `#pragma push_macro`. Not supported yet:
+variable length arrays, `_Complex`, `_Decimal` types, `long double`
+beyond `double` precision, `setjmp`, threads.
+
+The target is x86-64 Linux with the System V ABI: the VM and the
+shell lay out data as it does, the assembler writes ELF64 objects, and
+the printed assembly is for the GNU assembler; the C library is glibc's
+when a program is linked, and a small built-in subset of it in the VM.
+An ILP32 data model (`Ilp32`, 32-bit `long` and pointers) exists for
+the type system and the VM only, to keep the layout code honest; there
+is no code generator for it.
+
 ## Build and test
 
 Java 17 and the Gradle wrapper are all that is needed:
@@ -21,8 +47,9 @@ The typed and TAC corpus goldens under `src/test/resources` are
 regenerated with `./gradlew test -Dtyped.update=true -Dtac.update=true`.
 
 `src/test/resources/c-testsuite` holds the single-file programs of
-[c-testsuite](https://github.com/c-testsuite/c-testsuite); the ones in
-`passing.txt` must pass on the VM and natively. `./gradlew test
+[c-testsuite](https://github.com/c-testsuite/c-testsuite), compiled as
+C17 since they predate C23; the ones in `passing.txt` must pass on the
+VM and natively. `./gradlew test
 -Dctestsuite.report=true --tests '*CTestsuiteTest*' -i | grep CTESTSUITE`
 tries every program and prints why the others fail.
 
@@ -86,4 +113,5 @@ gcc -o prog file.o
 ```
 
 Without a file it compiles its built-in sample program. In the shell,
-`/asm name` shows a function's assembly the same way.
+`/asm name` shows a function's assembly the same way. `-std=c17`, on
+`Main` and on `cshell`, selects the older standard described above.

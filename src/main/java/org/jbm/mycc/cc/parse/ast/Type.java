@@ -128,10 +128,11 @@ public sealed interface Type {
     /** function-declarator (6.7.7.1). {@code (void)} yields an empty parameter list. */
     record Function(@NonNull Token paren, @NonNull Type returnType, @NonNull List<Parameter> parameters,
                     boolean isVariadic,
+                    boolean hasPrototype,
                     @NonNull Quals quals) implements Type {
         @Override
         public Type withQuals(Quals q) {
-            return new Function(paren, returnType, parameters, isVariadic, q);
+            return new Function(paren, returnType, parameters, isVariadic, hasPrototype, q);
         }
 
         @Override

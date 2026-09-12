@@ -222,6 +222,7 @@ public final class AstPrinter implements Visitor<String> {
         sb.append(t.parameters().stream().map(AstPrinter::parameter).collect(Collectors.joining(" ")));
         sb.append(')');
         if (t.isVariadic()) sb.append(" ...");
+        if (!t.hasPrototype()) sb.append(" old-style");
         return sb.append(')').toString();
     }
 

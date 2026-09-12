@@ -1,5 +1,6 @@
 package org.jbm.mycc.cc.sema;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.cc.backend.arch.Ilp32;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ParseException;
@@ -22,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,6 +48,18 @@ class TyperTest {
     private static String unit(String source) {
         var unit = parse(source);
         return TypedPrinter.print(Typer.type(unit, Resolver.resolve(unit)));
+    }
+
+    private static final Types C17 = new Types(X86_64SysV.INSTANCE, Std.C17);
+
+    /** The typed unit, printed, compiled as C17. */
+    private static String unitC17(String source) {
+        var unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source))), Std.C17));
+        return TypedPrinter.print(Typer.type(unit, Resolver.resolve(unit), C17));
+    }
+
+    private static SemaException failsC17(String source) {
+        return assertThrows(SemaException.class, () -> unitC17(source));
     }
 
     /** The printed body of the function defined last in {@code source}. */
@@ -831,6 +845,25 @@ class TyperTest {
         assertEquals(List.of("Q: int", "T: unsigned int", "t: unsigned int"), declaredTypes("typedef enum { Q } T; T t;"));
         assertEquals("(block (switch (rv:unsigned int e:unsigned int) (cases 0 1) (block (label case 0) (label case 1) (block))))",
                 body("enum E { A, B } e;", "switch (e) { case A: case B: {} }"));
+    }
+
+    @Test
+    void c17FunctionsWithoutAPrototype() {
+        assertTrue(fails("int f(); int g(void) { return f(1); }").getMessage().contains("too many arguments"), "C23: () is (void)");
+        String typed = unitC17("int f(); int g(void) { return f(1, 2.5f, 'c', \"s\"); }");
+        assertTrue(typed.contains("(call:int f:int () 1:int (float-to-float:double 2.5:float) 99:int (decay:char *"), typed);
+        String viaPointer = unitC17("int (*p)(); int h(void) { return p(1); }");
+        assertTrue(viaPointer.contains("(global p:int (*)())") && viaPointer.contains("p:int (*)()) 1:int)"), viaPointer);
+        String old = unitC17("long add(a, b) int a; char b; { return a + b; } long use(void) { return add(1, 2); }");
+        assertTrue(old.contains("(function add:long (int, char) (params a:int b:char)"), old);
+        assertTrue(old.contains("(call:long add:long (int, char) 1:int 2:int)"), old);
+        assertTrue(unitC17("int f(); int f(int x) { return x; }").contains("(function f:int (int)"), "the prototype is the composite");
+        assertTrue(unitC17("int f(int x); int f() { return 1; }").contains("(function f:int (int)"));
+        assertNotNull(unitC17("int f(); int f();"));
+        assertTrue(failsC17("int g(); int g(char c) { return c; }").getMessage().contains("conflicting types"), "char promotes to int");
+        assertTrue(failsC17("int g(); int g(int, ...);").getMessage().contains("conflicting types"), "a variadic prototype never matches");
+        assertTrue(failsC17("int k(a, b) int a, b; { return a; } int k(int x);").getMessage().contains("conflicting types"), "an old-style definition fixes the count");
+        assertNotNull(unitC17("int f(); int f(void); int g(int x, int y); int g();"), "all compatible");
     }
 
     @Test

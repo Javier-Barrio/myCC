@@ -46,6 +46,8 @@ class CompilerTest {
         assertTrue(p.contains("#define __x86_64__ 1\n"), p);
         assertTrue(p.contains("#define __SIZEOF_LONG__ 8\n"), p);
         assertTrue(p.contains("#define __STDC_VERSION__ 202311L\n"), p);
+        String c17 = Compiler.predefined(new Types(X86_64SysV.INSTANCE, org.jbm.mycc.cc.sema.types.Std.C17));
+        assertTrue(c17.contains("#define __STDC_VERSION__ 201710L\n"), c17);
         Compiler.Compiled c = Compiler.compile("#if defined(__LP64__) && __SIZEOF_POINTER__ == 8\nint ok = 1;\n#else\nint ok = 0;\n#endif",
                 BundledHeaders.INSTANCE, "t.c", X64);
         assertTrue(TacWriter.print(c.tac()).contains("@ok : i32 align 4 = { 0 : i32 1 }"));

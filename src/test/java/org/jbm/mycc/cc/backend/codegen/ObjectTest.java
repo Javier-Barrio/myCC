@@ -34,18 +34,26 @@ class ObjectTest {
     }
 
     static Compiler.Compiled compile(String source) {
-        return Compiler.compile(source, BundledHeaders.INSTANCE, "test.c", new Types(X86_64SysV.INSTANCE));
+        return compile(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    static Compiler.Compiled compile(String source, Types types) {
+        return Compiler.compile(source, BundledHeaders.INSTANCE, "test.c", types);
     }
 
     record Run(int exit, String out) {
     }
 
     static Run link(String source) throws Exception {
+        return link(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    static Run link(String source, Types types) throws Exception {
         assumeTrue(Native.gccAvailable(), "gcc is not available");
         Path dir = Files.createTempDirectory("mycc-object");
         Path o = dir.resolve("prog.o");
         Path exe = dir.resolve("prog");
-        Files.write(o, Codegen.object(compile(source).tac()));
+        Files.write(o, Codegen.object(compile(source, types).tac()));
         Process gcc = new ProcessBuilder("gcc", "-o", exe.toString(), o.toString(), "-lm").redirectErrorStream(true).start();
         String gccOut = new String(gcc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (!gcc.waitFor(60, TimeUnit.SECONDS) || gcc.exitValue() != 0) {
