@@ -599,7 +599,7 @@ public final class TypedTreeInvariants implements TVisitor<Void>, TStmtVisitor<V
     @Override
     public Void visit(TExpr.VaArg e) {
         node(e);
-        assertTrue(e.type().isScalar(), "va_arg yields a scalar");
+        assertTrue(e.type().isScalar() || e.type().isRecord() || e.type().isArray(), "va_arg yields a scalar or an aggregate");
         assertTrue(e.ap().type().isPointer(), "va_arg takes the pointer to the list");
         return rvalue(e.ap());
     }

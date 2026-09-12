@@ -120,7 +120,9 @@ final class TypeBuilder {
     }
 
     private CType array(Type.Array a, boolean inParameter) {
-        if (a.isStar()) throw unsupported("variable length arrays", a.bracket());
+        // `[*]` and a non-constant size are variable length arrays, not
+        // supported: they compile as zero-length arrays, so a program that
+        // declares one still builds. Soft failure by design.
         if (!inParameter && (a.isStatic() || !a.quals().isEmpty())) {
             throw new SemaException("static or type qualifiers in an array declarator are only allowed in a parameter",
                     a.bracket());
@@ -139,7 +141,9 @@ final class TypeBuilder {
     private long arraySize(Expr size, Token at) {
         if (evaluator == null) throw new IllegalStateException("no constant evaluator");
         Optional<TExpr.IntConst> c = evaluator.tryEvaluate(size);
-        if (c.isEmpty()) throw unsupported("variable length arrays", at);
+        if (c.isEmpty()) {
+            return 0;   // a variable length array, compiled as a zero-length one
+        }
         long n = c.get().value();
         boolean negative = types.isSigned(c.get().type()) && n < 0;
         if (negative) throw new SemaException("array size must be positive", at);

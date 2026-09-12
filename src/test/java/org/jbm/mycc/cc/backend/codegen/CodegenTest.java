@@ -158,8 +158,13 @@ class CodegenTest {
     @Test
     void aggregatesCrossCallsByAddress() {
         String asm = function("struct P { int a; int b; }; struct P mk(int a) { struct P p = { a, a }; return p; }");
-        assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -56(%rbp)"), asm);
-        assertTrue(asm.contains("rep movsb\n  movq -56(%rbp), %rax\n  leave"), asm);
+        assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -40(%rbp)"), asm);
+        assertTrue(asm.contains("rep movsb\n  movq -40(%rbp), %rax\n  leave"), asm);
+        assertTrue(asm.contains("%t1 at -32(%rbp), %t2 at -32(%rbp), %t3 at -32(%rbp)"), "temporaries share a slot once their last read is past: " + asm);
+        String table = Native.assembly("int f(void) { return 1; } int (*const table[1])(void) = { f }; const int k = 3; const char *const s = \"x\";");
+        assertTrue(table.contains(".section .data.rel.ro\n  .globl table\n  .balign 8"), "read-only data with addresses is relocated: " + table);
+        assertTrue(table.contains(".section .rodata\n  .globl k\n  .balign 4"), table);
+        assertTrue(table.indexOf(".globl s") > table.indexOf(".data.rel.ro"), table);
         String param = function("struct P { int a; int b; }; int sum(struct P p) { return p.a + p.b; }");
         assertTrue(param.contains("# %p copied from the address in its argument\n  movq %rdi, %rsi\n  leaq -8(%rbp), %rdi\n  movq $8, %rcx\n  rep movsb"), param);
         String mixed = function("struct P { int a; int b; }; int f(struct P p, int b) { return p.a + b; }");

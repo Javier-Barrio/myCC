@@ -957,10 +957,24 @@ final class ExprLower implements TVisitor<Val> {
     @Override
     public Val visit(TExpr.VaArg e) {
         Val ap = value(e.ap());
-        Var d = temp(e.type());
+        CType t = e.type();
+        if (t.isRecord() || t.isArray()) {
+            // The argument is the address of the caller's object: copy it
+            // into an object of our own and yield that.
+            Var from = b.temp(Type.PTR);
+            b.emit(new Instr.VaArg(from, ap.var(), e.token()));
+            Var object = b.local("vaarg." + ++vaArgTemps, typeMap.of(t), false);
+            Var at = b.temp(Type.PTR);
+            b.emit(new Instr.AddrOfVar(at, object, e.token()));
+            b.emit(new Instr.Store(at, from, typeMap.of(t), false, e.token()));
+            return new Val(at, t);
+        }
+        Var d = temp(t);
         b.emit(new Instr.VaArg(d, ap.var(), e.token()));
-        return new Val(d, e.type());
+        return new Val(d, t);
     }
+
+    private int vaArgTemps;
 
     @Override
     public Val visit(TExpr.StmtExpr e) {

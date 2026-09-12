@@ -21,7 +21,11 @@ final class Data {
     static void emit(Asm asm, Module module) {
         String section = "";
         for (Global g : module.globals) {
-            String wanted = g.init() == null ? ".bss" : g.readonly() ? ".section .rodata" : ".data";
+            // Read-only data holding an address is relocated by the dynamic
+            // linker, so it goes where gcc puts it, .data.rel.ro, and not in
+            // .rodata, which a position-independent executable cannot patch.
+            boolean relocated = g.init() != null && g.init().stream().anyMatch(item -> item instanceof Global.AddrItem);
+            String wanted = g.init() == null ? ".bss" : !g.readonly() ? ".data" : relocated ? ".section .data.rel.ro" : ".section .rodata";
             if (!wanted.equals(section)) {
                 asm.section(wanted);
                 section = wanted;
