@@ -76,8 +76,9 @@ What is missing or approximated, in the order it is likely to matter:
   neither of which glibc's headers need without `__GNUC__`; `-M`
   dependency output is accepted and not produced.
 - **No debug info**, so `gdb` shows symbols and disassembly only.
-- **ILP32** exists for the type system and the VM, with no code
-  generator.
+- **ILP32** exists for the VM and for testing: a second target with
+  every width different from x86-64's, so no size can hide in a rule
+  that should ask the target. It has no code generator.
 
 ## Build and test
 
