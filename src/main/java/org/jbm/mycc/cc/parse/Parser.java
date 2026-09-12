@@ -103,7 +103,7 @@ public final class Parser {
         if (t.type == TokenType.KEYWORD) {
             return TYPE_SPECIFIERS.contains(t.text) || TYPE_QUALIFIERS.contains(t.text) || t.text.equals("alignas");
         }
-        return t.type == TokenType.IDENTIFIER && scopes.isTypeName(t.text);
+        return t.type == TokenType.IDENTIFIER && (scopes.isTypeName(t.text) || t.text.equals("__attribute__"));
     }
 
     /** Can this token begin declaration-specifiers (6.7.1)? */
@@ -121,14 +121,21 @@ public final class Parser {
     private boolean atDeclaration() {
         Token t = cur.peek();
         if (t.type == TokenType.IDENTIFIER) {
-            return scopes.isTypeName(t.text) && !cur.at(1, ":");
+            return atGnuAttribute() || (scopes.isTypeName(t.text) && !cur.at(1, ":"));
         }
         return t.type == TokenType.KEYWORD
                 && (startsDeclarationSpecifiers(t) || t.text.equals("static_assert"));
     }
 
     private boolean atAttributeSpecifier() {
-        return cur.at("[") && cur.at(1, "[");
+        return (cur.at("[") && cur.at(1, "[")) || atGnuAttribute();
+    }
+
+    // `__attribute__((...))`, the GNU spelling: accepted wherever an
+    // attribute specifier is, and before a declarator, then dropped.
+    private boolean atGnuAttribute() {
+        Token t = cur.peek();
+        return t.type == TokenType.IDENTIFIER && t.text.equals("__attribute__") && cur.at(1, "(");
     }
 
     // ---- A.3.4 external definitions (6.9) -----------------------------------
@@ -495,6 +502,7 @@ public final class Parser {
                 parseMemberDeclaration(list);
             }
             members = Optional.of(list);
+            parseAttributeSpecifierSequence();
         } else if (tag.isEmpty()) {
             throw cur.error("expected identifier or '{' after '" + kw.text + "'");
         }
@@ -601,6 +609,9 @@ public final class Parser {
     }
 
     private Declarator parseDeclarator(DeclaratorKind kind) {
+        while (atGnuAttribute()) {
+            parseAttributeSpecifierSequence();
+        }
         if (cur.at("*")) {
             // pointer: * attribute-specifier-sequenceopt type-qualifier-listopt
             Token star = cur.next();
@@ -659,6 +670,9 @@ public final class Parser {
     private boolean startsNestedDeclarator(DeclaratorKind kind) {
         if (kind == DeclaratorKind.NAMED) return true;
         Token t = cur.peek(1);
+        if (t.type == TokenType.IDENTIFIER && t.text.equals("__attribute__")) {
+            return true;
+        }
         if (t.type == TokenType.PUNCTUATOR) {
             return !t.text.equals(")") && !t.text.equals("...");
         }
@@ -777,6 +791,10 @@ public final class Parser {
         if (!atAttributeSpecifier()) return List.of();
         var attrs = new ArrayList<Attribute>();
         while (atAttributeSpecifier()) {
+            if (atGnuAttribute()) {
+                skipGnuAttribute();
+                continue;
+            }
             cur.next();
             cur.next();
             while (!cur.at("]")) {
@@ -787,6 +805,23 @@ public final class Parser {
             cur.expect("]");
         }
         return attrs;
+    }
+
+    private void skipGnuAttribute() {
+        cur.next();
+        cur.expect("(");
+        int depth = 1;
+        while (depth > 0) {
+            if (cur.atEof()) {
+                throw cur.error("unterminated __attribute__");
+            }
+            Token t = cur.next();
+            if (t.text.equals("(")) {
+                depth++;
+            } else if (t.text.equals(")")) {
+                depth--;
+            }
+        }
     }
 
     // attribute: attribute-token attribute-argument-clauseopt. Attribute

@@ -383,6 +383,19 @@ class ParserTest {
         }
 
         @Test
+        void gnuAttributesAreAcceptedAndDropped() {
+            assertEquals("(decl (f (fn int ())))", unit("int __attribute__((noinline)) f(void);"));
+            assertEquals("(decl (f (fn int ())))", unit("__attribute__((noinline)) int f(void);"));
+            assertEquals("(decl extern (f (fn void ())))", unit("extern void f(void) __attribute__((stdcall));"));
+            assertEquals("(decl (union U (u int)))", unit("union __attribute__((packed)) U { int u; };"));
+            assertEquals("(decl typedef (T (union U (u int))))", unit("typedef union U { int u; } __attribute__((packed)) T;"));
+            assertEquals("(cast (ptr (fn int ())) p)", expr("(__attribute__((x)) int (*)(void)) p"));
+            assertEquals("(cast (ptr (fn int ())) p)", expr("(int (__attribute__((x)) *)(void)) p"));
+            assertEquals("(decl (p (ptr (fn int ()))))", unit("int (__attribute__((x, y(1, (2)))) *p)(void);"));
+            assertTrue(fails("int __attribute__((x f(void);").getMessage().contains("unterminated"));
+        }
+
+        @Test
         void attributeDeclaration() {
             assertEquals("(attrs [[deprecated(\"x\")]])", unit("[[deprecated(\"x\")]];"));
             assertEquals("(attrs [[a]] [[b::c(1 , ( 2 ))]])", unit("[[a, b::c(1, (2))]];"));
