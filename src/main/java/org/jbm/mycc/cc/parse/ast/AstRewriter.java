@@ -274,6 +274,12 @@ public abstract class AstRewriter implements Visitor<Object> {
         return left == e.left() && right == e.right() ? e : new Expr.Comma(e.comma(), left, right);
     }
 
+    @Override
+    public Object visit(Expr.StmtExpr e) {
+        Stmt body = rewrite(e.body());
+        return body == e.body() ? e : new Expr.StmtExpr(e.paren(), (Stmt.Compound) body);
+    }
+
     // ---- statements --------------------------------------------------------------------
 
     @Override

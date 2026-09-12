@@ -170,6 +170,11 @@ public final class AstPrinter implements Visitor<String> {
         return list(",", print(e.left()), print(e.right()));
     }
 
+    @Override
+    public String visit(Expr.StmtExpr e) {
+        return list("stmtexpr", e.body().accept(this));
+    }
+
     private static String typeOperand(Type t) {
         return list("type", print(t));
     }

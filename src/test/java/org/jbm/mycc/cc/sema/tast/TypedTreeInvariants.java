@@ -589,6 +589,18 @@ public final class TypedTreeInvariants implements TVisitor<Void>, TStmtVisitor<V
     }
 
     @Override
+    public Void visit(TExpr.StmtExpr e) {
+        node(e);
+        e.body().accept(this);
+        if (e.value().isPresent()) {
+            assertSame(e.value().get().type(), e.type());
+            return rvalue(e.value().get());
+        }
+        assertTrue(e.type().isVoid(), "a statement expression without a value is void");
+        return null;
+    }
+
+    @Override
     public Void visit(TExpr.Comma e) {
         node(e);
         assertSame(e.right().type(), e.type());

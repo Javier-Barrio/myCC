@@ -384,6 +384,14 @@ class ParserTest {
         }
 
         @Test
+        void statementExpressions() {
+            assertEquals("(stmtexpr (block (expr 1)))", expr("({ 1; })"));
+            assertEquals("(stmtexpr (block (decl (x int 1)) (expr x)))", expr("({ int x = 1; x; })"));
+            assertEquals("(+ (stmtexpr (block (expr (call f)))) 2)", expr("({ f(); }) + 2"));
+            assertEquals("(stmtexpr (block))", expr("({ })"));
+        }
+
+        @Test
         void gnuAttributesAreAcceptedAndDropped() {
             assertEquals("(decl (f (fn int ())))", unit("int __attribute__((noinline)) f(void);"));
             assertEquals("(decl (f (fn int ())))", unit("__attribute__((noinline)) int f(void);"));

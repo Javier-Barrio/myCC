@@ -1,5 +1,8 @@
 package org.jbm.mycc.cc.sema;
 
+import java.util.Optional;
+import org.jbm.mycc.cc.sema.tast.TStmt;
+import org.jbm.mycc.cc.parse.ast.Stmt;
 import lombok.NonNull;
 import org.jbm.mycc.cc.parse.ast.Expr;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
@@ -60,6 +63,13 @@ final class ExprTyper {
         this.nextId = bindings.symbolCount;
     }
 
+    // Types the block of a statement expression; set by the typer.
+    private @Nullable java.util.function.Function<Stmt.Compound, TStmt.Block> blocks;
+
+    void setBlocks(@NonNull java.util.function.Function<Stmt.Compound, TStmt.Block> blocks) {
+        this.blocks = blocks;
+    }
+
     void setLocals(@Nullable List<Symbol> locals) {
         this.locals = locals;
     }
@@ -101,6 +111,7 @@ final class ExprTyper {
         if (e instanceof Expr.Postfix p) return postfix(p);
         if (e instanceof Expr.Conditional c) return conditional(c);
         if (e instanceof Expr.Comma c) return comma(c);
+        if (e instanceof Expr.StmtExpr s) return stmtExpr(s);
         throw unsupported(e.getClass().getSimpleName(), tokenOf(e));
     }
 
@@ -706,6 +717,9 @@ final class ExprTyper {
             result = types.usualArithmetic(promotedType(t), promotedType(f));
         } else if (t.type().isVoid() && f.type().isVoid()) {
             result = types.void_();
+        } else if (t.type().isVoid() || f.type().isVoid()) {
+            // One void arm is GNU's extension: the other value is discarded.
+            return new TExpr.Cond(toBool(c), toVoid(t), toVoid(f), types.void_(), e.question());
         } else if (t.type().isRecord() && t.type() == f.type()) {
             // Both arms have the same structure or union type (6.5.16p3).
             result = t.type();
@@ -716,6 +730,23 @@ final class ExprTyper {
                     e.question());
         }
         return new TExpr.Cond(toBool(c), convert(t, result), convert(f, result), result, e.question());
+    }
+
+    // ({ ... }), GNU's statement expression: the block, then the value of
+    // its last expression statement, or void when there is none.
+    private TExpr stmtExpr(Expr.StmtExpr e) {
+        if (locals == null || blocks == null) {
+            throw new SemaException("a statement expression is only allowed inside a function", e.paren());
+        }
+        TStmt.Block block = blocks.apply(e.body());
+        List<TStmt> items = block.items();
+        Optional<Rvalue> value = Optional.empty();
+        if (!items.isEmpty() && items.get(items.size() - 1) instanceof TStmt.ExprStmt last) {
+            value = Optional.of(last.expr());
+            items = items.subList(0, items.size() - 1);
+        }
+        CType type = value.isPresent() ? value.get().type() : types.void_();
+        return new TExpr.StmtExpr(new TStmt.Block(List.copyOf(items), block.token()), value, type, e.paren());
     }
 
     private TExpr comma(Expr.Comma e) {

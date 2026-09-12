@@ -166,6 +166,14 @@ public sealed interface Expr {
         }
     }
 
+    /** ({ compound-statement }), GNU's statement expression: the value of the last expression statement. */
+    record StmtExpr(@NonNull Token paren, @NonNull Stmt.Compound body) implements Expr {
+        @Override
+        public <R> R accept(Visitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
     /** expression , assignment-expression (6.5.18). */
     record Comma(@NonNull Token comma, @NonNull Expr left, @NonNull Expr right) implements Expr {
         @Override

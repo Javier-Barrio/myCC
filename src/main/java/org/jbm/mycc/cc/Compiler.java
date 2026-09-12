@@ -79,6 +79,9 @@ public final class Compiler {
             sb.append("#define __i386__ 1\n");
         }
         sb.append("#define __linux__ 1\n#define __linux 1\n#define __unix__ 1\n#define __unix 1\n#define __gnu_linux__ 1\n");
+        // The spellings C23 keeps for older code, as macros for the keywords.
+        sb.append("#define _Bool bool\n#define _Alignas alignas\n#define _Alignof alignof\n");
+        sb.append("#define _Static_assert static_assert\n#define _Thread_local thread_local\n");
         sb.append("#define __ORDER_LITTLE_ENDIAN__ 1234\n#define __ORDER_BIG_ENDIAN__ 4321\n#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__\n");
         return sb.toString();
     }

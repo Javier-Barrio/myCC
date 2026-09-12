@@ -28,6 +28,7 @@ public interface Visitor<R> {
     R visit(Expr.Conditional e);
     R visit(Expr.Assign e);
     R visit(Expr.Comma e);
+    R visit(Expr.StmtExpr e);
 
     // ---- statements (6.8) ----
     R visit(Stmt.Labeled s);

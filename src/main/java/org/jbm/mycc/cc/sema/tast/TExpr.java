@@ -41,7 +41,7 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
 
     /** A value. */
     sealed interface Rvalue extends TExpr permits Constant, Conversion, Arithmetic, Shift, Comparison, Logical, Unary,
-            AddrOf, PtrAdd, PtrDiff, Call, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma {
+            AddrOf, PtrAdd, PtrDiff, Call, Assign, CompoundAssign, PostfixAssign, TargetValue, Cond, Comma, StmtExpr {
     }
 
     // ---- families -------------------------------------------------------------------------
@@ -622,6 +622,15 @@ public sealed interface TExpr permits TExpr.Lvalue, TExpr.Rvalue, TExpr.Function
     /** {@code c ? t : e} (6.5.16): the condition is a {@code bool}, the arms share the result type. */
     record Cond(@NonNull Rvalue condition, @NonNull Rvalue thenValue, @NonNull Rvalue elseValue, @NonNull CType type,
                 @NonNull Token token) implements Rvalue {
+        @Override
+        public <R> R accept(TVisitor<R> v) {
+            return v.visit(this);
+        }
+    }
+
+    /** ({ ... }), GNU's statement expression: the block runs, then the value is that of its last expression statement, if any. */
+    record StmtExpr(@NonNull TStmt.Block body, @NonNull Optional<Rvalue> value, @NonNull CType type, @NonNull Token token)
+            implements Rvalue {
         @Override
         public <R> R accept(TVisitor<R> v) {
             return v.visit(this);

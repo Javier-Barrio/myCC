@@ -139,7 +139,9 @@ public final class Lower {
         for (Symbol l : f.locals()) vars.put(l, b.local(localNames.of(l), typeMap.of(l.type()), l.type().quals().isVolatile()));
         b.open(b.block("entry"));
         var exprs = new ExprLower(this, b, vars);
-        new StmtLower(b, exprs, vars).lower(f.body());
+        var stmts = new StmtLower(b, exprs, vars);
+        exprs.setStmts(stmts);
+        stmts.lower(f.body());
         endOfBody(b, f, ctype.returnType());
         b.finish();
         module.functions.add(fn);

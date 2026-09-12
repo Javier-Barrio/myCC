@@ -339,6 +339,13 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
     }
 
     @Override
+    public String visit(TExpr.StmtExpr e) {
+        var sb = new StringBuilder("(stmtexpr:").append(e.type().spelling()).append(' ').append(e.body().accept(this));
+        e.value().ifPresent(v -> sb.append(' ').append(v.accept(this)));
+        return sb.append(')').toString();
+    }
+
+    @Override
     public String visit(TExpr.Deref e) {
         return node("deref", e, e.pointer());
     }

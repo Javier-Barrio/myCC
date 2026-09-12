@@ -1022,6 +1022,15 @@ class TyperTest {
         assertTrue(exprFails("struct S { int a; } s;", "!s").getMessage().contains("invalid operand"));
         assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
         assertEquals("(rv:struct S s:struct S)", expr("struct S { int a; } s;", "(struct S)s"), "a cast to its own type, as gcc allows");
+        assertEquals("(block (local y:int (stmtexpr:int (block) 3:int)))", body("", "int y = ({ 3; });"), "a statement expression's value is its last expression statement's");
+        assertEquals("(block (local y:int (stmtexpr:int (block (local t:int 2:int)) (mul:int (rv:int t:int) 2:int))))", body("", "int y = ({ int t = 2; t * 2; });"));
+        assertEquals("(block (expr (stmtexpr:void (block) (call:void g:void (void)))))", body("void g(void);", "({ g(); });"));
+        assertEquals("(block (expr (stmtexpr:void (block (expr (call:void g:void (void))) (block)))))", body("void g(void);", "({ g(); ; });"), "no value when the last statement is not an expression");
+        assertEquals("(block (expr (stmtexpr:int (block) 1:int)))", body("", "({ 1; });"));
+        assertTrue(fails("int g = ({ 1; });").getMessage().contains("inside a function"));
+        assertTrue(fails("void f(void) { int x = ({ ; }); }").getMessage().contains("void"));
+        assertEquals("(block (expr (cond:void (to-bool:bool (rv:int x:int)) (call:void g:void (void)) (to-void:void 0:int))))", body("void g(void); int x;", "x ? g() : 0;"), "one void arm, as gcc allows");
+        assertEquals("(block (expr (eq:int (rv:int x:int) 1:int)))", body("int x;", "__builtin_expect(x == 1, 0);"), "__builtin_expect is its first argument");
         assertEquals("(rv:struct S s:const struct S)", expr("struct S { int a; }; const struct S s;", "(struct S)s"));
         assertTrue(exprFails("struct S { int a; }; struct T { int b; } t;", "(struct S)t").getMessage().contains("non-scalar"));
     }
