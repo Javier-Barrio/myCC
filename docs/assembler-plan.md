@@ -91,9 +91,9 @@ org.jbm.mycc.cc.backend.arch.x86_64
 
 ## Steps
 
-1. [ ] The encoding core and `movq`, `pushq`, `leave`, `ret`; the test from `as`.
-2. [ ] The rest of the integer table.
-3. [ ] SSE and the wide immediates.
+1. [x] The encoding core and `movq`, `pushq`, `leave`, `ret`; the test from `as`.
+2. [x] The rest of the integer table.
+3. [x] SSE and the wide immediates.
 4. [ ] `Assembler` with labels; `ObjectFile`.
 5. [ ] Relocations, `Elf64`, `gcc` links it, the corpus runs and matches `as`; `Main -c`.
 
