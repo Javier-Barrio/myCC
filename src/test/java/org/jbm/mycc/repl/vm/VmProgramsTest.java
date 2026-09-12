@@ -1,6 +1,6 @@
 package org.jbm.mycc.repl.vm;
 
-import org.jbm.mycc.cc.lower.arch.Ilp32;
+import org.jbm.mycc.cc.backend.lower.arch.Ilp32;
 import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.jbm.mycc.repl.vm.VM;

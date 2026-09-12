@@ -1,8 +1,8 @@
 package org.jbm.mycc.cc.cpp;
 
-import org.jbm.mycc.cc.lower.arch.Ilp32;
+import org.jbm.mycc.cc.backend.lower.arch.Ilp32;
 import org.jbm.mycc.cc.cpp.*;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.parse.Parser;
 import org.jbm.mycc.cc.sema.Desugar;

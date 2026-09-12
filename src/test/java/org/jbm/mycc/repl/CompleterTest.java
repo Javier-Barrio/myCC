@@ -1,7 +1,7 @@
 package org.jbm.mycc.repl;
 
 import org.jbm.mycc.cc.cpp.BundledHeaders;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.jbm.mycc.repl.Completer;
 import org.jbm.mycc.repl.Repl;

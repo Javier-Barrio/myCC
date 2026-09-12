@@ -1,12 +1,12 @@
 package org.jbm.mycc.cc;
 
 import org.jbm.mycc.Main;
-import org.jbm.mycc.cc.lower.Lower;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
-import org.jbm.mycc.cc.lower.tac.Instr;
-import org.jbm.mycc.cc.lower.tac.Module;
-import org.jbm.mycc.cc.lower.tac.TacInvariants;
-import org.jbm.mycc.cc.lower.tac.TacWriter;
+import org.jbm.mycc.cc.backend.lower.Lower;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.tac.Instr;
+import org.jbm.mycc.cc.backend.lower.tac.Module;
+import org.jbm.mycc.cc.backend.lower.tac.TacInvariants;
+import org.jbm.mycc.cc.backend.lower.tac.TacWriter;
 import org.jbm.mycc.cc.sema.tast.TUnit;
 import org.jbm.mycc.cc.sema.types.Types;
 import org.junit.jupiter.api.Test;

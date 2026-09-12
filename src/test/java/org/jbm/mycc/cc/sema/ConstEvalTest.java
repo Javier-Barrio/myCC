@@ -1,7 +1,7 @@
 package org.jbm.mycc.cc.sema;
 
-import org.jbm.mycc.cc.lower.arch.Ilp32;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.arch.Ilp32;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
 import org.jbm.mycc.cc.cpp.CppTokenizer.TokenType;
 import org.jbm.mycc.cc.sema.SemaException;

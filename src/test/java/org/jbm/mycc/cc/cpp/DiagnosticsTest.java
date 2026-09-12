@@ -4,7 +4,7 @@ import org.jbm.mycc.cc.cpp.CppTokenizer;
 import org.jbm.mycc.cc.cpp.HeaderProvider;
 import org.jbm.mycc.cc.cpp.Scanner;
 import org.jbm.mycc.cc.cpp.TokenConversion;
-import org.jbm.mycc.cc.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.cpp.CppTokenizer.LexException;
 import org.jbm.mycc.cc.parse.ParseException;

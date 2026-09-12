@@ -1,18 +1,18 @@
 package org.jbm.mycc.repl.vm;
 
-import org.jbm.mycc.cc.lower.tac.Block;
-import org.jbm.mycc.cc.lower.tac.Function;
-import org.jbm.mycc.cc.lower.tac.Global;
-import org.jbm.mycc.cc.lower.tac.Instr;
-import org.jbm.mycc.cc.lower.tac.Module;
-import org.jbm.mycc.cc.lower.tac.Operand;
-import org.jbm.mycc.cc.lower.tac.RegClass;
-import org.jbm.mycc.cc.lower.tac.StructDef;
-import org.jbm.mycc.cc.lower.tac.Symbol;
-import org.jbm.mycc.cc.lower.tac.TacVisitor;
-import org.jbm.mycc.cc.lower.tac.TargetDesc;
-import org.jbm.mycc.cc.lower.tac.Type;
-import org.jbm.mycc.cc.lower.tac.Var;
+import org.jbm.mycc.cc.backend.lower.tac.Block;
+import org.jbm.mycc.cc.backend.lower.tac.Function;
+import org.jbm.mycc.cc.backend.lower.tac.Global;
+import org.jbm.mycc.cc.backend.lower.tac.Instr;
+import org.jbm.mycc.cc.backend.lower.tac.Module;
+import org.jbm.mycc.cc.backend.lower.tac.Operand;
+import org.jbm.mycc.cc.backend.lower.tac.RegClass;
+import org.jbm.mycc.cc.backend.lower.tac.StructDef;
+import org.jbm.mycc.cc.backend.lower.tac.Symbol;
+import org.jbm.mycc.cc.backend.lower.tac.TacVisitor;
+import org.jbm.mycc.cc.backend.lower.tac.TargetDesc;
+import org.jbm.mycc.cc.backend.lower.tac.Type;
+import org.jbm.mycc.cc.backend.lower.tac.Var;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
