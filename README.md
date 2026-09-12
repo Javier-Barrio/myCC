@@ -22,8 +22,7 @@ Lua 5.4.7 builds with the compiler unchanged and passes its own test
 suite, `all.lua`, in full. With the Lua sources unpacked in `lua/`:
 
 ```
-CP=build/classes/java/main:build/resources/main
-for f in lua/src/l*.c; do java -cp $CP org.jbm.mycc.Main -std=c17 -c $f -o obj/$(basename $f .c).o; done
+for f in lua/src/l*.c; do bin/mycc -std=c17 -c $f -o obj/$(basename $f .c).o; done
 gcc -o lua obj/*.o -lm
 cd lua-tests && ../lua -e "_U=true" all.lua
 ```
@@ -41,6 +40,43 @@ make -j4 && cd tests && perl runtests.pl -n -a
 The objects we produce follow the System V ABI, small structs in
 registers included, so they link with gcc-built objects and with the
 C library either way; `AbiTest` checks that in both directions.
+
+## Gaps
+
+What is missing or approximated, in the order it is likely to matter:
+
+- **A linker.** `bin/mycc -o prog` compiles every file itself and
+  hands the objects to gcc for the link. The plan is a dynamic linker
+  of our own producing a PIE against `libc.so.6` with our own `_start`,
+  which removes gcc from the pipeline; static linking against `libc.a`
+  is not planned.
+- **Variable length arrays** compile as zero-length arrays, so a
+  program that declares one builds and runs as long as it does not use
+  it. Real VLAs need a dynamic stack allocation through the TAC, the VM
+  and the emitter.
+- **`long double`** is computed and stored as `double` in a 16-byte
+  slot. Its bits are wrong when handed to glibc, `printf("%Lf")`
+  above all, and `va_arg(ap, long double)` reads a double. The x87
+  conversions at the library boundary are the fix.
+- **`_Complex`** and the `_Decimal` types are rejected.
+- **No optimization** and no register allocation: every variable has a
+  frame slot and every instruction goes through memory; temporaries
+  share slots, which is what keeps frames small. Correct and slow.
+- **Aggregates past a variadic callee's named parameters** travel by
+  our own pointer convention, not SysV's, so a struct passed to a
+  library's `...` is wrong; to our own functions it is consistent.
+- **`alignas` above 16** on a local is not honored natively, since the
+  frame is addressed from a 16-aligned `%rbp`; globals of any alignment
+  are fine.
+- **The VM's C library** is a subset: the printf family, files,
+  strings, `malloc`, math, and no `setjmp`, threads or sockets. A native
+  build has all of glibc.
+- **The preprocessor** lacks `#include_next` and `__has_include`,
+  neither of which glibc's headers need without `__GNUC__`; `-M`
+  dependency output is accepted and not produced.
+- **No debug info**, so `gdb` shows symbols and disassembly only.
+- **ILP32** exists for the type system and the VM, with no code
+  generator.
 
 ## Build and test
 
