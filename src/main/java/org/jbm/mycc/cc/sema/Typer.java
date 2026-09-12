@@ -5,6 +5,7 @@ import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.BlockItem;
 import org.jbm.mycc.cc.parse.ast.Decl;
 import org.jbm.mycc.cc.parse.ast.Expr;
+import org.jbm.mycc.cc.parse.ast.Specifiers;
 import org.jbm.mycc.cc.parse.ast.Stmt;
 import org.jbm.mycc.cc.cpp.CppTokenizer.Token;
 import org.jbm.mycc.cc.parse.ast.Initializer;
@@ -202,7 +203,13 @@ public final class Typer {
                 if (id.initializer().isPresent()) {
                     throw new SemaException("'" + symbol.name + "' cannot have an initializer", id.name());
                 }
+                if (d.specifiers().alignment().isPresent()) {
+                    throw new SemaException("alignas on '" + symbol.name + "', which is not an object", id.name());
+                }
                 continue;
+            }
+            if (d.specifiers().alignment().isPresent()) {
+                alignAs(v, d.specifiers().alignment().get(), id.name());
             }
             Optional<TInit> init = Optional.empty();
             if (id.initializer().isPresent()) {
@@ -227,6 +234,28 @@ public final class Typer {
                 out.add(new TStmt.LocalDecl(v, init, id.name()));
             }
         }
+    }
+
+    // alignas (6.7.6): a type's alignment or an integer constant that is a
+    // power of two, not weaker than the object's type asks; zero has no
+    // effect. The strictest of several applies, and the type's own always does.
+    private void alignAs(Symbol.Variable v, Specifiers.Alignas a, Token at) {
+        long requested;
+        if (a.type().isPresent()) {
+            requested = types.align(builder.build(a.type().get()));
+        } else {
+            requested = constEval.requireInteger(exprs.rvalue(exprs.type(a.expr().get())), a.keyword(), "alignment");
+        }
+        if (requested == 0) {
+            return;
+        }
+        if (requested < 0 || Long.bitCount(requested) != 1) {
+            throw new SemaException("alignment " + requested + " is not a power of two", a.keyword());
+        }
+        if (requested < types.align(v.type())) {
+            throw new SemaException("alignas(" + requested + ") is weaker than the alignment of '" + v.type().spelling() + "'", at);
+        }
+        v.setAlignment((int) Math.max(requested, v.alignment()));
     }
 
     // auto (6.7.10): the type is the initializer's after lvalue conversion

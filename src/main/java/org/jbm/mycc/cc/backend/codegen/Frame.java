@@ -26,7 +26,7 @@ public final class Frame {
             add(v, module.sizeOf(v.type), module.alignOf(v.type));
         }
         for (Var v : function.locals) {
-            add(v, module.sizeOf(v.type), module.alignOf(v.type));
+            add(v, module.sizeOf(v.type), Math.max(module.alignOf(v.type), v.align));
         }
     }
 

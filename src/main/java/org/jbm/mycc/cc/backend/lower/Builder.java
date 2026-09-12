@@ -51,7 +51,11 @@ final class Builder {
     }
 
     Var local(@NonNull String name, @NonNull Type type, boolean isVolatile) {
-        var v = new Var(name, type, isVolatile);
+        return local(name, type, isVolatile, 0);
+    }
+
+    Var local(@NonNull String name, @NonNull Type type, boolean isVolatile, int align) {
+        var v = new Var(name, type, isVolatile, align);
         fn.locals.add(v);
         declared.add(v);
         return v;

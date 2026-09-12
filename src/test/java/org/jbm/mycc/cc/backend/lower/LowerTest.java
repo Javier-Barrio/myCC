@@ -629,6 +629,19 @@ class LowerTest {
     }
 
     @Test
+    void alignasReachesTheVariableAndTheGlobal() {
+        assertEquals("""
+                global @g : i32 align 32 = { 0 : i32 1 }
+                define @f() -> void {
+                  i32 %a align 16
+                  i8 %c align 8
+                .entry:
+                  ret
+                }
+                """, unit("alignas(32) int g = 1; void f(void) { alignas(16) int a; alignas(double) char c; }"));
+    }
+
+    @Test
     void aFunctionWhoseAddressAGlobalInitializerTakesIsDeclared() {
         assertEquals("""
                 global @p : ptr align 8 = { 0 : addr @abs }

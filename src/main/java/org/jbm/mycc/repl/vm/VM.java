@@ -363,7 +363,7 @@ public class VM implements TacVisitor<Void> {
         all.addAll(function.locals);
         for (Var v : all) {
             long size = size(v.type);
-            long slot = memory.push(size, align(v.type));
+            long slot = memory.push(size, Math.max(align(v.type), v.align));
             memory.fill(slot, size, (byte) 0);
             slots.put(v, slot);
         }

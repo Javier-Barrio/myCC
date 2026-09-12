@@ -36,7 +36,7 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
         var lines = new java.util.ArrayList<String>();
         for (var g : unit.globals()) {
             lines.add(g.isDefinition()
-                    ? "(global " + p.symbol(g.symbol()) + g.init().map(i -> " " + p.init(i, g.symbol().type())).orElse("") + ")"
+                    ? "(global " + p.symbol(g.symbol()) + aligned(g.symbol()) + g.init().map(i -> " " + p.init(i, g.symbol().type())).orElse("") + ")"
                     : "(extern " + p.symbol(g.symbol()) + ")");
         }
         for (var str : unit.strings()) lines.add("(string " + p.symbol(str.symbol()) + ")");
@@ -46,6 +46,14 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
 
     private String symbol(Symbol s) {
         return s.name + ":" + s.type().spelling();
+    }
+
+    // " align N" for an object with an alignas, else nothing.
+    private static String aligned(Symbol s) {
+        if (s instanceof Symbol.Variable v && v.alignment() > 0) {
+            return " align " + v.alignment();
+        }
+        return "";
     }
 
     // A scalar's initializer prints as its value; an aggregate's as the item list.
@@ -89,7 +97,7 @@ public final class TypedPrinter implements TVisitor<String>, TStmtVisitor<String
 
     @Override
     public String visit(TStmt.LocalDecl s) {
-        return "(local " + symbol(s.symbol()) + s.init().map(i -> " " + init(i, s.symbol().type())).orElse("") + ")";
+        return "(local " + symbol(s.symbol()) + aligned(s.symbol()) + s.init().map(i -> " " + init(i, s.symbol().type())).orElse("") + ")";
     }
 
     @Override

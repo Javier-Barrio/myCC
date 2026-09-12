@@ -85,7 +85,9 @@ public final class TacWriter implements TacVisitor<String> {
         for (var v : f.locals) {
             sb.append("  ");
             if (v.isVolatile) sb.append("volatile ");
-            sb.append(v.type.spelling()).append(' ').append(v).append('\n');
+            sb.append(v.type.spelling()).append(' ').append(v);
+            if (v.align > 0) sb.append(" align ").append(v.align);
+            sb.append('\n');
         }
         for (var b : f.blocks) {
             sb.append(b).append(":\n");

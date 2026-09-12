@@ -13,11 +13,18 @@ public final class Var implements Operand {
     public final String name;
     public final Type type;
     public final boolean isVolatile;
+    /** The alignment the declaration asked for, or 0 for the type's own. */
+    public final int align;
 
-    public Var(@NonNull String name, @NonNull Type type, boolean isVolatile) {
+    public Var(@NonNull String name, @NonNull Type type, boolean isVolatile, int align) {
         this.name = name;
         this.type = type;
         this.isVolatile = isVolatile;
+        this.align = align;
+    }
+
+    public Var(@NonNull String name, @NonNull Type type, boolean isVolatile) {
+        this(name, type, isVolatile, 0);
     }
 
     public Var(@NonNull String name, @NonNull Type type) {
