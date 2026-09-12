@@ -80,8 +80,9 @@ public final class Repl {
     }
 
     private void reset() {
-        vm = new VM();  
+        vm = new VM();
         bound.clear();
+        boundObjects.clear();
         vm.out(new PrintStream(new ConsoleStream(), true, StandardCharsets.ISO_8859_1));
         printer = new ValuePrinter(vm, types);
         kept.clear();
@@ -99,6 +100,7 @@ public final class Repl {
     // not asked for, and dropping the include withdraws it again.
     private final Map<String, Builtin> library = Libc.all();
     private final Set<String> bound = new HashSet<>();
+    private final Set<String> boundObjects = new HashSet<>();
 
     private void bindDeclared(Compiler.Compiled compiled) {
         Set<String> declared = new HashSet<>();
@@ -114,6 +116,16 @@ public final class Repl {
         for (String name : declared) {
             if (library.containsKey(name) && bound.add(name)) {
                 vm.bind(name, library.get(name));
+            }
+        }
+        for (Decl d : compiled.ast()) {
+            if (d instanceof Decl.Declaration decl) {
+                for (Decl.InitDeclarator id : decl.declarators()) {
+                    byte[] bytes = Libc.objects().get(id.name().text);
+                    if (bytes != null && boundObjects.add(id.name().text)) {
+                        vm.bindObject(id.name().text, bytes);
+                    }
+                }
             }
         }
         for (String name : new ArrayList<>(bound)) {

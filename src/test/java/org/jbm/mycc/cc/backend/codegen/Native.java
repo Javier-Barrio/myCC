@@ -45,7 +45,7 @@ final class Native {
         Path s = dir.resolve("prog.s");
         Path exe = dir.resolve("prog");
         Files.writeString(s, assembly(source));
-        Process gcc = new ProcessBuilder("gcc", "-o", exe.toString(), s.toString()).redirectErrorStream(true).start();
+        Process gcc = new ProcessBuilder("gcc", "-o", exe.toString(), s.toString(), "-lm").redirectErrorStream(true).start();
         String gccOut = new String(gcc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (!gcc.waitFor(60, TimeUnit.SECONDS) || gcc.exitValue() != 0) {
             throw new AssertionError("gcc failed:\n" + gccOut + "\n--- assembly ---\n" + Files.readString(s));

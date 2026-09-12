@@ -1,4 +1,5 @@
 target x86_64-sysv
+type %Pair = { i32 @0, i32 @4 } size 8 align 4
 define @falls_off(i32 %c) -> i32 {
   u8 %t0
   i32 %t1
@@ -9,7 +10,7 @@ define @falls_off(i32 %c) -> i32 {
   mov.s32 %t1, 1
   ret %t1
 .if.done:
-  trap "end of non-void function"
+  ret 0
 }
 define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
   u32 %q
@@ -109,4 +110,26 @@ define @u(u32 %a, u32 %b, f64 %d, f32 %f) -> u32 {
   %t29 = f2u.32 %t28
   %t30 = xor.u32 %t26, %t29
   ret %t30
+}
+define @falls_off_aggregate(i32 %c) -> %Pair {
+  %Pair %p
+  u8 %t0
+  ptr %t1
+  ptr %t2
+  ptr %t3
+  ptr %t4
+.entry:
+  %t0 = ne %c, 0
+  condbr %t0, .then, .if.done
+.then:
+  %t1 = addrof %p
+  store.%Pair %t1, 0
+  %t2 = wadd.u64 %t1, 0
+  store.32 %t2, %c
+  %t3 = wadd.u64 %t1, 4
+  store.32 %t3, %c
+  %t4 = addrof %p
+  ret %t4
+.if.done:
+  trap "end of non-void function"
 }

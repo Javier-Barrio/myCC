@@ -35,6 +35,15 @@ class PreprocessorEndToEndTest {
     }
 
     @Test
+    void variadicMacros() {
+        assertExpandsTo("#define CALL(F, ...) F(__VA_ARGS__)\nCALL(f, 1, 2, 3)", "f", "(", "1", ",", "2", ",", "3", ")");
+        assertExpandsTo("#define ARGS(...) __VA_ARGS__\nARGS(1, 2)", "1", ",", "2");
+        assertExpandsTo("#define ARGS(...) [__VA_ARGS__]\nARGS()", "[", "]");
+        assertExpandsTo("#define LOG(fmt, ...) printf(fmt, __VA_ARGS__)\nLOG(\"%d %d\", a, b)", "printf", "(", "\"%d %d\"", ",", "a", ",", "b", ")");
+        assertExpandsTo("#define ONE(a) a\nONE((1, 2))", "(", "1", ",", "2", ")");
+    }
+
+    @Test
     void objectMacrosCombineInAnArithmeticExpression() {
         assertExpandsTo("""
                 #define WIDTH 80

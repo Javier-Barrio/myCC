@@ -46,7 +46,7 @@ class ObjectTest {
         Path o = dir.resolve("prog.o");
         Path exe = dir.resolve("prog");
         Files.write(o, Codegen.object(compile(source).tac()));
-        Process gcc = new ProcessBuilder("gcc", "-o", exe.toString(), o.toString()).redirectErrorStream(true).start();
+        Process gcc = new ProcessBuilder("gcc", "-o", exe.toString(), o.toString(), "-lm").redirectErrorStream(true).start();
         String gccOut = new String(gcc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (!gcc.waitFor(60, TimeUnit.SECONDS) || gcc.exitValue() != 0) {
             throw new AssertionError("gcc failed to link our object:\n" + gccOut);

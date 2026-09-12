@@ -218,7 +218,7 @@ public class CppTokenizer {
     // `#define` continued over several physical lines is one line - which
     // is also how the expander tells where a directive ends.
     private final String src;
-    private final String file;
+    private String file;   // changed only by #line
     private int pos;
     private int line = 1;
     private int col = 1;
@@ -313,7 +313,19 @@ public class CppTokenizer {
     }
 
     public static TokenSet tokenSet(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
+        return tokenSet(source, headers, file, "");
+    }
+
+    /**
+     * With {@code predefined}, lines of {@code #define} the target and
+     * the compiler provide, in force before the source's first line.
+     */
+    public static TokenSet tokenSet(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,
+                                    @NonNull String predefined) {
         CppTokenizer tokenizer = new CppTokenizer(source, headers, file);
+        if (!predefined.isBlank()) {
+            new CppTokenizer(splice(predefined), "<predefined>", headers, tokenizer.macroTable, 0).scan();
+        }
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
         set.macros = tokenizer.macroTable();
         return set;
@@ -429,6 +441,18 @@ public class CppTokenizer {
                 include(hash);
                 return null;
             }
+            if (directive.equals("line")) {
+                lineDirective(hash);
+                return null;
+            }
+            if (directive.equals("error")) {
+                int start = pos;
+                while (pos < src.length() && peek() != '\n') {
+                    advance();
+                }
+                String text = src.substring(start, pos).replaceFirst("^\\s*error\\s*", "").strip();
+                throw error("#error " + text, hash.line, hash.column);
+            }
             directiveState = DirectiveState.HASH;
             return hash;
         }
@@ -454,7 +478,14 @@ public class CppTokenizer {
         }
 
         if (isIdentifierStart(c)) {
-            return classifyDirectiveIdentifier(scanIdentifier(startLine, startCol));
+            Token id = scanIdentifier(startLine, startCol);
+            if (id.text.equals("__LINE__") && directiveState == DirectiveState.NONE) {
+                return new Token(TokenType.PP_NUMBER, Integer.toString(startLine), startLine, startCol);
+            }
+            if (id.text.equals("__FILE__") && directiveState == DirectiveState.NONE) {
+                return new Token(TokenType.STRING_LITERAL, "\"" + file + "\"", startLine, startCol);
+            }
+            return classifyDirectiveIdentifier(id);
         }
         if (Character.isDigit(c) || (c == '.' && Character.isDigit(peek(1)))) {
             return scanPpNumber(startLine, startCol);
@@ -586,6 +617,47 @@ public class CppTokenizer {
             }
             pending.add(t);
         }
+    }
+
+    // `#line N ["name"]`: the next line is line N. The number may come
+    // from a macro; the name, when given, is the file from then on.
+    private void lineDirective(Token hash) {
+        while (isBlank(peek())) {
+            advance();
+        }
+        scanIdentifier(line, col);
+        List<Token> tokens = expandedRestOfLine(pos);
+        if (tokens.isEmpty() || tokens.get(0).type != TokenType.PP_NUMBER) {
+            throw error("#line needs a line number", hash.line, hash.column);
+        }
+        int number;
+        try {
+            number = Integer.parseInt(tokens.get(0).text);
+        } catch (NumberFormatException e) {
+            throw error("#line needs a line number", hash.line, hash.column);
+        }
+        if (tokens.size() > 1 && tokens.get(1).type == TokenType.STRING_LITERAL) {
+            String quoted = tokens.get(1).text;
+            file = quoted.substring(quoted.indexOf('"') + 1, quoted.length() - 1);
+        }
+        while (pos < src.length() && peek() != '\n') {
+            advance();
+        }
+        line = number - 1;   // the new-line about to be consumed counts up to N
+    }
+
+    // The rest of the line, macro expanded, as the directive's arguments.
+    private List<Token> expandedRestOfLine(int from) {
+        TokenSet set = TokenSet.fromTokens(scanConditionTokens(from));
+        set.macros = macroTable;
+        TokenSet expanded = new Scanner().expand(set);
+        List<Token> tokens = new ArrayList<>();
+        for (CppToken t : expanded.tokens) {
+            if (t.token.type != TokenType.EOF) {
+                tokens.add(t.token);
+            }
+        }
+        return tokens;
     }
 
     // ---- conditional directives -------------------------------------------------------------------

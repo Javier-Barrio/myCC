@@ -127,6 +127,57 @@ class LibcTest {
     }
 
     @Test
+    void filesAndStreams(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        String path = dir.resolve("fred.txt").toString().replace("\\", "/");
+        Run r = run("""
+                #include <stdio.h>
+                #include <string.h>
+                int main(void) {
+                    FILE *f = fopen("%s", "w");
+                    fwrite("hello\\nworld\\n", 1, 12, f);
+                    fputs("tail", f);
+                    fputc('!', f);
+                    fprintf(f, "%%d", 42);
+                    fclose(f);
+                    char buf[8];
+                    f = fopen("%s", "r");
+                    int n = fread(buf, 1, 5, f);
+                    buf[n] = 0;
+                    printf("%%d %%s\\n", n, buf);
+                    int c;
+                    int count = 0;
+                    while ((c = fgetc(f)) != EOF) { count++; }
+                    fclose(f);
+                    f = fopen("%s", "r");
+                    while (fgets(buf, sizeof buf, f) != NULL) { printf("[%%s]", buf); }
+                    printf("\\n%%d %%d\\n", count, feof(f));
+                    fclose(f);
+                    fprintf(stdout, "to %%s\\n", "stdout");
+                    fprintf(stderr, "to %%s\\n", "stderr");
+                    int (*fp)(FILE *, const char *, ...) = &fprintf;
+                    fp(stdout, "%%d\\n", 7);
+                    return fopen("%s", "r") == NULL;
+                }
+                """.formatted(path, path, path, dir.resolve("missing.txt").toString().replace("\\", "/")));
+        assertEquals("5 hello\n[hello\n][world\n][tail!42]\n14 1\nto stdout\nto stderr\n7\n", r.out());
+        assertEquals(1, r.exit());
+    }
+
+    @Test
+    void strrchrFindsTheLastOccurrence() {
+        Run r = run("""
+                #include <stdio.h>
+                #include <string.h>
+                int main(void) {
+                    char a[] = "hello world";
+                    printf("%s|%d|%s\\n", strrchr(a, 'l'), strrchr(a, 'x') == NULL, strrchr(a, 0));
+                    return 0;
+                }
+                """);
+        assertEquals("ld|1|\n", r.out());
+    }
+
+    @Test
     void faultsInTheLibrary() {
         assertThrows(IllegalStateException.class, () -> run("#include <stdio.h>\nint main(void) { return printf(\"%d\"); }"));
         assertThrows(IllegalStateException.class, () -> run("#include <stdio.h>\nint main(void) { return printf(\"%d\", 1.5); }"));

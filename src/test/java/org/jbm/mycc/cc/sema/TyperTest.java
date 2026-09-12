@@ -454,8 +454,10 @@ class TyperTest {
         assertTrue(exprFails("int *p;", "p = 1").getMessage().contains("incompatible types"));
         assertTrue(exprFails("int *p; double d;", "p = d").getMessage().contains("incompatible types"));
         assertTrue(exprFails("int a; int *p;", "a = p").getMessage().contains("incompatible types"));
-        assertTrue(exprFails("int *p; const int *q;", "p = q").getMessage().contains("discards qualifiers"));
-        assertTrue(exprFails("int (*fp)(void); void *v;", "fp = v").getMessage().contains("incompatible types"));
+        assertEquals("(assign:int * p:int * (ptr-to-ptr:int * (rv:const int * q:const int *)))", expr("int *p; const int *q;", "p = q"),
+                "discarding qualifiers is accepted, as gcc does with a warning");
+        assertEquals("(assign:int (*)(void) fp:int (*)(void) (ptr-to-ptr:int (*)(void) (rv:void * v:void *)))", expr("int (*fp)(void); void *v;", "fp = v"),
+                "a function pointer through void * is accepted, as gcc does");
         assertTrue(exprFails("int f(void);", "f = 0").getMessage().contains("not an lvalue"));
         assertTrue(exprFails("const char *s;", "*s = 'a'").getMessage().contains("const-qualified"));
     }
@@ -572,7 +574,7 @@ class TyperTest {
         assertTrue(exprFails("int f(void);", "f(1)").getMessage().contains("too many arguments"));
         assertTrue(exprFails("int v(int, ...);", "v()").getMessage().contains("too few arguments"));
         assertTrue(exprFails("int f(int *);", "f(1)").getMessage().contains("incompatible types when passing argument 1"));
-        assertTrue(exprFails("int f(int *); const int *q;", "f(q)").getMessage().contains("discards qualifiers"));
+        assertTrue(expr("int f(int *); const int *q;", "f(q)").contains("ptr-to-ptr:int *"), "discarding qualifiers in a call is accepted");
         assertTrue(exprFails("int a;", "a()").getMessage().contains("not a function"));
         assertTrue(exprFails("int *p;", "p()").getMessage().contains("not a function"));
         assertTrue(exprFails("int f(int); void g(void);", "f(g())").getMessage().contains("type void"));
@@ -834,7 +836,8 @@ class TyperTest {
         assertEquals(List.of("p: enum_ptr"), declaredTypes("enum Fwd : short; enum Fwd *p;").stream()
                 .map(l -> l.replace("short *", "enum_ptr")).toList());
         assertTrue(fails("enum F : unsigned char { Y = 256 };").getMessage().contains("not representable"));
-        assertTrue(fails("enum Z *p;").getMessage().contains("incomplete"));
+        assertEquals(List.of("p: int *"), declaredTypes("enum Z *p;"), "a forward enum is int until defined, as gcc allows");
+        assertTrue(declaredTypes("enum Z; enum Z f(void); enum Z { ZA = 3 }; int g = ZA;").contains("g: int"), "a forward enum, then its definition");
         assertTrue(fails("enum E { A = 1.5 };").getMessage().contains("integer constant"));
         assertTrue(fails("int x; enum E { A = x };").getMessage().contains("not a constant"));
         assertTrue(fails("enum E : double { A };").getMessage().contains("must be an integer type"));

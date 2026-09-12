@@ -114,9 +114,16 @@ class LowerTest {
                   f80 %ld
                   i32 %e
                 .entry:
-                  trap "end of non-void function"
+                  ret 0
                 }
                 """, function("enum E { A }; int f(int a, double b, char *p, bool flag) { int x; char c; unsigned short us; long l; float fl; long double ld; enum E e; }"));
+    }
+
+    @Test
+    void fallingOffTheEndYieldsAZero() {
+        assertTrue(function("double f(void) { }").contains("  ret 0.0\n"), "a floating zero for a floating result");
+        assertTrue(function("int *f(void) { }").contains("  ret 0\n"), "a null pointer for a pointer result");
+        assertTrue(function("struct S { int a; }; struct S f(void) { }").contains("trap \"end of non-void function\""), "an aggregate has no zero");
     }
 
     @Test

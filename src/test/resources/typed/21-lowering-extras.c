@@ -9,3 +9,7 @@ unsigned u(unsigned a, unsigned b, double d, float f) {
     unsigned char back = (unsigned char) e;
     return q ^ r ^ back ^ (unsigned) (f - 1.0f);
 }
+struct Pair { int a; int b; };
+struct Pair falls_off_aggregate(int c) {
+    if (c) { struct Pair p = { c, c }; return p; }
+}
