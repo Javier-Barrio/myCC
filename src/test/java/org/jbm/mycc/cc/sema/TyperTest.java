@@ -856,7 +856,8 @@ class TyperTest {
                 declaredTypes("int a[2 + 3]; enum { N = 4 }; int b[N]; int c[sizeof(int)]; char d['a']; int e[1u << 3]; int f[N][N + 2];"));
         assertEquals("20:unsigned long", expr("int a[2 + 3];", "sizeof a"));
         assertEquals("(add:unsigned long 3:unsigned long 5:unsigned long)", expr("int a[2 + 3]; enum { N = 3 }; int b[N];", "_Countof b + _Countof a"));
-        assertTrue(fails("int z[0];").getMessage().contains("positive"));
+        assertEquals(List.of("z: int [0]"), declaredTypes("int z[0];"), "a zero-length array, as GNU allows");
+        assertEquals("0:unsigned long", expr("int z[0];", "sizeof z"));
         assertTrue(fails("int z[-1];").getMessage().contains("positive"));
         assertTrue(fails("int z[1.5];").getMessage().contains("not an integer"));
         assertTrue(fails("int n; int v[n];").getMessage().contains("variable length arrays"));
@@ -1502,7 +1503,9 @@ class TyperTest {
 
     @Test
     void invalidTypesAreErrors() {
-        assertTrue(fails("int a[0];").getMessage().contains("positive"));
+        assertEquals("0:unsigned long", expr("struct E {};", "sizeof(struct E)"), "an empty struct has size 0, as GNU allows");
+        assertEquals("1:unsigned long", expr("struct E {};", "alignof(struct E)"));
+        assertEquals("(add:unsigned long 0:unsigned long 2:unsigned long)", expr("struct E {}; struct C { struct E e; short s; };", "sizeof(struct E) + sizeof(struct C)"));
         assertTrue(fails("int f(void)[3];").getMessage().contains("return an array"));
         assertTrue(fails("int f(void)(int);").getMessage().contains("return a function"));
         assertTrue(fails("void a[3];").getMessage().contains("incomplete element type"));
