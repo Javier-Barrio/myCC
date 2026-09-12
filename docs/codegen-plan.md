@@ -106,7 +106,7 @@ Asm          builds the IR in order; comments only when annotating
 AttPrinter   the IR in AT&T syntax for the GNU assembler; an assembler would encode the same IR
 ```
 
-CPU-specific, in `org.jbm.mycc.cc.backend.lower.arch.x86_64`, beside `X86_64SysV`:
+CPU-specific, in `org.jbm.mycc.cc.backend.arch.x86_64`, beside `X86_64SysV`:
 
 ```
 X86Emitter   implements Backend and TacVisitor<Void>: one method per instruction, writing lines;

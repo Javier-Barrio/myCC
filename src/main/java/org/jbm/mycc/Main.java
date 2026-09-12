@@ -2,7 +2,7 @@ package org.jbm.mycc;
 
 import org.jbm.mycc.cc.Compiler;
 import org.jbm.mycc.cc.backend.codegen.Codegen;
-import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.AstPrinter;
 import org.jbm.mycc.cc.cpp.HeaderProvider;
 import org.jbm.mycc.cc.backend.lower.tac.TacWriter;

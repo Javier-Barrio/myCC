@@ -1,4 +1,4 @@
-package org.jbm.mycc.cc.backend.lower.arch.x86_64;
+package org.jbm.mycc.cc.backend.arch.x86_64;
 
 import java.util.List;
 

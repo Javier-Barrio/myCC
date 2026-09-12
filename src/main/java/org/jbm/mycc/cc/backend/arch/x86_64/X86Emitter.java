@@ -1,4 +1,4 @@
-package org.jbm.mycc.cc.backend.lower.arch.x86_64;
+package org.jbm.mycc.cc.backend.arch.x86_64;
 
 import org.jbm.mycc.cc.backend.codegen.Asm;
 import org.jbm.mycc.cc.backend.codegen.Backend;
@@ -24,8 +24,8 @@ import static org.jbm.mycc.cc.backend.codegen.Operand.imm;
 import static org.jbm.mycc.cc.backend.codegen.Operand.mem;
 import static org.jbm.mycc.cc.backend.codegen.Operand.reg;
 import static org.jbm.mycc.cc.backend.codegen.Operand.sym;
-import static org.jbm.mycc.cc.backend.lower.arch.x86_64.X86Abi.part;
-import static org.jbm.mycc.cc.backend.lower.arch.x86_64.X86Abi.suffix;
+import static org.jbm.mycc.cc.backend.arch.x86_64.X86Abi.part;
+import static org.jbm.mycc.cc.backend.arch.x86_64.X86Abi.suffix;
 
 /**
  * x86-64, one method per TAC instruction, building the assembly IR

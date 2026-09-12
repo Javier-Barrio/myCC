@@ -1,4 +1,4 @@
-package org.jbm.mycc.cc.backend.lower.arch;
+package org.jbm.mycc.cc.backend.arch;
 
 import org.jbm.mycc.cc.sema.types.CType.Float;
 import org.jbm.mycc.cc.sema.types.CType.Int.Rank;

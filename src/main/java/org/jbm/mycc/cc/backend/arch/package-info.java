@@ -4,6 +4,6 @@
  * point that picks the default.
  */
 @NotNullByDefault
-package org.jbm.mycc.cc.backend.lower.arch;
+package org.jbm.mycc.cc.backend.arch;
 
 import org.jetbrains.annotations.NotNullByDefault;

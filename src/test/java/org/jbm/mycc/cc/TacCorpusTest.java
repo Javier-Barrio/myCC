@@ -2,7 +2,7 @@ package org.jbm.mycc.cc;
 
 import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.backend.lower.Lower;
-import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.backend.lower.tac.Instr;
 import org.jbm.mycc.cc.backend.lower.tac.Module;
 import org.jbm.mycc.cc.backend.lower.tac.TacInvariants;

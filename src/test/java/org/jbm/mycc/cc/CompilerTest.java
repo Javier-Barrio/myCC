@@ -1,7 +1,7 @@
 package org.jbm.mycc.cc;
 
 import org.jbm.mycc.cc.Compiler;
-import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.cpp.BundledHeaders;
 import org.jbm.mycc.cc.parse.ParseException;
 import org.jbm.mycc.cc.parse.Parser;
