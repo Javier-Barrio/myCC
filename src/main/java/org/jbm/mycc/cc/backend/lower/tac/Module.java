@@ -43,6 +43,39 @@ public final class Module {
         throw new IllegalArgumentException("no size for " + t.spelling());
     }
 
+    /**
+     * The bytes a global's storage takes: its type's size, or more when
+     * the initializer reaches past it, as GNU's initialized flexible
+     * array member does.
+     */
+    public long imageSize(@NonNull Global g) {
+        long size = sizeOf(g.type());
+        if (g.init() == null) {
+            return size;
+        }
+        for (Global.Item item : g.init()) {
+            size = Math.max(size, item.offset() + itemSize(item));
+        }
+        return size;
+    }
+
+    private long itemSize(Global.Item item) {
+        if (item instanceof Global.IntItem x) {
+            return sizeOf(x.type());
+        }
+        if (item instanceof Global.FloatItem x) {
+            return sizeOf(x.type());
+        }
+        if (item instanceof Global.AddrItem) {
+            return target.pointerWidth() / 8;
+        }
+        if (item instanceof Global.BytesItem x) {
+            return x.bytes().length;
+        }
+        var bits = (Global.BitItem) item;
+        return (bits.bit() + bits.width() + 7) / 8;
+    }
+
     /** The alignment in bytes of a memory type. */
     public int alignOf(@NonNull Type t) {
         if (t instanceof Type.Array a) {

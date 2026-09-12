@@ -134,7 +134,7 @@ public class VM implements TacVisitor<Void> {
         for (Symbol s : mod.symbols()) {
             if (s instanceof Global g) {
                 Symbol previous = symbolTable.symbols.get(g.name());
-                long size = size(g.type());
+                long size = mod.imageSize(g);
                 // the same type by name may have a new layout: the size tells
                 boolean keep = previous instanceof Global old && old.type().equals(g.type())
                         && allocated.getOrDefault(g.name(), -1L) == size;
@@ -150,13 +150,13 @@ public class VM implements TacVisitor<Void> {
             symbolTable.symbols.put(s.name(), s);
         }
         for (Global g : placed) {
-            initialize(g, addresses.get(g.name()));
+            initialize(g, addresses.get(g.name()), allocated.get(g.name()));
         }
     }
 
     // The initializer items applied in order over zeros.
-    private void initialize(Global g, long address) {
-        memory.fill(address, size(g.type()), (byte) 0);
+    private void initialize(Global g, long address, long size) {
+        memory.fill(address, size, (byte) 0);
         if (g.init() == null) {
             return;
         }

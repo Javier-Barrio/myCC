@@ -1021,6 +1021,9 @@ class TyperTest {
         assertTrue(exprFails("struct S { int a; } s;", "s + 1").getMessage().contains("invalid operands"));
         assertTrue(exprFails("struct S { int a; } s;", "!s").getMessage().contains("invalid operand"));
         assertTrue(exprFails("struct S { int a; } s;", "(int)s").getMessage().contains("non-scalar"));
+        assertEquals("(rv:struct S s:struct S)", expr("struct S { int a; } s;", "(struct S)s"), "a cast to its own type, as gcc allows");
+        assertEquals("(rv:struct S s:const struct S)", expr("struct S { int a; }; const struct S s;", "(struct S)s"));
+        assertTrue(exprFails("struct S { int a; }; struct T { int b; } t;", "(struct S)t").getMessage().contains("non-scalar"));
     }
 
     @Test
@@ -1153,6 +1156,10 @@ class TyperTest {
         assertEquals("m:int [3][2] (init (8 1:int) (12 2:int) (16 3:int))", init("int m[][2] = {[1] = 1, 2, 3};"));
         assertEquals("m:int [2][2] (init (4 7:int) (8 8:int))", init("int m[2][2] = {[0][1] = 7, 8};"), "nested designators");
         assertEquals("a:int [6] (init (4 7:int) (8 7:int) (12 7:int) (16 8:int))", init("int a[6] = {[1 ... 3] = 7, 8};"), "a range, then the walk goes on after it");
+        assertEquals("s:struct S (init (0 1:int) (4 2:int))", init("struct S { int a, b; }; struct S s = ((struct S){1, 2});"), "a compound literal of the type initializes in place");
+        assertEquals("t:struct T (init (0 1:int) (4 2:int) (8 3:int))", init("struct S { int a, b; }; struct T { struct S s; int c; }; struct T t = { (struct S){1, 2}, 3 };"));
+        assertEquals("a:int [2] (init (0 1:int) (4 2:int))", init("int a[2] = (int [2]){1, 2};"));
+        assertTrue(fails("struct S { int a, b; }; struct T { int c; }; struct T t = (struct S){1, 2};").getMessage().contains("initializing"));
         assertEquals("a:int [4] (init (0 1:int) (4 1:int) (4 2:int) (8 2:int))", init("int a[4] = {[0 ... 1] = 1, [1 ... 2] = 2};"), "overlapping ranges, later wins");
         assertEquals("a:int [5] (init (12 3:int) (16 3:int))", init("int a[] = {[3 ... 4] = 3};"), "completed from the range's end");
         assertEquals("m:int [2][2] (init (4 5:int) (12 5:int))", init("int m[2][2] = {[0 ... 1][1] = 5};"), "a range with a nested designator");
