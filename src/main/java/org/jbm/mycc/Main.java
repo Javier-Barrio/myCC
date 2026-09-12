@@ -97,7 +97,9 @@ public class Main {
             file = args[i];
             source = Files.readString(Path.of(file));
         }
-        HeaderProvider headers = HeaderProvider.standard(searchDirs);
+        // A native build declares the C library from the system's headers;
+        // the VM's view uses the bundled subset it implements.
+        HeaderProvider headers = assembly || object ? HeaderProvider.system(searchDirs) : HeaderProvider.standard(searchDirs);
         var types = new Types(X86_64SysV.INSTANCE, std);
         Compiler.Compiled compiled = Compiler.compile(source, headers, file, types);
         if (object) {

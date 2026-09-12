@@ -1,5 +1,9 @@
 package org.jbm.mycc.cc.cpp;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import org.jbm.mycc.cc.cpp.HeaderProvider;
 import org.jbm.mycc.cc.backend.arch.Ilp32;
 import org.jbm.mycc.cc.cpp.*;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
@@ -19,6 +23,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Every bundled header is found, goes through the whole front end on both targets, and can be included twice. */
@@ -85,6 +90,29 @@ class BundledHeadersTest {
         assertTrue(ilp32.contains("(global d:int "), ilp32);
         assertTrue(ilp32.contains("(global i:int "), ilp32);
         assertTrue(ilp32.contains("(global u:unsigned int "), ilp32);
+    }
+
+    @Test
+    void theCompilerHeadersAnswerTheLibraryHeadersProtocol() {
+        String partial = typed("#define __need___va_list\n#include <stdarg.h>\n__gnuc_va_list a; int n = sizeof(__gnuc_va_list);\n", X64);
+        assertTrue(partial.contains("(global n:int 24:int)"), partial);
+        assertThrows(RuntimeException.class, () -> typed("#define __need___va_list\n#include <stdarg.h>\nva_list b;\n", X64), "only __gnuc_va_list was asked for");
+        String full = typed("#define __need___va_list\n#include <stdarg.h>\n#include <stdarg.h>\nva_list b; int m = sizeof b;\n", X64);
+        assertTrue(full.contains("(global m:int 24:int)"), full);
+        String needs = typed("#define __need_size_t\n#include <stddef.h>\n#ifdef __need_size_t\nint still = 1;\n#endif\nsize_t s = 1;\n", X64);
+        assertTrue(!needs.contains("still") && needs.contains("(global s:unsigned long "), needs);
+        assertTrue(typed("#include <float.h>\nint d = DBL_DIG; double e = DBL_EPSILON;\n", X64).contains("(global d:int 15:int)"));
+        assertTrue(typed("#include <iso646.h>\nint x = 1 and not 0;\n", X64).contains("(global x:int 1:int)"));
+    }
+
+    @Test
+    void theSystemProviderTakesTheCompilerHeadersFromTheBundle() {
+        HeaderProvider system = HeaderProvider.system(List.of());
+        assertEquals("<stddef.h>", system.find("stddef.h", false, "x.c").orElseThrow().name());
+        assertEquals("<stdarg.h>", system.find("stdarg.h", false, "x.c").orElseThrow().name());
+        assumeTrue(Files.isRegularFile(Path.of("/usr/include/stdio.h")), "no system headers");
+        assertTrue(system.find("stdio.h", false, "x.c").orElseThrow().name().startsWith("/usr/include"), "the library's from the system");
+        assertTrue(system.find("sys/types.h", false, "x.c").isPresent());
     }
 
     @Test

@@ -130,6 +130,26 @@ class ConditionalDirectivesTest {
     }
 
     @Test
+    void aCommentMayRunPastTheEndOfADirectiveLine() {
+        assertExpandsTo("#define SA 4 /* what it\n   does */\nSA", "4");
+        assertExpandsTo("#define F(x) (x /* the\n   argument */ + 1)\nF(2)", "(", "2", "+", "1", ")");
+        assertExpandsTo("#define G(x /* the\n   parameter */) x\nG(3)", "3");
+        assertExpandsTo("#if 1 /* yes\n   */\nok\n#endif\n#undef SA /* gone\n   */\nSA", "ok", "SA");
+        assertExpandsTo("#define S \"/*\" /* a\n   comment */\nS", "\"/*\"");
+    }
+
+    @Test
+    void aNameIsAMacroOnlyAfterItsDefinition() {
+        assertExpandsTo("X\n#define X 1\nX", "X", "1");
+        assertExpandsTo("enum { A =\n#define A 0\n A, B =\n#define B 1\n B };", "enum", "{", "A", "=", "0", ",", "B", "=", "1", "}", ";");
+        assertExpandsTo("#define P Q\n#define Q 2\nP", "2");
+        assertExpandsTo("#define F(x) x + G\nF(1)\n#define G 3\nF(1)", "1", "+", "G", "1", "+", "3");
+        assertExpandsTo("#define X 1\n#undef X\nX\n#define X 2\nX", "X", "2");
+        assertExpandsTo("#define M(x) T x\n#define T double\nM(a);\n#undef T\n#define T float\nM(b);\n#undef M\nM(c)",
+                "double", "a", ";", "float", "b", ";", "M", "(", "c", ")");
+    }
+
+    @Test
     void pushAndPopMacro() {
         assertExpandsTo("#define A 1\n#pragma push_macro(\"A\")\n#undef A\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "1");
         assertExpandsTo("#pragma push_macro(\"A\")\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "A");

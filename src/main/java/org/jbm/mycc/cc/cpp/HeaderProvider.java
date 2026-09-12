@@ -27,9 +27,22 @@ public interface HeaderProvider {
         };
     }
 
-    /** What a compilation sees: files next to the includer and in {@code searchDirs}, then the bundled headers. */
+    /** What a compilation for the VM sees: files next to the includer and in {@code searchDirs}, then the bundled headers. */
     static HeaderProvider standard(@NonNull List<Path> searchDirs) {
         return chain(List.of(new FileHeaders(searchDirs), BundledHeaders.INSTANCE));
+    }
+
+    /** Where the system's C library keeps its headers. */
+    List<Path> SYSTEM_DIRS = List.of(Path.of("/usr/include/x86_64-linux-gnu"), Path.of("/usr/include"));
+
+    /**
+     * What a native build sees: files next to the includer and in
+     * {@code searchDirs}, the headers that describe the compiler, then
+     * the system's, which describe the C library the program is linked
+     * with.
+     */
+    static HeaderProvider system(@NonNull List<Path> searchDirs) {
+        return chain(List.of(new FileHeaders(searchDirs), BundledHeaders.COMPILER, new FileHeaders(SYSTEM_DIRS)));
     }
 
     /** The first provider that has the header wins. */
