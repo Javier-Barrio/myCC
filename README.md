@@ -3,7 +3,8 @@
 A C compiler in Java: preprocessor, parser, semantic analysis, and a
 lowering to a three-address code (TAC), plus a VM that executes the TAC
 and `cshell`, an interactive C shell in the spirit of `jshell`.  There is 
-also an x86-64 assembler built in.  The linker is planned but not yet implemented.
+also an x86-64 assembler built in.  The linker is planned but not yet implemented;
+see [Gaps](#gaps) for that and the other things missing or approximated.
 
 The compilation targets are x86-64 Linux and the cshell.
 
