@@ -349,6 +349,33 @@ public class VM implements TacVisitor<Void> {
         return result;
     }
 
+    /**
+     * Runs main as the C runtime would: with argc and argv when it takes
+     * them, the strings and the pointer array placed in static storage;
+     * a main without parameters gets none.
+     */
+    public Value main(List<String> argv) {
+        Symbol symbol = symbolTable.symbols.get("main");
+        if (!(symbol instanceof Function function) || function.params.isEmpty()) {
+            return call("main", List.of());
+        }
+        int pointerBytes = target.pointerWidth() / 8;
+        long array = memory.allocate((long) pointerBytes * (argv.size() + 1), 8);
+        for (int i = 0; i < argv.size(); i++) {
+            String arg = argv.get(i);
+            long at = memory.allocate(arg.length() + 1, 1);
+            memory.string(at, arg);
+            memory.storeInt(array + (long) pointerBytes * i, target.pointerWidth(), at);
+        }
+        memory.storeInt(array + (long) pointerBytes * argv.size(), target.pointerWidth(), 0);
+        List<Value> args = new ArrayList<>();
+        args.add(new IntValue(argv.size()));
+        if (function.params.size() > 1) {
+            args.add(new IntValue(array));
+        }
+        return call("main", args);
+    }
+
     private static final int MAX_FRAMES = 100_000;
 
     // A frame for a call: a zeroed slot on the stack for every parameter

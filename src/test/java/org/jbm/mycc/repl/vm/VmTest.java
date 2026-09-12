@@ -49,6 +49,19 @@ class VmTest {
         return run(source, new Types(X86_64SysV.INSTANCE));
     }
 
+    @Test
+    void mainReceivesItsArguments() {
+        VM vm = new VM();
+        vm.step(module("int main(int argc, char **argv) { return argc * 100 + (argv[0][0] == 'p') * 10 + (argv[1][1] == 'b') + (argv[2] == 0) * 1000; }"));
+        assertEquals(new VM.IntValue(1211), vm.main(List.of("prog", "ab")));
+        vm = new VM();
+        vm.step(module("int main(int argc) { return argc; }"));
+        assertEquals(new VM.IntValue(3), vm.main(List.of("a", "b", "c")));
+        vm = new VM();
+        vm.step(module("int main(void) { return 7; }"));
+        assertEquals(new VM.IntValue(7), vm.main(List.of("ignored")));
+    }
+
     static VM.Value run(String source, Types types) {
         VM vm = new VM();
         vm.step(module(source, types));

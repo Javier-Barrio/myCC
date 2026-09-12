@@ -63,7 +63,7 @@ class CTestsuiteTest {
             vm.step(compiled.tac());
             long exit;
             try {
-                VM.Value v = vm.call("main", List.of());
+                VM.Value v = vm.main(List.of("test"));
                 exit = v instanceof VM.IntValue i ? i.value() : 0;
             } catch (Libc.Exit e) {
                 exit = e.status;
