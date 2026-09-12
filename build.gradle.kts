@@ -33,7 +33,7 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     // -Dtyped.update=true / -Dtac.update=true regenerate the corpus goldens.
-    for (flag in listOf("typed.update", "tac.update")) {
+    for (flag in listOf("typed.update", "tac.update", "ctestsuite.report")) {
         System.getProperty(flag)?.let { systemProperty(flag, it) }
     }
 }

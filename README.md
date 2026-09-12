@@ -20,6 +20,12 @@ Java 17 and the Gradle wrapper are all that is needed:
 The typed and TAC corpus goldens under `src/test/resources` are
 regenerated with `./gradlew test -Dtyped.update=true -Dtac.update=true`.
 
+`src/test/resources/c-testsuite` holds the single-file programs of
+[c-testsuite](https://github.com/c-testsuite/c-testsuite); the ones in
+`passing.txt` must pass on the VM and natively. `./gradlew test
+-Dctestsuite.report=true --tests '*CTestsuiteTest*' -i | grep CTESTSUITE`
+tries every program and prints why the others fail.
+
 ## The shell
 
 ```
