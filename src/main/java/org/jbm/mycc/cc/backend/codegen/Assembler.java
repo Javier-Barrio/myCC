@@ -60,7 +60,11 @@ public final class Assembler {
         Section current = section(".text");
         for (Item item : items) {
             if (item instanceof Item.Section s) {
-                current = section(s.name().startsWith(".section ") ? s.name().substring(9).split(",")[0] : s.name());
+                String name = s.name().startsWith(".section ") ? s.name().substring(9).split(",")[0] : s.name();
+                if (name.startsWith(".note")) {
+                    continue;   // the object writer adds the GNU-stack note itself
+                }
+                current = section(name);
             } else if (item instanceof Item.Label l) {
                 current.chunks.add(new LabelChunk(l.name()));
             } else if (item instanceof Item.Global g) {
