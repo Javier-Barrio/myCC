@@ -75,6 +75,8 @@ CP=build/classes/java/main:$(find ~/.gradle -name 'annotations-26*.jar' | head -
 java -cp $CP org.jbm.mycc.Main file.c [-I dir]
 java -cp $CP org.jbm.mycc.Main -S -a file.c > file.s
 gcc -o prog file.s          # AT&T syntax for the GNU assembler; the C library is glibc's
+java -cp $CP org.jbm.mycc.Main -c file.c      # or our own assembler: writes file.o
+gcc -o prog file.o
 ```
 
 Without a file it compiles its built-in sample program. In the shell,

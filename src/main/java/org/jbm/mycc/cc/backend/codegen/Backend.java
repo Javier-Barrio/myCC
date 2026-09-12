@@ -10,4 +10,7 @@ public interface Backend {
     String target();
 
     void function(Asm asm, Module module, Function function);
+
+    /** The target's instruction encoder, for the assembler. */
+    Encoder encoder();
 }
