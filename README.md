@@ -34,7 +34,25 @@ An ILP32 data model (`Ilp32`, 32-bit `long` and pointers) exists for
 the type system and the VM only, to keep the layout code honest; there
 is no code generator for it.
 
-## Lua, as a check
+## The commands
+
+`./gradlew installDist` builds the launchers; then `bin/mycc` is the
+compiler as a gcc-compatible command and `bin/cshell` the shell:
+
+```
+bin/mycc -c file.c -o file.o        # an ELF object, ready for gcc or ld
+bin/mycc -S -a file.c               # assembly with the TAC in comments
+bin/mycc -E -DX=1 -I inc file.c     # preprocessed
+bin/mycc -o prog a.c b.o -lm        # compiles the C and links through gcc
+bin/mycc -std=c17 -c old.c
+```
+
+`-O`, `-g`, `-W...`, `-f...`, `-m...` and the `-M` dependency flags
+are accepted and ignored, so a build system can be pointed at it with
+`CC=bin/mycc`. Until there is a linker of our own, the link step is
+gcc's; the objects are all ours.
+
+## Lua and curl, as checks
 
 Lua 5.4.7 builds with the compiler unchanged and passes its own test
 suite, `all.lua`, in full. With the Lua sources unpacked in `lua/`:
@@ -47,6 +65,18 @@ cd lua-tests && ../lua -e "_U=true" all.lua
 ```
 
 `luac.c` is left out since it defines its own `main`.
+
+curl 8.10.1 builds through its own `configure` with the compiler as
+`CC`, and its test suite runs against the result:
+
+```
+./configure CC=$PWD/../myCc/bin/mycc --without-ssl --disable-shared --without-libpsl --without-zlib
+make -j4 && cd tests && perl runtests.pl -n -a
+```
+
+The objects we produce follow the System V ABI, small structs in
+registers included, so they link with gcc-built objects and with the
+C library either way; `AbiTest` checks that in both directions.
 
 ## Build and test
 
