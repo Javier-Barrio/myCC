@@ -1,5 +1,6 @@
 package org.jbm.mycc.cc;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import lombok.NonNull;
 import org.jbm.mycc.cc.cpp.CppTokenizer;
 import org.jbm.mycc.cc.cpp.CppTokenizer.TokenSet;
@@ -40,9 +41,10 @@ public final class Compiler {
     }
 
     /** Preprocesses and parses a script, without resolving or typing it. */
-    public static Parsed parseScript(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
+    public static Parsed parseScript(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,
+                                     @NonNull Std std) {
         TokenSet tokens = TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file)));
-        return new Parsed(tokens, Parser.parseScript(tokens));
+        return new Parsed(tokens, Parser.parseScript(tokens, std));
     }
 
     public static Compiled compile(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,
@@ -60,7 +62,7 @@ public final class Compiler {
         Target t = types.target();
         StringBuilder sb = new StringBuilder();
         sb.append("#define __STDC__ 1\n");
-        sb.append("#define __STDC_VERSION__ 202311L\n");
+        sb.append("#define __STDC_VERSION__ ").append(types.std().version).append('\n');
         sb.append("#define __STDC_HOSTED__ 1\n");
         sb.append("#define __CHAR_BIT__ 8\n");
         sb.append("#define __SIZEOF_SHORT__ ").append(t.width(CType.Int.Rank.SHORT) / 8).append('\n');
@@ -88,7 +90,7 @@ public final class Compiler {
 
     private static Compiled run(String source, @Nullable HeaderProvider headers, String file, Types types, boolean script) {
         TokenSet tokens = TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file, predefined(types))));
-        List<Decl> ast = script ? Parser.parseScript(tokens) : Parser.parse(tokens);
+        List<Decl> ast = script ? Parser.parseScript(tokens, types.std()) : Parser.parse(tokens, types.std());
         List<Decl> desugared = Desugar.desugar(ast);
         TUnit typed = Typer.type(desugared, Resolver.resolve(desugared), types);
         Module tac = Lower.lower(typed, types);

@@ -31,7 +31,7 @@ final class Spelling {
         if (t instanceof CType.Function f) {
             String params = f.parameters().stream().map(CType::spelling).collect(Collectors.joining(", "));
             if (f.isVariadic()) params += params.isEmpty() ? "..." : ", ...";
-            if (params.isEmpty()) params = "void";
+            if (params.isEmpty() && f.hasPrototype()) params = "void";
             return spell(f.returnType(), inner + "(" + params + ")");
         }
         String base = t.spelling();

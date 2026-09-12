@@ -1,5 +1,6 @@
 package org.jbm.mycc.cc.parse;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.Main;
 import org.jbm.mycc.cc.parse.ParseException;
 import org.jbm.mycc.cc.parse.Parser;
@@ -39,6 +40,14 @@ class ParserTest {
     /** Parses a translation unit; one line per external declaration. */
     private static String unit(String source) {
         return AstPrinter.print(Parser.parse(preprocess(source)));
+    }
+
+    private static String unitC17(String source) {
+        return AstPrinter.print(Parser.parse(preprocess(source), Std.C17));
+    }
+
+    private static ParseException failsC17(String source) {
+        return assertThrows(ParseException.class, () -> Parser.parse(preprocess(source), Std.C17));
     }
 
     private static ParseException fails(String source) {
@@ -381,6 +390,25 @@ class ParserTest {
             assertEquals("(decl (enum E (A) (B)))", unit("enum E { A [[deprecated(\"old\")]], B };"));
             assertEquals("(decl (a (array int 3)))", unit("int a[3] [[q]];"));
             assertEquals("(decl (f (fn void ((n int)))))", unit("void f([[maybe_unused]] int n);"));
+        }
+
+        @Test
+        void c17FunctionsWithoutAPrototype() {
+            assertEquals("(decl (f (fn int ())))", unit("int f();"), "C23: () is (void)");
+            assertEquals("(decl (f (fn int () old-style)))", unitC17("int f();"), "C17: () declares no prototype");
+            assertEquals("(decl (f (fn int ())))", unitC17("int f(void);"));
+            assertEquals("(decl typedef (fp (ptr (fn int () old-style))))", unitC17("typedef int (*fp)();"));
+            assertEquals("(fundef add (fn long ((a int) (b char)) old-style) (block (return (+ a b))))",
+                    unitC17("long add(a, b) int a; char b; { return a + b; }"), "an old-style definition");
+            assertEquals("(fundef g (fn int ((x int) (y int)) old-style) (block (return x)))",
+                    unitC17("int g(x, y) { return x; }"), "an undeclared parameter is an int");
+            assertEquals("(fundef h (fn int ((n int) (p (ptr char))) old-style) (block (return n)))",
+                    unitC17("int h(n, p) char *p; { return n; }"), "declarations in any order, parameters in the list's");
+            assertTrue(failsC17("int f(a, b) int c; { return a; }").getMessage().contains("not a parameter"));
+            assertTrue(failsC17("int f(a, a) { return a; }").getMessage().contains("twice"));
+            assertTrue(failsC17("int f(a) int a = 1; { return a; }").getMessage().contains("initializer"));
+            assertTrue(failsC17("int f(a); int g;").getMessage().contains("expected"));
+            assertTrue(fails("int f(a, b) int a; { return a; }").getMessage().contains("expected"), "C23 has no identifier lists");
         }
 
         @Test

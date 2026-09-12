@@ -1,5 +1,6 @@
 package org.jbm.mycc.repl.vm;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.cc.Compiler;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.parse.ast.Decl;
@@ -40,13 +41,21 @@ class VmTest {
 
     static Module module(String source, Types types) {
         CppTokenizer.TokenSet tokens = CppTokenizer.tokenSet(source, BundledHeaders.INSTANCE, "test.c");
-        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens))));
+        List<Decl> unit = Desugar.desugar(Parser.parse(TokenConversion.convert(new Scanner().expand(tokens)), types.std()));
         TUnit typed = Typer.type(unit, Resolver.resolve(unit), types);
         return Lower.lower(typed, types);
     }
 
     static VM.Value run(String source) {
         return run(source, new Types(X86_64SysV.INSTANCE));
+    }
+
+    @Test
+    void c17CallsWithoutAPrototype() {
+        Types c17 = new Types(X86_64SysV.INSTANCE, Std.C17);
+        String source = "int f() { return 1; } int add(a, b) int a; char b; { return a + b; } double half(d) double d; { return d / 2; }"
+                + " int main() { return f(2, 3.5) + add(40, 'b' - 'a') + (half(6.0) == 3.0); }";
+        assertEquals(new VM.IntValue(43), run(source, c17));
     }
 
     @Test

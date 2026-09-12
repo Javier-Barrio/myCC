@@ -306,9 +306,13 @@ public sealed interface CType
      * dropped for compatibility). {@code (void)} is an empty parameter
      * list. Function types have no qualifiers.
      */
-    record Function(CType returnType, List<CType> parameters, boolean isVariadic) implements CType {
+    record Function(CType returnType, List<CType> parameters, boolean isVariadic, boolean hasPrototype) implements CType {
         public Function {
             parameters = List.copyOf(parameters);
+        }
+
+        public Function(CType returnType, List<CType> parameters, boolean isVariadic) {
+            this(returnType, parameters, isVariadic, true);
         }
 
         @Override
@@ -329,7 +333,7 @@ public sealed interface CType
         @Override
         public boolean equals(Object o) {
             if (!(o instanceof Function f) || f.returnType != returnType || f.isVariadic != isVariadic
-                    || f.parameters.size() != parameters.size()) return false;
+                    || f.hasPrototype != hasPrototype || f.parameters.size() != parameters.size()) return false;
             for (int i = 0; i < parameters.size(); i++) if (f.parameters.get(i) != parameters.get(i)) return false;
             return true;
         }
@@ -338,7 +342,7 @@ public sealed interface CType
         public int hashCode() {
             int h = System.identityHashCode(returnType);
             for (CType p : parameters) h = h * 31 + System.identityHashCode(p);
-            return h * 2 + (isVariadic ? 1 : 0);
+            return h * 4 + (isVariadic ? 1 : 0) + (hasPrototype ? 2 : 0);
         }
 
         @Override

@@ -26,8 +26,15 @@ public final class Types {
     private final CType.Int boolType;
     private final CType.Nullptr nullptrType;
 
+    private final Std std;
+
     public Types(@NonNull Target target) {
+        this(target, Std.C23);
+    }
+
+    public Types(@NonNull Target target, @NonNull Std std) {
         this.target = target;
+        this.std = std;
         this.voidType = (CType.Void) intern(new CType.Void(Quals.NONE));
         this.boolType = (CType.Int) intern(new CType.Int(Rank.BOOL, Sign.UNSIGNED, Quals.NONE));
         this.nullptrType = (CType.Nullptr) intern(new CType.Nullptr(Quals.NONE));
@@ -35,6 +42,10 @@ public final class Types {
 
     public Target target() {
         return target;
+    }
+
+    public Std std() {
+        return std;
     }
 
     private CType intern(CType t) {
@@ -148,9 +159,15 @@ public final class Types {
      */
     public CType.Function function(@NonNull CType returnType, @NonNull List<? extends CType> parameters,
                                    boolean isVariadic) {
+        return function(returnType, parameters, isVariadic, true);
+    }
+
+    /** A function type without a prototype (C17 6.7.6.3): {@code ()} declared, or an old-style definition's parameters. */
+    public CType.Function function(@NonNull CType returnType, @NonNull List<? extends CType> parameters,
+                                   boolean isVariadic, boolean hasPrototype) {
         var adjusted = new ArrayList<CType>(parameters.size());
         for (CType p : parameters) adjusted.add(adjustParameter(p));
-        return (CType.Function) intern(new CType.Function(returnType, adjusted, isVariadic));
+        return (CType.Function) intern(new CType.Function(returnType, adjusted, isVariadic, hasPrototype));
     }
 
     /** 6.7.7.4p7-8, and 6.7.7.4p15: qualifiers do not take part in compatibility. */
@@ -287,14 +304,37 @@ public final class Types {
             return compatible(aa.element(), ab.element());
         }
         if (a instanceof CType.Function fa && b instanceof CType.Function fb) {
-            if (fa.isVariadic() != fb.isVariadic() || fa.parameters().size() != fb.parameters().size()) return false;
             if (!compatible(fa.returnType(), fb.returnType())) return false;
+            if (!fa.hasPrototype() || !fb.hasPrototype()) return compatibleWithoutPrototype(fa, fb);
+            if (fa.isVariadic() != fb.isVariadic() || fa.parameters().size() != fb.parameters().size()) return false;
             for (int i = 0; i < fa.parameters().size(); i++) {
                 if (!compatible(fa.parameters().get(i), fb.parameters().get(i))) return false;
             }
             return true;
         }
         return false;
+    }
+
+    // C17 6.7.6.3p15 for a function type without a prototype, the return
+    // types already compatible: against a prototype, that one is not
+    // variadic and its parameters are what the default argument
+    // promotions make of them; parameters from an old-style definition
+    // must agree in number and, promoted, in type. Two without a
+    // prototype agree unless both have parameters that differ in number.
+    private boolean compatibleWithoutPrototype(CType.Function a, CType.Function b) {
+        if (!a.hasPrototype() && !b.hasPrototype()) {
+            return a.parameters().isEmpty() || b.parameters().isEmpty() || a.parameters().size() == b.parameters().size();
+        }
+        CType.Function old = a.hasPrototype() ? b : a;
+        CType.Function proto = a.hasPrototype() ? a : b;
+        if (proto.isVariadic()) return false;
+        if (!old.parameters().isEmpty() && old.parameters().size() != proto.parameters().size()) return false;
+        for (int i = 0; i < proto.parameters().size(); i++) {
+            CType p = proto.parameters().get(i);
+            if (!compatible(p, defaultArgumentPromote(p))) return false;
+            if (i < old.parameters().size() && !compatible(defaultArgumentPromote(old.parameters().get(i)), p)) return false;
+        }
+        return true;
     }
 
     /**
@@ -313,6 +353,16 @@ public final class Types {
             return size.isPresent() ? array(element, size.getAsLong()) : incompleteArray(element);
         }
         if (a instanceof CType.Function fa && b instanceof CType.Function fb) {
+            CType ret = composite(fa.returnType(), fb.returnType());
+            if (fa.hasPrototype() != fb.hasPrototype()) {
+                // The prototype is the composite (C17 6.2.7p3).
+                CType.Function proto = fa.hasPrototype() ? fa : fb;
+                return function(ret, proto.parameters(), proto.isVariadic(), true);
+            }
+            if (!fa.hasPrototype()) {
+                CType.Function withParameters = fa.parameters().isEmpty() ? fb : fa;
+                return function(ret, withParameters.parameters(), false, false);
+            }
             var params = new ArrayList<CType>(fa.parameters().size());
             for (int i = 0; i < fa.parameters().size(); i++) {
                 params.add(composite(fa.parameters().get(i), fb.parameters().get(i)));

@@ -172,7 +172,7 @@ final class TypeBuilder {
             if (p.name().isPresent()) bindings.symbolOf(p).setType(pt);
             params.add(pt);
         }
-        return types.function(returnType, params, f.isVariadic());
+        return types.function(returnType, params, f.isVariadic(), f.hasPrototype());
     }
 
     // ---- structures and unions (6.7.3.2) ------------------------------------------------------

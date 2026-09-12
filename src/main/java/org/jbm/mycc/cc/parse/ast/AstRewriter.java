@@ -434,7 +434,7 @@ public abstract class AstRewriter implements Visitor<Object> {
         Type ret = rewrite(t.returnType());
         var params = rewriteAll(t.parameters(), this::rewriteParameter);
         if (ret == t.returnType() && params == t.parameters()) return t;
-        return new Type.Function(t.paren(), ret, params, t.isVariadic(), t.quals());
+        return new Type.Function(t.paren(), ret, params, t.isVariadic(), t.hasPrototype(), t.quals());
     }
 
     @Override

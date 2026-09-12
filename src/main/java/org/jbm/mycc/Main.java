@@ -1,5 +1,6 @@
 package org.jbm.mycc;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.cc.Compiler;
 import org.jbm.mycc.cc.backend.codegen.Codegen;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
@@ -55,7 +56,8 @@ public class Main {
     // With a path argument compiles that file, with `-I dir` search
     // directories for its includes; without one, SOURCE.
     // `-S` prints x86-64 assembly instead, `-a` with the TAC in comments;
-    // `-c` writes an object file, `-o name` names it.
+    // `-c` writes an object file, `-o name` names it; `-std=c17` compiles
+    // as C17, where `()` declares no prototype.
     public static void main(String[] args) throws IOException {
         List<Path> searchDirs = new ArrayList<>();
         String file = "<source>";
@@ -64,7 +66,12 @@ public class Main {
         boolean annotate = false;
         boolean object = false;
         String output = null;
+        Std std = Std.C23;
         for (int i = 0; i < args.length; i++) {
+            if (args[i].startsWith("-std=")) {
+                std = Std.of(args[i].substring("-std=".length()));
+                continue;
+            }
             if (args[i].equals("-I") && i + 1 < args.length) {
                 searchDirs.add(Path.of(args[i + 1]));
                 i++;
@@ -91,7 +98,7 @@ public class Main {
             source = Files.readString(Path.of(file));
         }
         HeaderProvider headers = HeaderProvider.standard(searchDirs);
-        var types = new Types(X86_64SysV.INSTANCE);
+        var types = new Types(X86_64SysV.INSTANCE, std);
         Compiler.Compiled compiled = Compiler.compile(source, headers, file, types);
         if (object) {
             String name = output != null ? output : file.replaceAll("\\.c$", "") + ".o";

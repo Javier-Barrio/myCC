@@ -1,5 +1,6 @@
 package org.jbm.mycc.cc.backend.codegen;
 
+import org.jbm.mycc.cc.sema.types.Std;
 import org.jbm.mycc.cc.Compiler;
 import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.cpp.BundledHeaders;
@@ -35,6 +36,9 @@ class CTestsuiteTest {
 
     static final Path DIR = Path.of("src/test/resources/c-testsuite");
 
+    // The suite predates C23: `()` declares no prototype there.
+    static final Types STD = new Types(X86_64SysV.INSTANCE, Std.C17);
+
     static Stream<Path> programs() throws IOException {
         try (var files = Files.list(DIR)) {
             return files.filter(p -> p.toString().endsWith(".c")).sorted().toList().stream();
@@ -55,7 +59,7 @@ class CTestsuiteTest {
 
     static Result onVm(String source, String expected) {
         try {
-            var compiled = Compiler.compile(source, BundledHeaders.INSTANCE, "test.c", new Types(X86_64SysV.INSTANCE));
+            var compiled = Compiler.compile(source, BundledHeaders.INSTANCE, "test.c", STD);
             VM vm = new VM();
             Libc.bind(vm);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -83,7 +87,7 @@ class CTestsuiteTest {
 
     static Result natively(String source, String expected) {
         try {
-            ObjectTest.Run r = ObjectTest.link(source);
+            ObjectTest.Run r = ObjectTest.link(source, STD);
             if (r.exit() != 0) {
                 return new Result("native", false, "exit " + r.exit());
             }

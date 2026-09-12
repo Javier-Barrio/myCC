@@ -1,5 +1,8 @@
 package org.jbm.mycc.cc.parse;
 
+import java.util.LinkedHashMap;
+import java.util.IdentityHashMap;
+import org.jbm.mycc.cc.sema.types.Std;
 import lombok.NonNull;
 import org.jbm.mycc.cc.parse.ast.Attribute;
 import org.jbm.mycc.cc.parse.ast.BlockItem;
@@ -50,17 +53,30 @@ public final class Parser {
     }
 
     public Parser(@NonNull List<CppToken> tokens) {
-        this(tokens, false);
+        this(tokens, false, Std.C23);
     }
 
-    private Parser(List<CppToken> tokens, boolean script) {
+    // The standard: whether `()` declares no prototype and an old-style
+    // definition is accepted (C17), or `()` is `(void)` (C23).
+    private final Std std;
+
+    // The identifier list of each old-style declarator, by its '(' token,
+    // for the function definition that must follow.
+    private final Map<Token, List<Token>> identifierLists = new IdentityHashMap<>();
+
+    private Parser(List<CppToken> tokens, boolean script, Std std) {
         this.cur = new TokenCursor(tokens);
         this.script = script;
+        this.std = std;
     }
 
     /** Parses a whole translation-unit (6.9.1). */
     public static List<Decl> parse(@NonNull TokenSet tokens) {
-        return new Parser(tokens).parseTranslationUnit();
+        return parse(tokens, Std.C23);
+    }
+
+    public static List<Decl> parse(@NonNull TokenSet tokens, @NonNull Std std) {
+        return new Parser(tokens.tokens, false, std).parseTranslationUnit();
     }
 
     /** The name of the function that holds a script's file-scope statements. */
@@ -68,7 +84,11 @@ public final class Parser {
 
     /** Parses a script: a translation unit that may also have statements at file scope. */
     public static List<Decl> parseScript(@NonNull TokenSet tokens) {
-        return new Parser(tokens.tokens, true).parseTranslationUnit();
+        return parseScript(tokens, Std.C23);
+    }
+
+    public static List<Decl> parseScript(@NonNull TokenSet tokens, @NonNull Std std) {
+        return new Parser(tokens.tokens, true, std).parseTranslationUnit();
     }
 
     // ---- keyword classes --------------------------------------------------
@@ -181,7 +201,7 @@ public final class Parser {
         Token name = new Token(TokenType.IDENTIFIER, FILE_FUNCTION, first.line, first.column);
         name.file = first.file;
         Type voidType = new Type.Basic(first, Type.Kind.VOID, false, Quals.NONE);
-        Type.Function type = new Type.Function(first, voidType, List.of(), false, Quals.NONE);
+        Type.Function type = new Type.Function(first, voidType, List.of(), false, true, Quals.NONE);
         Specifiers specs = new Specifiers(first, List.of(), List.of(), Optional.empty(), Optional.of(voidType));
         Stmt.Compound body = new Stmt.Compound(first, statements);
         return new Decl.FunctionDefinition(List.of(), specs, name, type, body);
@@ -205,16 +225,25 @@ public final class Parser {
             return new Decl.Declaration(attrs, specs, List.of());
         }
         var first = parseDeclarator(DeclaratorKind.NAMED);
-        if (cur.at("{")) {
-            return parseFunctionDefinition(attrs, specs, first);
+        List<Token> identifiers = identifierListOf(first, specs);
+        if (cur.at("{") || !identifiers.isEmpty()) {
+            return parseFunctionDefinition(attrs, specs, first, identifiers);
         }
         var declarators = parseInitDeclaratorList(specs, first);
         cur.expect(";");
         return new Decl.Declaration(attrs, specs, declarators);
     }
 
+    // The identifier list of an old-style declarator, else nothing.
+    private List<Token> identifierListOf(Declarator declarator, Specifiers specs) {
+        if (applyDeclarator(declarator, specs).orElse(null) instanceof Type.Function fn) {
+            return identifierLists.getOrDefault(fn.paren(), List.of());
+        }
+        return List.of();
+    }
+
     private Decl.FunctionDefinition parseFunctionDefinition(List<Attribute> attrs, Specifiers specs,
-                                                            Declarator declarator) {
+                                                            Declarator declarator, List<Token> identifiers) {
         if (!(applyDeclarator(declarator, specs).orElse(null) instanceof Type.Function fn)) {
             throw cur.error("expected ';' after declarator (only a function can have a body)");
         }
@@ -222,6 +251,9 @@ public final class Parser {
         scopes.declareOrdinary(name.text);
         // 6.2.1p4: parameters have block scope in the function body.
         scopes.push();
+        if (!identifiers.isEmpty()) {
+            fn = oldStyleParameters(fn, identifiers);
+        }
         for (var p : fn.parameters()) {
             p.name().ifPresent(n -> scopes.declareOrdinary(n.text));
         }
@@ -654,8 +686,12 @@ public final class Parser {
             } else if (cur.at("(")) {
                 Token paren = cur.next();
                 var params = parseParameterTypeList();
+                if (!params.identifiers().isEmpty()) {
+                    identifierLists.put(paren, params.identifiers());
+                }
                 UnaryOperator<Type> prev = build;
-                build = t -> prev.apply(new Type.Function(paren, t, params.parameters(), params.variadic(), Quals.NONE));
+                build = t -> prev.apply(new Type.Function(paren, t, params.parameters(), params.variadic(),
+                        params.prototype(), Quals.NONE));
             } else {
                 break;
             }
@@ -712,16 +748,55 @@ public final class Parser {
         return quals;
     }
 
-    private record ParameterTypeList(List<Type.Parameter> parameters, boolean variadic) {
+    private record ParameterTypeList(List<Type.Parameter> parameters, boolean variadic, boolean prototype,
+                                     List<Token> identifiers) {
     }
 
     // parameter-type-list (6.7.7.1), '(' already consumed. Parameter names
     // live in a function prototype scope that ends at the ')' (6.2.1p4).
+    // An old-style definition (C17 6.9.1): the declarations between the
+    // identifier list and the body give the parameters their types, in
+    // the list's order; one not declared is an int.
+    private Type.Function oldStyleParameters(Type.Function fn, List<Token> identifiers) {
+        var declared = new LinkedHashMap<String, Type>();
+        while (!cur.at("{")) {
+            if (cur.atEof()) {
+                throw cur.error("expected the parameter declarations and '{' of an old-style definition");
+            }
+            if (!(parseDeclaration() instanceof Decl.Declaration d) || d.specifiers().has("typedef")) {
+                throw cur.error("expected a parameter declaration");
+            }
+            for (var id : d.declarators()) {
+                String parameter = id.name().text;
+                if (identifiers.stream().noneMatch(t -> t.text.equals(parameter))) {
+                    throw cur.error("'" + parameter + "' is not a parameter of the definition");
+                }
+                if (declared.containsKey(parameter)) {
+                    throw cur.error("parameter '" + parameter + "' declared twice");
+                }
+                if (id.initializer().isPresent()) {
+                    throw cur.error("a parameter cannot have an initializer");
+                }
+                declared.put(parameter, id.type().orElseThrow(() -> cur.error("a parameter needs a type")));
+            }
+        }
+        var params = new ArrayList<Type.Parameter>();
+        for (Token id : identifiers) {
+            Type type = declared.getOrDefault(id.text, new Type.Basic(id, Type.Kind.INT, false, Quals.NONE));
+            params.add(new Type.Parameter(List.of(), List.of(), type, Optional.of(id)));
+        }
+        return new Type.Function(fn.paren(), fn.returnType(), params, false, false, fn.quals());
+    }
+
     private ParameterTypeList parseParameterTypeList() {
         var params = new ArrayList<Type.Parameter>();
         boolean variadic = false;
         if (cur.accept(")")) {
-            return new ParameterTypeList(params, false);
+            // `()`: a prototype with no parameters in C23, none at all in C17.
+            return new ParameterTypeList(params, false, std == Std.C23, List.of());
+        }
+        if (std == Std.C17 && atIdentifierList()) {
+            return new ParameterTypeList(params, false, false, parseIdentifierList());
         }
         scopes.push();
         while (true) {
@@ -741,7 +816,27 @@ public final class Parser {
                 && b.kind() == Type.Kind.VOID && b.quals().isEmpty()) {
             params.clear();
         }
-        return new ParameterTypeList(params, variadic);
+        return new ParameterTypeList(params, variadic, true, List.of());
+    }
+
+    // identifier-list (C17 6.7.6.3): identifiers that are not type names,
+    // separated by commas, up to ')'.
+    private boolean atIdentifierList() {
+        Token t = cur.peek();
+        return t.type == TokenType.IDENTIFIER && !scopes.isTypeName(t.text) && (cur.at(1, ",") || cur.at(1, ")"));
+    }
+
+    private List<Token> parseIdentifierList() {
+        var names = new ArrayList<Token>();
+        do {
+            Token name = cur.expectIdentifier();
+            if (names.stream().anyMatch(n -> n.text.equals(name.text))) {
+                throw cur.error("'" + name.text + "' appears twice in the identifier list");
+            }
+            names.add(name);
+        } while (cur.accept(","));
+        cur.expect(")");
+        return names;
     }
 
     private Type.Parameter parseParameterDeclaration() {
