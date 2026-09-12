@@ -130,6 +130,17 @@ class ConditionalDirectivesTest {
     }
 
     @Test
+    void pushAndPopMacro() {
+        assertExpandsTo("#define A 1\n#pragma push_macro(\"A\")\n#undef A\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "1");
+        assertExpandsTo("#pragma push_macro(\"A\")\n#define A 2\nA\n#pragma pop_macro(\"A\")\nA", "2", "A");
+        assertExpandsTo("#define A 1\n#pragma push_macro(\"A\")\n#pragma push_macro(\"A\")\n#undef A\n#define A 3\n"
+                + "#pragma pop_macro(\"A\")\nA\n#pragma pop_macro(\"A\")\nA\n#pragma pop_macro(\"A\")\nA", "1", "1", "1");
+        assertExpandsTo("#define push_macro x\n#define A 1\n#pragma push_macro(\"A\")\n#undef A\n#pragma pop_macro(\"A\")\nA",
+                "1");
+        assertExpandsTo("#pragma once\nok", "ok");
+    }
+
+    @Test
     void errors() {
         assertTrue(fails("#if 1\n#else\n#else\n#endif").contains("#else after #else"));
         assertTrue(fails("#if 1\n#else\n#elif 1\n#endif").contains("#elif after #else"));
