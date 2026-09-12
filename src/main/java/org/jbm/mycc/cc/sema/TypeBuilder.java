@@ -92,7 +92,11 @@ final class TypeBuilder {
             return types.qualified(types.pointer(element), quals(a.quals()));
         }
         if (t instanceof Type.Function) return types.pointer(build(t));
-        return build(t);
+        // The array or function may hide behind a typedef, va_list above all.
+        CType built = build(t);
+        if (built instanceof CType.Array a) return types.qualified(types.pointer(a.element()), built.quals());
+        if (built.isFunction()) return types.pointer(built);
+        return built;
     }
 
     private CType basic(Type.Basic b) {

@@ -848,6 +848,13 @@ class TyperTest {
     }
 
     @Test
+    void aParameterOfArrayTypeThroughATypedefIsAPointer() {
+        assertEquals(List.of("A: int [3]", "F: int (void)", "f: void (int *)", "g: void (int (*)(void))"), declaredTypes("typedef int A[3]; typedef int F(void); void f(A a); void g(F fn);"));
+        assertTrue(lastBody("typedef int A[3]; void f(A a) { unsigned long n = sizeof a; a[1] = 2; }").contains("(local n:unsigned long 8:unsigned long)"), "the parameter itself is a pointer");
+        assertTrue(unit("typedef struct T { int a; } L[1]; void f(L p) { p->a = 1; p[0].a = 2; }").contains("(params p:struct T *)"));
+    }
+
+    @Test
     void aTagInsideADefinitionRefersToTheVisibleOne() {
         String typed = unit("struct S; struct H { int (*f)(struct S *); }; struct S { int a; }; int g(struct S *s) { return s->a; }"
                 + " struct H h = { g }; int call(struct H *hh, struct S *s) { return hh->f(s); }");

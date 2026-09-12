@@ -143,7 +143,7 @@ class CodegenTest {
     @Test
     void callsFollowSysV() {
         String asm = function("int g(int a, int b, int c, int d, int e, int f, int h, double x, int i); int f(void) { return g(1, 2, 3, 4, 5, 6, 7, 2.5, 9); }");
-        assertTrue(asm.contains("pushq %rax"), asm);
+        assertTrue(asm.contains("subq $16, %rsp\n  movslq -28(%rbp), %rax\n  movq %rax, (%rsp)\n  movslq -44(%rbp), %rax\n  movq %rax, 8(%rsp)"), "the stack arguments in order from (%rsp): " + asm);
         assertTrue(asm.contains("movslq -24(%rbp), %r9"), asm);
         assertTrue(asm.contains("call g@PLT\n  addq $16, %rsp"), asm);
         String var = function("int printf(const char *, ...); int f(void) { return printf(\"%d %f\", 1, 2.5); }");
@@ -157,18 +157,26 @@ class CodegenTest {
 
     @Test
     void aggregatesCrossCallsByAddress() {
-        String asm = function("struct P { int a; int b; }; struct P mk(int a) { struct P p = { a, a }; return p; }");
-        assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -40(%rbp)"), asm);
-        assertTrue(asm.contains("rep movsb\n  movq -40(%rbp), %rax\n  leave"), asm);
-        assertTrue(asm.contains("%t1 at -32(%rbp), %t2 at -32(%rbp), %t3 at -32(%rbp)"), "temporaries share a slot once their last read is past: " + asm);
+        String small = function("struct P { int a; int b; }; struct P mk(int a) { struct P p = { a, a }; return p; }");
+        assertTrue(small.contains("# ret %t3\n  movq -32(%rbp), %r11\n  movq (%r11), %rax\n  leave"), "an 8-byte struct comes back in %rax: " + small);
+        assertTrue(small.contains("%t1 at -32(%rbp), %t2 at -32(%rbp), %t3 at -32(%rbp)"), "temporaries share a slot once their last read is past: " + small);
+        String asm = function("struct Q { long a, b, c; }; struct Q mk(long a) { struct Q q = { a, a, a }; return q; }");
+        assertTrue(asm.contains("# the result's address from its argument register\n  movq %rdi, -56(%rbp)"), "a 24-byte struct is written where the caller asked: " + asm);
+        assertTrue(asm.contains("rep movsb\n  movq -56(%rbp), %rax\n  leave"), asm);
+        String mixed16 = function("struct M { int a; double b; }; struct M mk(int a) { struct M m = { a, a }; return m; }");
+        assertTrue(mixed16.contains("movq (%r11), %rax\n  movsd 8(%r11), %xmm0\n  leave"), "an int and a double: %rax and %xmm0: " + mixed16);
         String table = Native.assembly("int f(void) { return 1; } int (*const table[1])(void) = { f }; const int k = 3; const char *const s = \"x\";");
         assertTrue(table.contains(".section .data.rel.ro\n  .globl table\n  .balign 8"), "read-only data with addresses is relocated: " + table);
         assertTrue(table.contains(".section .rodata\n  .globl k\n  .balign 4"), table);
         assertTrue(table.indexOf(".globl s") > table.indexOf(".data.rel.ro"), table);
         String param = function("struct P { int a; int b; }; int sum(struct P p) { return p.a + p.b; }");
-        assertTrue(param.contains("# %p copied from the address in its argument\n  movq %rdi, %rsi\n  leaq -8(%rbp), %rdi\n  movq $8, %rcx\n  rep movsb"), param);
-        String mixed = function("struct P { int a; int b; }; int f(struct P p, int b) { return p.a + b; }");
-        assertTrue(mixed.indexOf("movl %esi, -12(%rbp)") < mixed.indexOf("rep movsb"), "scalars are spilled before the copy clobbers their registers\n" + mixed);
+        assertTrue(param.contains("# %p from its argument registers\n  movq %rdi, -8(%rbp)"), param);
+        String big = function("struct Q { long a, b, c; }; long sum(struct Q q, int b) { return q.a + b; }");
+        assertTrue(big.indexOf("movl %edi, -28(%rbp)") < big.indexOf("# %q copied from the stack\n  leaq 16(%rbp), %rsi\n  leaq -24(%rbp), %rdi\n  movq $24, %rcx\n  rep movsb"), "a 24-byte struct lies on the caller's stack; scalars are spilled before the copy clobbers their registers\n" + big);
+        String odd = function("struct C5 { char v[5]; }; int f(struct C5 c) { return c.v[4]; }");
+        assertTrue(odd.contains("movl %edi, -8(%rbp)\n  shrq $32, %rdi\n  movb %dil, -4(%rbp)"), "a 5-byte struct: its low four bytes, then its fifth: " + odd);
+        String call = function("struct M { int a; double b; }; struct Q { long a, b, c; }; double g(struct M m, struct Q q); double f(void) { struct M m = { 1, 2.5 }; struct Q q = { 1, 2, 3 }; return g(m, q); }");
+        assertTrue(call.contains("subq $32, %rsp") && call.contains("rep movsb") && call.contains("movl (%r11), %edi\n  movsd 8(%r11), %xmm0\n  call g@PLT"), "the small struct in %rdi and %xmm0, the large one copied to the stack: " + call);
     }
 
     @Test
