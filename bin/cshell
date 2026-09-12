@@ -1,0 +1,4 @@
+#!/bin/sh
+# The interactive C shell. Run ./gradlew installDist first.
+here=$(dirname "$(readlink -f "$0")")
+exec "$here/../build/install/cshell/bin/cshell" "$@"

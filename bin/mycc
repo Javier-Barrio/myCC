@@ -1,0 +1,5 @@
+#!/bin/sh
+# The compiler as a gcc-compatible command, for build systems: CC=mycc.
+# Run ./gradlew installDist first; the jars are under build/install/cshell/lib.
+here=$(dirname "$(readlink -f "$0")")
+exec java -Xss64m -cp "$here/../build/install/cshell/lib/*" org.jbm.mycc.Driver "$@"
