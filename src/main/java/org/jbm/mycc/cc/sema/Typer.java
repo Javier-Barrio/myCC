@@ -292,7 +292,9 @@ public final class Typer {
         for (var p : d.type().parameters()) p.name().ifPresent(n -> parameters.add(bindings.symbolOf(p)));
         function = new FunctionState(type.returnType());
         exprs.setLocals(function.locals);
+        exprs.setVariadic(type.isVariadic());
         TStmt.Block body = block(d.body());
+        exprs.setVariadic(false);
         functions.add(new TFunction(bindings.symbolOf(d), parameters, function.locals, body));
         exprs.setLocals(null);
         function = null;

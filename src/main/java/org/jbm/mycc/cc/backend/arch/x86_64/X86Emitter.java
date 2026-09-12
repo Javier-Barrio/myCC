@@ -62,6 +62,15 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     private long intoSlot;
     private boolean returnsAggregate;
 
+    // A variadic function's register save area, 176 bytes: the six
+    // integer argument registers then the eight floating ones, 16 bytes
+    // each, spilled at entry for va_start; and what the named parameters
+    // took of the registers and of the stack.
+    private long vaSaveArea;
+    private int namedInts;
+    private int namedFloats;
+    private int namedStack;
+
     // Floating constants, emitted after the code as 8-byte words in
     // .rodata and loaded PC-relative: the instruction set has no
     // floating immediates.
@@ -87,6 +96,9 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         this.returnsAggregate = isAggregate(function.sig.ret());
         if (returnsAggregate) {
             intoSlot = frame.reserve(8, 8);
+        }
+        if (function.sig.variadic()) {
+            vaSaveArea = frame.reserve(176, 16);
         }
         asm.note(TacWriter.print(function).split("\n")[0].replace(" {", ""));
         if (function.linkage == Linkage.EXTERNAL) {
@@ -161,6 +173,15 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         int ints = 0;
         int floats = 0;
         int stack = 0;
+        if (function.sig.variadic()) {
+            asm.comment("the argument registers saved for va_start");
+            for (int k = 0; k < X86Abi.INT_ARGS.size(); k++) {
+                asm.insn("movq", reg(X86Abi.INT_ARGS.get(k)), mem(vaSaveArea + 8L * k, "rbp"));
+            }
+            for (int k = 0; k < X86Abi.FLOAT_ARGS.size(); k++) {
+                asm.insn("movsd", reg(X86Abi.FLOAT_ARGS.get(k)), mem(vaSaveArea + 48 + 16L * k, "rbp"));
+            }
+        }
         if (returnsAggregate) {
             asm.comment("the result's address from its argument register");
             asm.insn("movq", reg(X86Abi.INT_ARGS.get(ints++)), mem(intoSlot, "rbp"));
@@ -195,6 +216,9 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
                 write("rax", p);
             }
         }
+        namedInts = ints;
+        namedFloats = floats;
+        namedStack = 8 * stack;
         for (int k = 0; k < aggregates.size(); k++) {
             Var p = aggregates.get(k);
             asm.comment(p + " copied from the address in its argument");
@@ -643,6 +667,58 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         }
         asm.insn("leave");
         asm.insn("ret");
+        return null;
+    }
+
+    // The list's four fields: the register offsets past what the named
+    // parameters used, the first stack argument above the return
+    // address and the named ones, and the save area.
+    @Override
+    public Void visit(Instr.VaStart i) {
+        read(i.ap(), "rax");
+        asm.insn("movl", imm(8L * namedInts), reg("ecx"));
+        asm.insn("movl", reg("ecx"), mem(0, "rax"));
+        asm.insn("movl", imm(48 + 16L * namedFloats), reg("ecx"));
+        asm.insn("movl", reg("ecx"), mem(4, "rax"));
+        asm.insn("leaq", mem(16 + namedStack, "rbp"), RCX);
+        asm.insn("movq", RCX, mem(8, "rax"));
+        asm.insn("leaq", mem(vaSaveArea, "rbp"), RCX);
+        asm.insn("movq", RCX, mem(16, "rax"));
+        return null;
+    }
+
+    // SysV's sequence: while the class's offset is below its limit the
+    // argument is in the save area and the offset moves by a register's
+    // slot, else it is at the overflow area, which moves by 8.
+    @Override
+    public Void visit(Instr.VaArg i) {
+        boolean floating = i.dst().type instanceof Type.Float;
+        long offsetField = floating ? 4 : 0;
+        long limit = floating ? 176 : 48;
+        long step = floating ? 16 : 8;
+        read(i.ap(), "rax");
+        asm.insn("movl", mem(offsetField, "rax"), reg("ecx"));
+        asm.insn("cmpq", imm(limit), RCX);
+        asm.insn("jae", sym("1f"));
+        asm.insn("movq", mem(16, "rax"), RDX);
+        asm.insn("addq", RCX, RDX);
+        asm.insn("addq", imm(step), RCX);
+        asm.insn("movl", reg("ecx"), mem(offsetField, "rax"));
+        asm.insn("jmp", sym("2f"));
+        asm.label("1");
+        asm.insn("movq", mem(8, "rax"), RDX);
+        asm.insn("leaq", mem(8, "rdx"), RCX);
+        asm.insn("movq", RCX, mem(8, "rax"));
+        asm.label("2");
+        if (floating) {
+            asm.insn("movsd", mem(0, "rdx"), XMM0);
+            writeFloat("xmm0", i.dst());
+        } else {
+            Type t = i.dst().type;
+            boolean signed = t instanceof Type.Int n && n.signed();
+            extendFrom(mem(0, "rdx"), width(t), signed, "rax");
+            write("rax", i.dst());
+        }
         return null;
     }
 

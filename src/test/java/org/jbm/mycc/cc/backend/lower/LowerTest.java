@@ -629,6 +629,15 @@ class LowerTest {
     }
 
     @Test
+    void variableArgumentsAreInstructions() {
+        String tac = function("void f(int n, ...) { char *ap; __builtin_va_start(ap, n); int x = __builtin_va_arg(ap, int); double d = __builtin_va_arg(ap, double); }");
+        assertTrue(tac.contains("define @f(i32 %n, ...) -> void {"), tac);
+        assertTrue(tac.contains("  vastart %ap\n"), tac);
+        assertTrue(tac.contains("  %t0 = vaarg %ap\n  mov.s32 %x, %t0\n"), tac);
+        assertTrue(tac.contains("  %t1 = vaarg %ap\n  mov.64 %d, %t1\n"), tac);
+    }
+
+    @Test
     void alignasReachesTheVariableAndTheGlobal() {
         assertEquals("""
                 global @g : i32 align 32 = { 0 : i32 1 }

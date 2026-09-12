@@ -1277,6 +1277,12 @@ public final class Parser {
         switch (t.type) {
             case IDENTIFIER -> {
                 cur.next();
+                if (t.text.equals("__builtin_va_arg") && cur.at("(")) {
+                    return parseVaArg(t);
+                }
+                if (t.text.equals("__builtin_va_start") && cur.at("(")) {
+                    return parseVaStart(t);
+                }
                 return new Expr.Identifier(t);
             }
             case INTEGER_CONSTANT, FLOATING_CONSTANT, CHARACTER_LITERAL -> {
@@ -1322,6 +1328,27 @@ public final class Parser {
             }
             default -> throw cur.error("expected expression");
         }
+    }
+
+    // __builtin_va_arg(ap, type-name): the builtin behind va_arg, a
+    // primary expression of its own since it takes a type.
+    private Expr parseVaArg(Token name) {
+        cur.expect("(");
+        Expr ap = parseAssignmentExpression();
+        cur.expect(",");
+        Type type = parseTypeName();
+        cur.expect(")");
+        return new Expr.VaArg(name, ap, type);
+    }
+
+    // __builtin_va_start(ap, last): the builtin behind va_start.
+    private Expr parseVaStart(Token name) {
+        cur.expect("(");
+        Expr ap = parseAssignmentExpression();
+        cur.expect(",");
+        Expr last = parseAssignmentExpression();
+        cur.expect(")");
+        return new Expr.VaStart(name, ap, last);
     }
 
     // Adjacent string literals are one string-literal token sequence that

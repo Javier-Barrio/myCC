@@ -171,6 +171,16 @@ public final class AstPrinter implements Visitor<String> {
     }
 
     @Override
+    public String visit(Expr.VaStart e) {
+        return list("va_start", print(e.ap()), print(e.last()));
+    }
+
+    @Override
+    public String visit(Expr.VaArg e) {
+        return list("va_arg", print(e.ap()), typeOperand(e.type()));
+    }
+
+    @Override
     public String visit(Expr.StmtExpr e) {
         return list("stmtexpr", e.body().accept(this));
     }

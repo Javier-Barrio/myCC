@@ -100,7 +100,8 @@ public class VM implements TacVisitor<Void> {
     // restore, and the call being served. Every variable, parameter or
     // local, scalar or aggregate, has storage; a scalar is read and
     // written at its type's width, which keeps it extended per its type.
-    private record Frame(Block block, int pc, LinkedHashMap<Var, Long> slots, long savedSp, Instr.Call caller) {}
+    private record Frame(Block block, int pc, LinkedHashMap<Var, Long> slots, long savedSp, Instr.Call caller,
+                         long varargs) {}
 
     private final Deque<Frame> frames = new ArrayDeque<>();
 
@@ -377,7 +378,57 @@ public class VM implements TacVisitor<Void> {
                 storeVar(slot, p.type, args.get(i));
             }
         }
-        return new Frame(returnBlock, returnPc, slots, savedSp, caller);
+        // The unnamed arguments of a variadic call, spilled in order, 8
+        // bytes each, where va_start finds them.
+        long varargs = 0;
+        int extra = args.size() - function.params.size();
+        if (function.sig.variadic() && extra > 0) {
+            varargs = memory.push(8L * extra, 16);
+            for (int k = 0; k < extra; k++) {
+                Value v = args.get(function.params.size() + k);
+                long at = varargs + 8L * k;
+                if (v instanceof FloatValue f) {
+                    memory.storeFloat(at, 64, f.value());
+                } else {
+                    memory.storeInt(at, 64, ((IntValue) v).value());
+                }
+            }
+        }
+        return new Frame(returnBlock, returnPc, slots, savedSp, caller, varargs);
+    }
+
+    /** The pointer width of the target the loaded modules were compiled for. */
+    public int pointerWidth() {
+        return target.pointerWidth();
+    }
+
+    // Where a va_list keeps the address of the next argument: SysV's
+    // overflow_arg_area, at offset 8 after the two 32-bit offsets.
+    private static long nextField(long ap) {
+        return ap + 8;
+    }
+
+    @Override
+    public Void visit(Instr.VaStart i) {
+        long ap = integer(i.ap());
+        memory.storeInt(nextField(ap), target.pointerWidth(), frames.peek().varargs());
+        return null;
+    }
+
+    // The next argument at its type's width, from its 8-byte slot.
+    @Override
+    public Void visit(Instr.VaArg i) {
+        long field = nextField(integer(i.ap()));
+        long at = memory.loadInt(field, target.pointerWidth(), false);
+        Type t = i.dst().type;
+        if (t instanceof Type.Float) {
+            set(i.dst(), new FloatValue(memory.loadFloat(at, 64)));
+        } else {
+            boolean signed = t instanceof Type.Int n && n.signed();
+            set(i.dst(), new IntValue(memory.loadInt(at, 64, signed)));
+        }
+        memory.storeInt(field, target.pointerWidth(), at + 8);
+        return null;
     }
 
     private void jump(Block target) {

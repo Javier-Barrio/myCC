@@ -95,6 +95,7 @@ class AstWalkerTest {
                 do { switch (i) { case 1: goto L; default: ; } } while (0);
                 x = _Generic(i, int: 1, default: 2), s.m = values[i] ? -x : ~x;
                 x = ({ int q = x; q + 1; });
+                __builtin_va_start(str, n); i = __builtin_va_arg(str, int);
                 return g(&t, n) + (x += 1);
             }
             """;

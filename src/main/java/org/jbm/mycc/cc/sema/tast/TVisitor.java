@@ -83,4 +83,6 @@ public interface TVisitor<R> {
     R visit(TExpr.Cond e);
     R visit(TExpr.Comma e);
     R visit(TExpr.StmtExpr e);
+    R visit(TExpr.VaStart e);
+    R visit(TExpr.VaArg e);
 }

@@ -195,6 +195,16 @@ public final class TacWriter implements TacVisitor<String> {
     }
 
     @Override
+    public String visit(Instr.VaStart i) {
+        return "vastart " + i.ap();
+    }
+
+    @Override
+    public String visit(Instr.VaArg i) {
+        return i.dst() + " = vaarg " + i.ap();
+    }
+
+    @Override
     public String visit(Instr.Trap i) {
         return "trap " + quote(i.message().getBytes(StandardCharsets.UTF_8));
     }
