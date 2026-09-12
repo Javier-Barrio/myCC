@@ -412,6 +412,12 @@ class ParserTest {
         }
 
         @Test
+        void funcNamesTheEnclosingFunction() {
+            assertTrue(unit("void f(void) { const char *n = __func__; }").contains("(n (ptr (const char)) \"f\")"));
+            assertTrue(unit("int __func__;").contains("(decl (__func__ int))"), "outside a function it is an ordinary name");
+        }
+
+        @Test
         void variableArgumentBuiltins() {
             assertEquals("(va_arg ap (type int))", expr("__builtin_va_arg(ap, int)"));
             assertEquals("(+ (va_arg ap (type (ptr char))) 1)", expr("__builtin_va_arg(ap, char *) + 1"));

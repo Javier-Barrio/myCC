@@ -91,9 +91,10 @@ in `~/.cshell_history`, and tab completion of names, members after
 
 Headers are not included unless you ask: `#include <stdio.h>` declares
 `printf`, and `-I dir` on the command line adds a directory for your
-own headers, `build/install/cshell/bin/cshell -I include`.
-The library functions themselves are not provided yet; calling one
-faults with "no definition".
+own headers, `build/install/cshell/bin/cshell -I include`. The shell
+and the VM see the bundled headers, a subset of the C library that the
+VM implements as builtins, bound by name while a header declares them;
+calling a function the VM does not have faults with "no definition".
 
 A session can also be piped in: `echo '6 * 7' | ./gradlew -q cshell --console=plain`.
 
@@ -115,3 +116,12 @@ gcc -o prog file.o
 Without a file it compiles its built-in sample program. In the shell,
 `/asm name` shows a function's assembly the same way. `-std=c17`, on
 `Main` and on `cshell`, selects the older standard described above.
+
+A native build (`-S` or `-c`) declares the C library from the system's
+own headers in `/usr/include`, the ones that match the glibc the
+program is linked with, so `setjmp.h`, `time.h`, `pthread.h` and the
+rest are all there; the compiler brings only the headers that describe
+itself, `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`, `stdalign.h`,
+`stdnoreturn.h` and `iso646.h`. glibc's headers are read as they are,
+without `__GNUC__`, which turns their GNU-only parts off. The bundled
+library headers are for the VM, whose builtins they declare.

@@ -14,17 +14,27 @@ import java.util.Optional;
  */
 public final class BundledHeaders implements HeaderProvider {
 
-    public static final BundledHeaders INSTANCE = new BundledHeaders();
+    /** The headers that describe the compiler itself: the ones a native build takes from here rather than the system. */
+    public static final List<String> COMPILER_NAMES = List.of(
+            "stddef.h", "stdarg.h", "stdbool.h", "float.h", "stdalign.h", "stdnoreturn.h", "iso646.h");
 
+    /** Every bundled header: the compiler's and the C library subset the VM implements. */
     public static final List<String> NAMES = List.of(
-            "stdio.h", "stdlib.h", "string.h", "math.h", "stddef.h", "stdbool.h", "stdint.h", "limits.h", "wchar.h", "stdarg.h");
+            "stdio.h", "stdlib.h", "string.h", "math.h", "stddef.h", "stdbool.h", "stdint.h", "limits.h", "wchar.h", "stdarg.h",
+            "float.h", "stdalign.h", "stdnoreturn.h", "iso646.h");
 
-    private BundledHeaders() {
+    public static final BundledHeaders INSTANCE = new BundledHeaders(NAMES);
+    public static final BundledHeaders COMPILER = new BundledHeaders(COMPILER_NAMES);
+
+    private final List<String> names;
+
+    private BundledHeaders(List<String> names) {
+        this.names = names;
     }
 
     @Override
     public Optional<Header> find(String name, boolean quoted, String includer) {
-        if (!NAMES.contains(name)) {
+        if (!names.contains(name)) {
             return Optional.empty();
         }
         try (InputStream in = BundledHeaders.class.getResourceAsStream("/headers/" + name)) {

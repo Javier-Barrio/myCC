@@ -60,6 +60,9 @@ public final class Parser {
     // definition is accepted (C17), or `()` is `(void)` (C23).
     private final Std std;
 
+    // The function whose body is being parsed, for __func__.
+    private String currentFunction;
+
     // The identifier list of each old-style declarator, by its '(' token,
     // for the function definition that must follow.
     private final Map<Token, List<Token>> identifierLists = new IdentityHashMap<>();
@@ -249,6 +252,7 @@ public final class Parser {
         }
         Token name = declarator.name().orElseThrow();
         scopes.declareOrdinary(name.text);
+        currentFunction = name.text;
         // 6.2.1p4: parameters have block scope in the function body.
         scopes.push();
         if (!identifiers.isEmpty()) {
@@ -259,6 +263,7 @@ public final class Parser {
         }
         var body = parseCompoundStatement(false);
         scopes.pop();
+        currentFunction = null;
         return new Decl.FunctionDefinition(attrs, specs, name, fn, body);
     }
 
@@ -1372,6 +1377,12 @@ public final class Parser {
         switch (t.type) {
             case IDENTIFIER -> {
                 cur.next();
+                if (t.text.equals("__func__") && currentFunction != null) {
+                    // The predeclared name of the enclosing function (6.4.3.2), as a string literal.
+                    Token literal = new Token(TokenType.STRING_LITERAL, "\"" + currentFunction + "\"", t.line, t.column);
+                    literal.file = t.file;
+                    return new Expr.StringLiteral(List.of(literal));
+                }
                 if (t.text.equals("__builtin_va_arg") && cur.at("(")) {
                     return parseVaArg(t);
                 }

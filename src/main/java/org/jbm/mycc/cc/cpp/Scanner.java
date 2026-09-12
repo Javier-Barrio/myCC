@@ -21,7 +21,7 @@ public class Scanner {
     // Macro table captured from the incoming TokenSet. Recursive expansion
     // builds fresh intermediate TokenSets, so the table lives here rather
     // than being threaded through each of them.
-    private Map<String, Token> macros = Map.of();
+    private MacroTable macros = new MacroTable();
 
     public TokenSet expand(@NonNull TokenSet tokenSet) {
         macros = tokenSet.macros;
@@ -52,7 +52,7 @@ public class Scanner {
                 var hs = hideSetPlus(first, Optional.empty());
                 var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                         new ArrayList<>(), new ArrayList<>(), hs, TokenSet.empty());
-                work = replacing(withLeadingSpace(replaced, first.spaceBefore), work, at + 1);
+                work = replacing(atMomentOf(first, withLeadingSpace(replaced, first.spaceBefore)), work, at + 1);
                 at = 0;
                 continue;
             }
@@ -73,7 +73,7 @@ public class Scanner {
                     var hs = hideSetPlus(first, Optional.of(closeParen));
                     var replaced = substitute(TokenSet.fromTokens(definition.expansion),
                             fp, args, hs, TokenSet.empty());
-                    work = replacing(withLeadingSpace(replaced, first.spaceBefore), work, at + 1 + close + 1);
+                    work = replacing(atMomentOf(first, withLeadingSpace(replaced, first.spaceBefore)), work, at + 1 + close + 1);
                     at = 0;
                     continue;
                 }
@@ -83,6 +83,15 @@ public class Scanner {
             at++;
         }
         return new TokenSet(out);
+    }
+
+    // A replacement is rescanned with the definitions of the moment of
+    // use: the occurrence's, whatever the body's tokens carried.
+    private static TokenSet atMomentOf(CppToken occurrence, TokenSet replacement) {
+        for (CppToken t : replacement.tokens) {
+            t.seq = occurrence.seq;
+        }
+        return replacement;
     }
 
     // The replacement followed by the work list from `from` on.
@@ -255,7 +264,7 @@ public class Scanner {
             case OBJECT_MACRO -> t.token;
             // Function-like occurrences and rescanned identifiers resolve
             // against the macro table.
-            case CALL_MACRO, IDENTIFIER -> macros.get(t.token.text);
+            case CALL_MACRO, IDENTIFIER -> macros.at(t.token.text, t.seq);
             default -> null;
         };
     }

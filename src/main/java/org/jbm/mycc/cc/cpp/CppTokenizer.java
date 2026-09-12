@@ -61,7 +61,7 @@ public class CppTokenizer {
         // Macro name -> its defining OBJECT_MACRO/CALL_MACRO token, built up
         // while pre-tokenizing so the scanner can resolve usages without
         // re-scanning for `#define`s.
-        public Map<String, Token> macros = Map.of();
+        public MacroTable macros = new MacroTable();
     }
 
     public enum TokenType {
@@ -98,6 +98,9 @@ public class CppTokenizer {
         // previous one in the source. The expander keeps a per-occurrence
         // copy on CppToken, which is what the stringize operator reads.
         public boolean spaceBefore;
+        // The macro table's version when the token was scanned: the
+        // definitions in force for it.
+        public int seq;
 
         // Populated only for OBJECT_MACRO/CALL_MACRO tokens: the
         // replacement-list tokens found on the rest of the
@@ -227,7 +230,7 @@ public class CppTokenizer {
 
     // Definitions saved by #pragma push_macro, per name; null for "was not defined".
     private final Map<String, List<Token>> pushedMacros = new HashMap<>();
-    private final Map<String, Token> macroTable;
+    private final MacroTable macroTable;
 
     // The conditional directives (6.10.1): each `#if`, `#ifdef` or
     // `#ifndef` opens a group that its `#endif` closes. A group is active
@@ -268,11 +271,11 @@ public class CppTokenizer {
     }
 
     public CppTokenizer(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
-        this(splice(source), file, headers, new LinkedHashMap<>(), 0);
+        this(splice(source), file, headers, new MacroTable(), 0);
     }
 
     private CppTokenizer(String splicedSource, String file, @Nullable HeaderProvider headers,
-                         Map<String, Token> macroTable, int depth) {
+                         MacroTable macroTable, int depth) {
         this.src = splicedSource;
         this.file = file;
         this.headers = headers;
@@ -285,7 +288,7 @@ public class CppTokenizer {
     // start of a physical line. A `#define`'s replacement list is lexed
     // against an empty table, so its macro names stay unresolved until
     // expansion; an `#if` condition shares this tokenizer's table.
-    private CppTokenizer(String source, String file, int startLine, int startCol, Map<String, Token> macroTable) {
+    private CppTokenizer(String source, String file, int startLine, int startCol, MacroTable macroTable) {
         this(source, file, null, macroTable, 0);
         this.line = startLine;
         this.col = startCol;
@@ -330,15 +333,15 @@ public class CppTokenizer {
             new CppTokenizer(splice(predefined), "<predefined>", headers, tokenizer.macroTable, 0).scan();
         }
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
-        set.macros = tokenizer.macroTable();
+        set.macros = tokenizer.macroTable;
         return set;
     }
 
     // Macro name -> its defining OBJECT_MACRO/CALL_MACRO token, as seen so
     // far by this tokenizer. A later #define for the same name overwrites
     // the earlier entry, matching last-definition-wins semantics.
-    public Map<String, Token> macroTable() {
-        return Collections.unmodifiableMap(macroTable);
+    public MacroTable macroTable() {
+        return macroTable;
     }
 
     public List<Token> scan() {
@@ -415,6 +418,7 @@ public class CppTokenizer {
             }
             t.spaceBefore = separated;
             t.file = file;
+            t.seq = macroTable.version();
             return t;
         }
     }
@@ -453,9 +457,7 @@ public class CppTokenizer {
             }
             if (directive.equals("error")) {
                 int start = pos;
-                while (pos < src.length() && peek() != '\n') {
-                    advance();
-                }
+                skipToLogicalLineEnd();
                 String text = src.substring(start, pos).replaceFirst("^\\s*error\\s*", "").strip();
                 throw error("#error " + text, hash.line, hash.column);
             }
@@ -535,15 +537,67 @@ public class CppTokenizer {
         return null;
     }
 
+    // Where a directive's line ends: at the new-line, except inside a
+    // block comment, which may run on for lines, or a literal. Phase 2
+    // has already spliced backslash-newlines away.
+    private int logicalLineEnd(int from) {
+        int i = from;
+        while (i < src.length()) {
+            char c = src.charAt(i);
+            if (c == '\n') {
+                return i;
+            }
+            if (c == '/' && i + 1 < src.length() && src.charAt(i + 1) == '*') {
+                int close = src.indexOf("*/", i + 2);
+                if (close < 0) {
+                    return src.length();
+                }
+                i = close + 2;
+            } else if (c == '/' && i + 1 < src.length() && src.charAt(i + 1) == '/') {
+                int newline = src.indexOf('\n', i);
+                return newline < 0 ? src.length() : newline;
+            } else if (c == '"' || c == '\'') {
+                i = literalEnd(i);
+            } else {
+                i++;
+            }
+        }
+        return i;
+    }
+
+    // Past the literal opened at `from`, or at the new-line if it never closes.
+    private int literalEnd(int from) {
+        char quote = src.charAt(from);
+        int i = from + 1;
+        while (i < src.length() && src.charAt(i) != '\n') {
+            if (src.charAt(i) == '\\') {
+                i += 2;
+                continue;
+            }
+            if (src.charAt(i) == quote) {
+                return i + 1;
+            }
+            i++;
+        }
+        return i;
+    }
+
+    // Consumes the rest of the directive's logical line, counting the
+    // lines a comment inside it spans.
+    private void skipToLogicalLineEnd() {
+        int end = logicalLineEnd(pos);
+        while (pos < end) {
+            advance();
+        }
+    }
+
     private void skipWhitespaceAndComments() {
         while (pos < src.length()) {
             char c = peek();
             if (Character.isWhitespace(c)) {
                 advance();
             } else if (c == '/' && peek(1) == '/') {
-                while (pos < src.length() && peek() != '\n') {
-                    advance();
-                }
+                skipToLogicalLineEnd();
             } else if (c == '/' && peek(1) == '*') {
                 skipBlockComment();
             } else {
@@ -596,9 +650,7 @@ public class CppTokenizer {
         }
         String name = src.substring(start, pos);
         advance();
-        while (pos < src.length() && peek() != '\n') {
-            advance();
-        }
+        skipToLogicalLineEnd();
         String spelled = open + name + close;
         if (headers == null) {
             throw error("no headers are available to #include " + spelled, hash.line, hash.column);
@@ -646,9 +698,7 @@ public class CppTokenizer {
             String quoted = tokens.get(1).text;
             file = quoted.substring(quoted.indexOf('"') + 1, quoted.length() - 1);
         }
-        while (pos < src.length() && peek() != '\n') {
-            advance();
-        }
+        skipToLogicalLineEnd();
         line = number - 1;   // the new-line about to be consumed counts up to N
     }
 
@@ -662,7 +712,7 @@ public class CppTokenizer {
             advance();
         }
         scanIdentifier(line, col);
-        List<Token> tokens = scanRestOfLine(pos, Map.of());
+        List<Token> tokens = scanRestOfLine(pos, new MacroTable());
         boolean shaped = tokens.size() == 4
                 && tokens.get(0).type == TokenType.IDENTIFIER
                 && tokens.get(1).text.equals("(")
@@ -686,9 +736,7 @@ public class CppTokenizer {
                 macroTable.put(name, saved);
             }
         }
-        while (pos < src.length() && peek() != '\n') {
-            advance();
-        }
+        skipToLogicalLineEnd();
         return true;
     }
 
@@ -805,9 +853,7 @@ public class CppTokenizer {
             }
             default -> throw new IllegalStateException(name.text);
         }
-        while (pos < src.length() && peek() != '\n') {
-            advance();
-        }
+        skipToLogicalLineEnd();
     }
 
     private Group top(Token name) {
@@ -936,6 +982,12 @@ public class CppTokenizer {
                 return idToken;
             case DEFINE:
                 directiveState = DirectiveState.NONE;
+                // The rest of the line is scanned again as tokens the
+                // scanner strips by line; a comment that runs past the
+                // line would leave what follows it, so that case is consumed here.
+                int lineEnd = logicalLineEnd(pos);
+                int newline = src.indexOf('\n', pos);
+                boolean spansLines = newline >= 0 && newline < lineEnd;
                 if (peek() == '(') {
                     Token callMacro = new Token(TokenType.CALL_MACRO, idToken.text, idToken.line, idToken.column);
                     int closeParen = findMatchingParen(pos);
@@ -946,11 +998,17 @@ public class CppTokenizer {
                         callMacro.expansion = scanExpansionTokens(pos);
                     }
                     macroTable.put(callMacro.text, callMacro);
+                    if (spansLines) {
+                        skipToLogicalLineEnd();
+                    }
                     return callMacro;
                 }
                 Token objectMacro = new Token(TokenType.OBJECT_MACRO, idToken.text, idToken.line, idToken.column);
                 objectMacro.expansion = scanExpansionTokens(pos);
                 macroTable.put(objectMacro.text, objectMacro);
+                if (spansLines) {
+                    skipToLogicalLineEnd();
+                }
                 return objectMacro;
             default:
                 return classifyCallSite(idToken);
@@ -999,7 +1057,8 @@ public class CppTokenizer {
     private int findMatchingParen(int from) {
         int depth = 0;
         int i = from;
-        while (i < src.length() && src.charAt(i) != '\n') {
+        int end = logicalLineEnd(from);
+        while (i < end) {
             char c = src.charAt(i);
             if (c == '(') {
                 depth++;
@@ -1045,7 +1104,7 @@ public class CppTokenizer {
             return List.of();
         }
 
-        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new LinkedHashMap<>()).scan();
+        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new MacroTable()).scan();
         List<List<Token>> arguments = new ArrayList<>();
         List<Token> current = new ArrayList<>();
         int depth = 0;
@@ -1074,7 +1133,7 @@ public class CppTokenizer {
     // a variadic "...", i.e. dropping the separating commas.
     private List<Token> scanParamListTokens(int from, int to) {
         String inner = src.substring(from, to);
-        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new LinkedHashMap<>()).scan();
+        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new MacroTable()).scan();
         List<Token> params = new ArrayList<>();
         for (Token t : raw) {
             if (t.type == TokenType.IDENTIFIER || (t.type == TokenType.PUNCTUATOR && t.text.equals("..."))) {
@@ -1088,7 +1147,7 @@ public class CppTokenizer {
     // consuming it from `this`) to capture a macro's replacement-list
     // tokens.
     private List<Token> scanExpansionTokens(int from) {
-        return scanRestOfLine(from, new LinkedHashMap<>());
+        return scanRestOfLine(from, new MacroTable());
     }
 
     // The rest of an `#if` line, with macro occurrences resolved against
@@ -1097,11 +1156,8 @@ public class CppTokenizer {
         return scanRestOfLine(from, macroTable);
     }
 
-    private List<Token> scanRestOfLine(int from, Map<String, Token> table) {
-        int end = from;
-        while (end < src.length() && src.charAt(end) != '\n') {
-            end++;
-        }
+    private List<Token> scanRestOfLine(int from, MacroTable table) {
+        int end = logicalLineEnd(from);
         String rest = src.substring(from, end);
         List<Token> raw = new CppTokenizer(rest, file, line, col + (from - pos), table).scan();
         List<Token> expansion = new ArrayList<>();

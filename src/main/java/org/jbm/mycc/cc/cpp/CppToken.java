@@ -18,10 +18,14 @@ public class CppToken {
     // token of a replacement the spacing of the macro name or parameter it
     // replaced (6.10.5.3p2 relies on this for the stringize operator).
     public boolean spaceBefore;
+    // The macro table's version this occurrence is expanded with: the
+    // token's own moment, or for a macro body's tokens the moment of use.
+    public int seq;
 
     public CppToken(@NonNull CppTokenizer.Token token) {
         this.token = token;
         this.spaceBefore = token.spaceBefore;
+        this.seq = token.seq;
     }
 
     public CppToken clone() {
@@ -29,6 +33,7 @@ public class CppToken {
         clone.hideSet.addAll(this.hideSet);
         clone.macro = this.macro;
         clone.spaceBefore = this.spaceBefore;
+        clone.seq = this.seq;
         return clone;
     }
 }
