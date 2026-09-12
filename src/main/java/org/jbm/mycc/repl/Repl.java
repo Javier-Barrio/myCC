@@ -80,7 +80,7 @@ public final class Repl {
     }
 
     private void reset() {
-        vm = new VM();
+        vm = new VM();  
         bound.clear();
         vm.out(new PrintStream(new ConsoleStream(), true, StandardCharsets.ISO_8859_1));
         printer = new ValuePrinter(vm, types);

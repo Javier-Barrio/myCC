@@ -33,6 +33,12 @@ public final class Codegen {
         return asm.items();
     }
 
+    /** The module as a relocatable ELF object for its target, through its own assembler. */
+    public static byte[] object(@NonNull Module module) {
+        Backend backend = backend(module);
+        return Elf64.write(new Assembler(backend.encoder()).assemble(build(module, false)));
+    }
+
     /** One function's assembly alone, for a reader. */
     public static String emit(@NonNull Module module, @NonNull Function function, boolean annotate) {
         Asm asm = new Asm(annotate);

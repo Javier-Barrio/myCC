@@ -54,13 +54,16 @@ public class Main {
 
     // With a path argument compiles that file, with `-I dir` search
     // directories for its includes; without one, SOURCE.
-    // `-S` prints x86-64 assembly instead, `-a` with the TAC in comments.
+    // `-S` prints x86-64 assembly instead, `-a` with the TAC in comments;
+    // `-c` writes an object file, `-o name` names it.
     public static void main(String[] args) throws IOException {
         List<Path> searchDirs = new ArrayList<>();
         String file = "<source>";
         String source = SOURCE;
         boolean assembly = false;
         boolean annotate = false;
+        boolean object = false;
+        String output = null;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("-I") && i + 1 < args.length) {
                 searchDirs.add(Path.of(args[i + 1]));
@@ -75,12 +78,26 @@ public class Main {
                 annotate = true;
                 continue;
             }
+            if (args[i].equals("-c")) {
+                object = true;
+                continue;
+            }
+            if (args[i].equals("-o") && i + 1 < args.length) {
+                output = args[i + 1];
+                i++;
+                continue;
+            }
             file = args[i];
             source = Files.readString(Path.of(file));
         }
         HeaderProvider headers = HeaderProvider.standard(searchDirs);
         var types = new Types(X86_64SysV.INSTANCE);
         Compiler.Compiled compiled = Compiler.compile(source, headers, file, types);
+        if (object) {
+            String name = output != null ? output : file.replaceAll("\\.c$", "") + ".o";
+            Files.write(Path.of(name), Codegen.object(compiled.tac()));
+            return;
+        }
         if (assembly) {
             System.out.print(Codegen.emit(compiled.tac(), annotate));
             return;

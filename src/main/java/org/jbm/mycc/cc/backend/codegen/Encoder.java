@@ -11,10 +11,10 @@ import java.util.Optional;
  */
 public interface Encoder {
 
-    /** How a symbol enters an instruction's 32-bit field. */
-    enum Fix { PC32, PLT32, GOTPCREL }
+    /** How a symbol enters a field: a 32-bit PC-relative one, through the PLT or the GOT, or a 64-bit absolute word in data. */
+    enum Fix { PC32, PLT32, GOTPCREL, ABS64 }
 
-    /** A 4-byte field at {@code offset} of the encoding, to hold {@code symbol + addend} per {@code fix}. */
+    /** A field at {@code offset} of the encoding, 4 bytes or 8 for {@code ABS64}, to hold {@code symbol + addend} per {@code fix}. */
     record Fixup(int offset, @NonNull Fix fix, @NonNull String symbol, long addend) {
     }
 

@@ -74,6 +74,11 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     }
 
     @Override
+    public org.jbm.mycc.cc.backend.codegen.Encoder encoder() {
+        return new X86Encoder();
+    }
+
+    @Override
     public void function(Asm asm, Module module, Function function) {
         this.asm = asm;
         this.module = module;
