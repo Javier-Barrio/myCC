@@ -174,7 +174,7 @@ class CodegenTest {
         String big = function("struct Q { long a, b, c; }; long sum(struct Q q, int b) { return q.a + b; }");
         assertTrue(big.indexOf("movl %edi, -28(%rbp)") < big.indexOf("# %q copied from the stack\n  leaq 16(%rbp), %rsi\n  leaq -24(%rbp), %rdi\n  movq $24, %rcx\n  rep movsb"), "a 24-byte struct lies on the caller's stack; scalars are spilled before the copy clobbers their registers\n" + big);
         String odd = function("struct C5 { char v[5]; }; int f(struct C5 c) { return c.v[4]; }");
-        assertTrue(odd.contains("movl %edi, -8(%rbp)\n  shrq $32, %rdi\n  movb %dil, -4(%rbp)"), "a 5-byte struct: its low four bytes, then its fifth: " + odd);
+        assertTrue(odd.contains("movl %edi, -5(%rbp)\n  shrq $32, %rdi\n  movb %dil, -1(%rbp)"), "a 5-byte struct: its low four bytes, then its fifth: " + odd);
         String call = function("struct M { int a; double b; }; struct Q { long a, b, c; }; double g(struct M m, struct Q q); double f(void) { struct M m = { 1, 2.5 }; struct Q q = { 1, 2, 3 }; return g(m, q); }");
         assertTrue(call.contains("subq $32, %rsp") && call.contains("rep movsb") && call.contains("movl (%r11), %edi\n  movsd 8(%r11), %xmm0\n  call g@PLT"), "the small struct in %rdi and %xmm0, the large one copied to the stack: " + call);
     }
