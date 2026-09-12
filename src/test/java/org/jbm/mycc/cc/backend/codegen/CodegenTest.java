@@ -183,7 +183,7 @@ class CodegenTest {
     void plainModeHasNoComments() {
         String plain = Codegen.emit(org.jbm.mycc.cc.Compiler.compile("int main(void) { return 1; }",
                 org.jbm.mycc.cc.cpp.BundledHeaders.INSTANCE, "t.c",
-                new org.jbm.mycc.cc.sema.types.Types(org.jbm.mycc.cc.backend.lower.arch.X86_64SysV.INSTANCE)).tac(), false);
+                new org.jbm.mycc.cc.sema.types.Types(org.jbm.mycc.cc.backend.arch.X86_64SysV.INSTANCE)).tac(), false);
         assertFalse(plain.contains("#"), plain);
         assertTrue(plain.contains("main:\n  pushq %rbp\n"), plain);
     }

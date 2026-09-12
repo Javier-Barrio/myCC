@@ -88,7 +88,7 @@ class AsmIrTest {
     @Test
     void theModuleIrIsWhatThePrinterSpells() {
         var compiled = org.jbm.mycc.cc.Compiler.compile("int main(void) { return 42; }", org.jbm.mycc.cc.cpp.BundledHeaders.INSTANCE, "t.c",
-                new org.jbm.mycc.cc.sema.types.Types(org.jbm.mycc.cc.backend.lower.arch.X86_64SysV.INSTANCE));
+                new org.jbm.mycc.cc.sema.types.Types(org.jbm.mycc.cc.backend.arch.X86_64SysV.INSTANCE));
         List<Item> items = Codegen.build(compiled.tac(), false);
         assertEquals(AttPrinter.print(items), Codegen.emit(compiled.tac(), false));
         long insns = items.stream().filter(i -> i instanceof Item.Insn).count();

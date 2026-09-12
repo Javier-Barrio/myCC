@@ -1,7 +1,7 @@
 package org.jbm.mycc.cc.sema.types;
 
-import org.jbm.mycc.cc.backend.lower.arch.Ilp32;
-import org.jbm.mycc.cc.backend.lower.arch.X86_64SysV;
+import org.jbm.mycc.cc.backend.arch.Ilp32;
+import org.jbm.mycc.cc.backend.arch.X86_64SysV;
 import org.jbm.mycc.cc.sema.types.CType;
 import org.jbm.mycc.cc.sema.types.CType.Int.Rank;
 import org.jbm.mycc.cc.sema.types.CType.Int.Sign;

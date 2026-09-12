@@ -1,7 +1,7 @@
 package org.jbm.mycc.cc.backend.codegen;
 
 import lombok.NonNull;
-import org.jbm.mycc.cc.backend.lower.arch.x86_64.X86Emitter;
+import org.jbm.mycc.cc.backend.arch.x86_64.X86Emitter;
 import org.jbm.mycc.cc.backend.lower.tac.Function;
 import org.jbm.mycc.cc.backend.lower.tac.Module;
 
