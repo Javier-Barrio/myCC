@@ -433,11 +433,18 @@ final class ExprTyper {
                 // Discarded qualifiers and a function pointer through void *
                 // are constraint violations that gcc only warns about, and
                 // real code relies on both; accepted here without a word.
-                CType tt = tp.target(), ft = fp.target();
-                boolean compatible = types.compatible(types.unqualified(tt), types.unqualified(ft));
-                boolean viaVoid = tt.isVoid() || ft.isVoid();
-                if (compatible || viaVoid) return convert(x, to);
+                // Distinct pointer types too: gcc warns about the
+                // incompatible pointer types and converts. Real code does
+                // it, int * for unsigned *, so it is accepted.
+                return convert(x, to);
             }
+            if (from.isInteger()) {
+                // An integer for a pointer: gcc warns and converts.
+                return convert(x, to);
+            }
+        }
+        if (to.isInteger() && from instanceof CType.Pointer) {
+            return convert(x, to);
         }
         if (to.isNullptr() && isNullish(x)) return x.type().isNullptr() ? x : new TExpr.NullToPtr(x, to, at);
         throw new SemaException("incompatible types when " + context + " '" + to.spelling() + "' from '"

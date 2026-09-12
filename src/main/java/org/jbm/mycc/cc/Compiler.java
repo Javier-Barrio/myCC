@@ -52,6 +52,12 @@ public final class Compiler {
         return run(source, headers, file, types, false);
     }
 
+    /** The preprocessed tokens alone, for {@code -E}. */
+    public static TokenSet preprocess(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,
+                                      @NonNull Types types) {
+        return TokenConversion.convert(new Scanner().expand(CppTokenizer.tokenSet(source, headers, file, predefined(types))));
+    }
+
     public static Compiled compileScript(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file,
                                          @NonNull Types types) {
         return run(source, headers, file, types, true);

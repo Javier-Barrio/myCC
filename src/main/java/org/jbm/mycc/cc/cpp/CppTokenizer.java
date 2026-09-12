@@ -117,19 +117,25 @@ public class CppTokenizer {
         // found in the call's `(...)`.
         public List<List<Token>> arguments = List.of();
 
+        // The line in the file, counting the physical lines a backslash-
+        // newline joined; `line` counts logical lines, which is what the
+        // directive stripping and the -E output go by.
+        public int physicalLine;
+
         public Token(@NonNull TokenType type, @NonNull String text, int line, int column) {
             this.type = type;
             this.text = text;
             this.line = line;
             this.column = column;
+            this.physicalLine = line;
         }
 
         /** {@code file:line:column}, or {@code line:column} for a token without a file. */
         public String location() {
             if (file.isEmpty()) {
-                return line + ":" + column;
+                return physicalLine + ":" + column;
             }
-            return file + ":" + line + ":" + column;
+            return file + ":" + physicalLine + ":" + column;
         }
 
         @Override
@@ -271,7 +277,12 @@ public class CppTokenizer {
     }
 
     public CppTokenizer(@NonNull String source, @Nullable HeaderProvider headers, @NonNull String file) {
-        this(splice(source), file, headers, new MacroTable(), 0);
+        this(spliced(source), file, headers, new MacroTable(), 0);
+    }
+
+    private CppTokenizer(Spliced source, String file, @Nullable HeaderProvider headers, MacroTable macroTable, int depth) {
+        this(source.text(), file, headers, macroTable, depth);
+        continuations(source.continuations());
     }
 
     private CppTokenizer(String splicedSource, String file, @Nullable HeaderProvider headers,
@@ -295,19 +306,51 @@ public class CppTokenizer {
         this.atLineStart = false;
     }
 
-    private static String splice(String source) {
+    // The source after phase 2, and where each deleted backslash-newline
+    // was, as indices into the spliced text, so the physical line count
+    // survives: a token after a continuation reports the line it is on.
+    private record Spliced(String text, int[] continuations) {
+    }
+
+    private static Spliced spliced(String source) {
         var sb = new StringBuilder(source.length());
+        var at = new ArrayList<Integer>();
         int i = 0;
         while (i < source.length()) {
             char c = source.charAt(i);
             if (c == '\\' && i + 1 < source.length() && source.charAt(i + 1) == '\n') {
                 i += 2;
+                at.add(sb.length());
                 continue;
             }
             sb.append(c);
             i++;
         }
-        return sb.toString();
+        return new Spliced(sb.toString(), at.stream().mapToInt(Integer::intValue).toArray());
+    }
+
+    private static String splice(String source) {
+        return spliced(source).text();
+    }
+
+    // The continuations of this text, the next one ahead of `pos`, how
+    // many are behind it, and for a tokenizer over one directive line
+    // the physical lines its parent had already passed.
+    private int[] continuations = new int[0];
+    private int nextContinuation;
+    private int extraLines;
+    private int lineShift;
+
+    private void continuations(int[] positions) {
+        this.continuations = positions;
+        this.nextContinuation = 0;
+    }
+
+    // A tokenizer over the text of a directive line starting at `from`.
+    private CppTokenizer lineTokenizer(String text, int from, MacroTable table) {
+        var nested = new CppTokenizer(text, file, line, col + (from - pos), table);
+        nested.lineShift = extraLines + lineShift;
+        return nested;
     }
 
     public static List<Token> tokenize(@NonNull String source) {
@@ -330,7 +373,7 @@ public class CppTokenizer {
                                     @NonNull String predefined) {
         CppTokenizer tokenizer = new CppTokenizer(source, headers, file);
         if (!predefined.isBlank()) {
-            new CppTokenizer(splice(predefined), "<predefined>", headers, tokenizer.macroTable, 0).scan();
+            new CppTokenizer(spliced(predefined), "<predefined>", headers, tokenizer.macroTable, 0).scan();
         }
         TokenSet set = TokenSet.fromTokens(tokenizer.scan());
         set.macros = tokenizer.macroTable;
@@ -373,6 +416,12 @@ public class CppTokenizer {
         } else {
             col++;
         }
+        // Past a deleted backslash-newline: the next character is on the
+        // following physical line, though still on this logical one.
+        while (nextContinuation < continuations.length && continuations[nextContinuation] <= pos) {
+            extraLines++;
+            nextContinuation++;
+        }
         return c;
     }
 
@@ -387,7 +436,7 @@ public class CppTokenizer {
     }
 
     private LexException error(String message, int line, int column) {
-        return new LexException(message, file, line, column);
+        return new LexException(message, file, line + extraLines + lineShift, column);
     }
 
     private boolean active() {
@@ -419,6 +468,7 @@ public class CppTokenizer {
             t.spaceBefore = separated;
             t.file = file;
             t.seq = macroTable.version();
+            t.physicalLine = t.line + extraLines + lineShift;
             return t;
         }
     }
@@ -662,8 +712,7 @@ public class CppTokenizer {
         if (header.isEmpty()) {
             throw error("header not found: " + spelled, hash.line, hash.column);
         }
-        String text = splice(header.get().text());
-        CppTokenizer nested = new CppTokenizer(text, header.get().name(), headers, macroTable, depth + 1);
+        CppTokenizer nested = new CppTokenizer(spliced(header.get().text()), header.get().name(), headers, macroTable, depth + 1);
         boolean first = true;
         for (Token t : nested.scan()) {
             if (t.type == TokenType.EOF) {
@@ -785,6 +834,20 @@ public class CppTokenizer {
             }
             if (c == '/' && peek(1) == '*') {
                 skipBlockComment();
+                continue;
+            }
+            if (c == '/' && peek(1) == '/') {
+                while (pos < src.length() && peek() != '\n') {
+                    advance();
+                }
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                // A literal: what looks like a comment inside it is not one.
+                int end = literalEnd(pos);
+                while (pos < end) {
+                    advance();
+                }
                 continue;
             }
             advance();
@@ -1055,11 +1118,30 @@ public class CppTokenizer {
     // Returns the index of the ')' matching the '(' at `from`, or -1 if the
     // parameter list isn't closed on this line.
     private int findMatchingParen(int from) {
+        return matchingParen(from, logicalLineEnd(from));
+    }
+
+    // The ')' matching the '(' at `from` before `end`, or -1; parentheses
+    // in literals and comments do not count.
+    private int matchingParen(int from, int end) {
         int depth = 0;
         int i = from;
-        int end = logicalLineEnd(from);
         while (i < end) {
             char c = src.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = literalEnd(i);
+                continue;
+            }
+            if (c == '/' && i + 1 < end && src.charAt(i + 1) == '*') {
+                int close = src.indexOf("*/", i + 2);
+                i = close < 0 ? end : close + 2;
+                continue;
+            }
+            if (c == '/' && i + 1 < end && src.charAt(i + 1) == '/') {
+                int newline = src.indexOf('\n', i);
+                i = newline < 0 ? end : newline;
+                continue;
+            }
             if (c == '(') {
                 depth++;
             } else if (c == ')') {
@@ -1077,21 +1159,7 @@ public class CppTokenizer {
     // invocation's argument list (unlike a #define's parameter list) may
     // span multiple lines.
     private int findMatchingParenAcrossLines(int from) {
-        int depth = 0;
-        int i = from;
-        while (i < src.length()) {
-            char c = src.charAt(i);
-            if (c == '(') {
-                depth++;
-            } else if (c == ')') {
-                depth--;
-                if (depth == 0) {
-                    return i;
-                }
-            }
-            i++;
-        }
-        return -1;
+        return matchingParen(from, src.length());
     }
 
     // Lexes the argument-list text between `from` (just after '(') and `to`
@@ -1104,7 +1172,7 @@ public class CppTokenizer {
             return List.of();
         }
 
-        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new MacroTable()).scan();
+        List<Token> raw = lineTokenizer(inner, from, new MacroTable()).scan();
         List<List<Token>> arguments = new ArrayList<>();
         List<Token> current = new ArrayList<>();
         int depth = 0;
@@ -1133,7 +1201,7 @@ public class CppTokenizer {
     // a variadic "...", i.e. dropping the separating commas.
     private List<Token> scanParamListTokens(int from, int to) {
         String inner = src.substring(from, to);
-        List<Token> raw = new CppTokenizer(inner, file, line, col + (from - pos), new MacroTable()).scan();
+        List<Token> raw = lineTokenizer(inner, from, new MacroTable()).scan();
         List<Token> params = new ArrayList<>();
         for (Token t : raw) {
             if (t.type == TokenType.IDENTIFIER || (t.type == TokenType.PUNCTUATOR && t.text.equals("..."))) {
@@ -1159,7 +1227,7 @@ public class CppTokenizer {
     private List<Token> scanRestOfLine(int from, MacroTable table) {
         int end = logicalLineEnd(from);
         String rest = src.substring(from, end);
-        List<Token> raw = new CppTokenizer(rest, file, line, col + (from - pos), table).scan();
+        List<Token> raw = lineTokenizer(rest, from, table).scan();
         List<Token> expansion = new ArrayList<>();
         for (Token t : raw) {
             if (t.type != TokenType.EOF) {
