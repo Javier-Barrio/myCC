@@ -9,6 +9,7 @@ import org.jbm.mycc.cc.lower.tac.Function;
 import org.jbm.mycc.cc.lower.tac.Instr;
 import org.jbm.mycc.cc.lower.tac.Linkage;
 import org.jbm.mycc.cc.lower.tac.Module;
+import org.jbm.mycc.cc.lower.tac.Operand.IntImm;
 import org.jbm.mycc.cc.lower.tac.RegClass;
 import org.jbm.mycc.cc.lower.tac.TacVisitor;
 import org.jbm.mycc.cc.lower.tac.TacWriter;
@@ -20,7 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 
 import static org.jbm.mycc.cc.codegen.Operand.imm;
-import static org.jbm.mycc.cc.codegen.Operand.indirect;
 import static org.jbm.mycc.cc.codegen.Operand.mem;
 import static org.jbm.mycc.cc.codegen.Operand.reg;
 import static org.jbm.mycc.cc.codegen.Operand.sym;
@@ -243,7 +243,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     }
 
     private void read(org.jbm.mycc.cc.lower.tac.Operand o, String register) {
-        if (o instanceof org.jbm.mycc.cc.lower.tac.Operand.IntImm x) {
+        if (o instanceof IntImm x) {
             immediate(x.value(), register);
         } else {
             read((Var) o, register);
@@ -569,7 +569,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         } else {
             read(i.ptr(), "rdi");
             asm.insn("movq", imm(module.sizeOf(t)), RCX);
-            if (i.value() instanceof org.jbm.mycc.cc.lower.tac.Operand.IntImm) {
+            if (i.value() instanceof IntImm) {
                 asm.insn("xorl", EAX, EAX);
                 asm.insn("rep stosb");
             } else {
@@ -660,7 +660,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
         // %r10 is neither an argument register nor %rax, which a variadic call uses
         call(i.sig(), i.args(), i.into(), i.dst(), () -> {
             read(i.callee(), "r10");
-            asm.insn("call", indirect("r10"));
+            asm.insn("call", reg("r10"));
         });
         return null;
     }

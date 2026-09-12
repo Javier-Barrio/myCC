@@ -8,7 +8,9 @@ import org.jetbrains.annotations.Nullable;
  * it: a register, an immediate, a memory operand of a base register
  * with a displacement, a symbol (a label or a global, plain or through
  * the PLT), a symbol addressed relative to the instruction pointer
- * (plain or through the GOT), or a register holding a call target.
+ * (plain or through the GOT). A call or jump through a register or a
+ * memory operand takes it as it is; the target being a value rather
+ * than a symbol is the operand's kind, and the {@code *} is spelling.
  */
 public sealed interface Operand {
 
@@ -31,10 +33,6 @@ public sealed interface Operand {
 
     /** A symbol's address relative to the instruction pointer: {@code name(%rip)} or {@code name@GOTPCREL(%rip)}. */
     record RipRel(@NonNull String name, @NonNull Reloc reloc) implements Operand {
-    }
-
-    /** A register holding the target of an indirect call or jump. */
-    record Indirect(@NonNull String reg) implements Operand {
     }
 
     static Reg reg(String name) {
@@ -67,9 +65,5 @@ public sealed interface Operand {
 
     static RipRel got(String name) {
         return new RipRel(name, Reloc.GOT);
-    }
-
-    static Indirect indirect(String reg) {
-        return new Indirect(reg);
     }
 }

@@ -99,8 +99,8 @@ Frame        slot offsets for one Function's parameters and locals, from the mod
 Data         a Global's byte image as IR items: bytes, addresses, zeros
 Item         the assembly IR, one record per line: Insn(mnemonic, operands), Label, Section, Global,
              Align, Bytes, Address, Word, Zero, Comment, Note
-Operand      Reg, Imm, Mem(disp, base, index, scale), Sym(name, addend, reloc), RipRel(name, reloc),
-             Indirect(reg); reloc is PLAIN, PLT or GOT
+Operand      Reg, Imm, Mem(disp, base, index, scale), Sym(name, addend, reloc), RipRel(name, reloc);
+             reloc is PLAIN, PLT or GOT; a call or jump to a Reg or Mem is indirect, the printer adds the `*`
 Asm          builds the IR in order; comments only when annotating
 AttPrinter   the IR in AT&T syntax for the GNU assembler; an assembler would encode the same IR
 ```
