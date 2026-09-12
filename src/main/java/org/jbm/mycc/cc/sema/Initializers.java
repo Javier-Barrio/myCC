@@ -62,6 +62,13 @@ final class Initializers {
     private CType initObject(CType t, Initializer init, long baseOffset, Token at, List<TInit.Item> out,
                              Optional<Layout.BitField> bits) {
         if (init instanceof Initializer.Expression e) {
+            Optional<Initializer> literal = aggregateLiteralFor(t, e.expr());
+            if (literal.isPresent()) {
+                // A compound literal of the aggregate's own type initializes
+                // it in place, so it is allowed where a constant is required,
+                // as gcc allows: `struct S s = (struct S){1, 2};`.
+                return initObject(t, literal.get(), baseOffset, at, out, bits);
+            }
             TExpr typed = exprs.type(e.expr());
             if (t.isArray()) {
                 StringData str = exprs.stringLiteral(typed).orElse(null);
@@ -94,6 +101,22 @@ final class Initializers {
         int consumed = walk.fill(0);
         if (consumed < braced.items().size()) throw excess(braced.items().get(consumed), braced.brace());
         return walk.completedType();
+    }
+
+    // The braced initializer of a compound literal whose type is the
+    // aggregate type t, else nothing.
+    private Optional<Initializer> aggregateLiteralFor(CType t, Expr expr) {
+        if (!(expr instanceof Expr.CompoundLiteral c) || !c.storageClasses().isEmpty()) {
+            return Optional.empty();
+        }
+        if (!t.isRecord() && !t.isArray()) {
+            return Optional.empty();
+        }
+        TExpr typed = exprs.typeUnevaluated(expr);
+        if (types.unqualified(typed.type()) != types.unqualified(t)) {
+            return Optional.empty();
+        }
+        return Optional.of(c.initializer());
     }
 
     // A scalar in braces (6.7.11p11): one initializer, itself possibly braced.

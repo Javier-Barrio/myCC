@@ -31,7 +31,7 @@ final class Data {
             }
             asm.align(Math.max(g.align(), 1));
             asm.label(g.name());
-            long size = module.sizeOf(g.type());
+            long size = module.imageSize(g);
             if (g.init() == null) {
                 asm.zero(size);
                 continue;

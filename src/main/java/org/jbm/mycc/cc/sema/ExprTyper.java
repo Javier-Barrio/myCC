@@ -186,6 +186,11 @@ final class ExprTyper {
         CType to = types.unqualified(builder.build(e.type()));
         Rvalue x = rvalue(type(e.operand()));
         if (to.isVoid()) return toVoid(x);
+        if (to.isRecord() && types.unqualified(x.type()) == to) {
+            // A struct or union cast to its own type is the value itself,
+            // which gcc allows with a pedantic warning.
+            return x;
+        }
         if (!to.isScalar()) throw new SemaException("cast to non-scalar type '" + to.spelling() + "'", at);
         CType from = x.type();
         if (!from.isScalar()) throw new SemaException("cast of non-scalar type '" + from.spelling() + "'", at);
