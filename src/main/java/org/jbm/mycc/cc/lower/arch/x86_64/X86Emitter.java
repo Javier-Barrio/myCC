@@ -678,9 +678,7 @@ public final class X86Emitter implements Backend, TacVisitor<Void> {
     // passes. The result goes from %rax or %xmm0 to dst.
     private void call(Type.Func sig, List<org.jbm.mycc.cc.lower.tac.Operand> operands, Var into, Var dst, Runnable emitCall) {
         List<Arg> args = new ArrayList<>();
-        if (into != null) {
-            args.add(new Arg(into, RegClass.INT, false));
-        }
+        args.add(new Arg(into, RegClass.INT, false));
         for (int k = 0; k < operands.size(); k++) {
             org.jbm.mycc.cc.lower.tac.Operand o = operands.get(k);
             RegClass c;
